@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard | Ctrl+Alt+Lyrics</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="app" class="dashboard-vertical">
+    <div id="audioBlockedBanner" class="audio-blocked-banner" style="display: none;">
+      <span>⚠️ Browser sound paused. Click anywhere on this page to enable audio playback!</span>
+    </div>
+    
+    <!-- Upper Panel: Songs List Management (Search & Queue on Left, History on Right) -->
+    <div class="panel glass upper-panel">
+      
+      <!-- Left Column: Search & Queue -->
+      <div class="upper-left">
+        <div class="search-header-block">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.25rem;">
+            <h2>Search</h2>
+            <button id="engineSettingsToggleBtn" class="btn" style="padding: 0.2rem 0.5rem; font-size: 0.7rem; background: rgba(255,255,255,0.12);" title="Separation Settings">⚙️ <span id="engineBadgeText">Balanced (MP3 192k)</span></button>
+          </div>
+
+          <!-- Separation Engine Settings Panel -->
+          <div id="engineSettingsPanel" style="display: none; background: rgba(15, 23, 42, 0.95); border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem; margin-bottom: 0.5rem; font-size: 0.8rem; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.4rem;">
+              <strong style="color: var(--accent); font-size: 0.75rem;">⚙️ Stem Separation Options</strong>
+              <label style="font-size: 0.75rem; display: flex; align-items: center; gap: 0.3rem; cursor: pointer;">
+                <input type="checkbox" id="customEngineToggle"> Custom Settings
+              </label>
+            </div>
+            <div id="engineControls" style="display:flex; gap: 0.4rem; flex-wrap: wrap; opacity: 0.5; pointer-events: none; transition: opacity 0.2s;">
+              <div>
+                <label style="display:block; font-size: 0.65rem; color: var(--text-secondary);">Mode:</label>
+                <select id="engineModeSelect" style="background: rgba(0,0,0,0.6); color: #fff; border: 1px solid var(--border); border-radius: 4px; padding: 0.2rem; font-size: 0.75rem;">
+                  <option value="balanced" selected>⚖️ Balanced (~30s)</option>
+                  <option value="fast">⚡ Fast (~10s)</option>
+                  <option value="high">🎯 High Precision (~60s)</option>
+                  <option value="ultra">👑 Ultra Quality (~2m)</option>
+                </select>
+              </div>
+              <div>
+                <label style="display:block; font-size: 0.65rem; color: var(--text-secondary);">Format:</label>
+                <select id="engineFormatSelect" style="background: rgba(0,0,0,0.6); color: #fff; border: 1px solid var(--border); border-radius: 4px; padding: 0.2rem; font-size: 0.75rem;">
+                  <option value="MP3" selected>MP3 (Compact)</option>
+                  <option value="M4A">M4A (AAC)</option>
+                  <option value="WAV">WAV (Uncompressed)</option>
+                </select>
+              </div>
+              <div>
+                <label style="display:block; font-size: 0.65rem; color: var(--text-secondary);">Bitrate:</label>
+                <select id="engineBitrateSelect" style="background: rgba(0,0,0,0.6); color: #fff; border: 1px solid var(--border); border-radius: 4px; padding: 0.2rem; font-size: 0.75rem;">
+                  <option value="192k" selected>192 kbps (Default)</option>
+                  <option value="320k">320 kbps (High)</option>
+                  <option value="128k">128 kbps (Draft)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div style="position: relative;">
+            <div style="display:flex; gap: 0.5rem;">
+              <input type="search" id="searchInput" placeholder="Search song title..." autocomplete="off">
+              <button id="searchBtn" class="btn">Go</button>
+            </div>
+            <div id="searchResults" class="search-results-popup" style="display: none;"></div>
+          </div>
+        </div>
+
+        <h2 style="margin-top: 0.5rem;">Queue</h2>
+        <div id="queueList" class="queue-list"></div>
+      </div>
+
+      <!-- Right Column: Library -->
+      <div class="upper-right">
+        <div class="library-header-row">
+          <h2>Library</h2>
+          <div class="library-controls-group">
+            <input type="search" id="libraryFilterInput" class="library-filter-input" placeholder="🔍 Filter library..." autocomplete="off">
+            <div class="sort-wrapper">
+              <button id="librarySortBtn" class="btn sort-btn" title="Sort Options">↕️ Sort</button>
+              <div id="librarySortMenu" class="sort-menu" style="display: none;">
+                <div class="sort-menu-header">Sort By</div>
+                <button class="sort-option active" data-key="date">📅 Date Added</button>
+                <button class="sort-option" data-key="title">🔤 Song Title</button>
+                <button class="sort-option" data-key="artist">👤 Artist Name</button>
+                <button class="sort-option" data-key="missing">⚠️ Missing / Errors</button>
+                <div class="sort-menu-divider"></div>
+                <div class="sort-order-row">
+                  <button class="sort-order-btn active" data-order="desc">⬇️ Descending</button>
+                  <button class="sort-order-btn" data-order="asc">⬆️ Ascending</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="libraryList" class="library-list"></div>
+      </div>
+
+    </div>
+
+    <!-- Lower Panel: Playback Control and Mixing -->
+    <div class="panel glass lower-panel">
+      <div class="lower-container">
+        
+        <!-- Left Side: Audio Controls -->
+        <div class="audio-controls-card">
+          <h2 style="text-align: center;">Currently Playing: <span id="currentSongTitle">None</span></h2>
+          
+          <!-- Merged Play/Pause & Song Navigation -->
+          <div style="display:flex; gap: 0.5rem; align-items:center; justify-content: center; flex-wrap: wrap;">
+            <button id="prevBtn" class="btn" style="padding: 0.4rem 0.85rem; font-size: 1.1rem;" title="Prev Song (Shift + <)">⏮</button>
+            <button id="playPauseBtn" class="btn" style="padding: 0.5rem 1.25rem; font-size: 1.2rem; font-weight: 700; background: var(--accent);" title="Play/Pause (Space)">▶</button>
+            <button id="nextBtn" class="btn" style="padding: 0.4rem 0.85rem; font-size: 1.1rem;" title="Next Song (Shift + >)">⏭</button>
+          </div>
+
+          <!-- Lyric Line Navigation -->
+          <div style="display:flex; gap: 0.75rem; align-items:center; justify-content: center;">
+            <button id="prevLineBtn" class="btn" style="padding: 0.35rem 0.7rem; font-size: 0.9rem; background: rgba(255,255,255,0.1);" title="Prev Line (<)">◀</button>
+            <span id="lyricsCounter" style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary); min-width: 90px; text-align: center; background: rgba(0,0,0,0.2); padding: 0.2rem 0.65rem; border-radius: 12px; border: 1px solid var(--border);">Lyrics 0/0</span>
+            <button id="nextLineBtn" class="btn" style="padding: 0.35rem 0.7rem; font-size: 0.9rem; background: rgba(255,255,255,0.1);" title="Next Line (>)">▶</button>
+          </div>
+
+          <!-- Timeline Slider & Time Display -->
+          <div style="display:flex; align-items:center; gap: 0.75rem; width: 100%; justify-content: center; margin-top: 0.25rem;">
+            <input type="range" id="timelineSlider" min="0" max="100" value="0" style="flex:1; width: 100%; height: 8px; writing-mode: horizontal-tb; -webkit-appearance: slider-horizontal;" disabled>
+            <span id="timeDisplay" style="font-family: monospace; font-size: 0.85rem; color: var(--text-secondary); min-width: 85px; text-align: right;">0:00 / 0:00</span>
+          </div>
+        </div>
+
+        <!-- Right Side: Mixer & Subtitle Toggles -->
+        <div class="mixer-card">
+          <!-- Toggles for Pronunciation & Translation on top of mixer -->
+          <div class="mixer-toggles-row" style="justify-content: center; width: 100%;">
+            <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">Subtitles:</span>
+            <div style="display:flex; align-items:center; gap: 1rem; font-size: 0.85rem;">
+              <label style="cursor: pointer;"><input type="checkbox" id="toggleTranslit"> Pronunciation</label>
+              <label style="cursor: pointer;"><input type="checkbox" id="toggleTranslat"> Translation</label>
+            </div>
+          </div>
+
+          <!-- Stem Audio Title & Shortcuts directly below title -->
+          <div style="display:flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 0.25rem;">
+            <h3>Stem Mixer</h3>
+            <p style="font-size:0.75rem; color:var(--text-secondary); margin-top: 0.25rem;">Q/A: Inst | W/S: Back | E/D: Lead</p>
+          </div>
+          
+          <div class="mixer" style="padding: 0; justify-content: center; gap: 0.75rem; align-items: center; width: 100%;">
+            <div class="fader-container">
+              <input type="range" id="volInst" min="0" max="1" step="0.01" value="1">
+              <span class="fader-label">Inst</span>
+            </div>
+            
+            <!-- Link Inst & Back -->
+            <button id="linkInstBackBtn" class="btn" style="padding: 0.3rem 0.4rem; font-size: 1rem; background: rgba(255,255,255,0.08); border: 1px solid var(--border); border-radius: 6px; opacity: 0.4;" title="Unlinked Inst & Back (Click to Link)">🔓</button>
+
+            <div class="fader-container">
+              <input type="range" id="volBackVoc" min="0" max="1" step="0.01" value="1">
+              <span class="fader-label">Back</span>
+            </div>
+
+            <!-- Link Back & Lead -->
+            <button id="linkBackLeadBtn" class="btn" style="padding: 0.3rem 0.4rem; font-size: 1rem; background: rgba(255,255,255,0.08); border: 1px solid var(--border); border-radius: 6px; opacity: 0.4;" title="Unlinked Back & Lead (Click to Link)">🔓</button>
+
+            <div class="fader-container">
+              <input type="range" id="volLeadVoc" min="0" max="1" step="0.01" value="1">
+              <span class="fader-label">Lead</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Lyrics Fetch Report Modal -->
+  <div id="lyricsReportModal" class="modal-backdrop" style="display: none;">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="lyricsReportTitle">🎵 Lyrics Provider Report</h3>
+        <button id="closeLyricsReportBtn" class="btn-close">✕</button>
+      </div>
+      <div id="lyricsReportBody" class="modal-body"></div>
+      <button id="dismissLyricsReportBtn" class="btn" style="width: 100%;">Dismiss</button>
+    </div>
+  </div>
+
+  <script type="module" src="/dashboard.js"></script>
+</body>
+</html>

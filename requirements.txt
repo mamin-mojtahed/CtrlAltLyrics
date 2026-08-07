@@ -1,0 +1,5 @@
+spotdl
+audio-separator
+requests
+pykakasi
+unidecode

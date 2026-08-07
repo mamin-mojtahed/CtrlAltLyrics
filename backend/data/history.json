@@ -1,0 +1,137 @@
+[
+  {
+    "id": "1535707980",
+    "title": "Toranj",
+    "artist": "Mohsen Namjoo",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/db/68/89/db68893e-a3f1-b3d2-bc5d-a8badab38725/195448577280.jpg/100x100bb.jpg",
+    "query": "Toranj Mohsen Namjoo",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/1535707980/instrumental.wav",
+      "lead": "/audio/1535707980/lead_vocal.wav",
+      "back": "/audio/1535707980/back_vocal.wav"
+    },
+    "hasLyrics": true
+  },
+  {
+    "id": "281868505",
+    "title": "Los Angeles",
+    "artist": "Sharareh",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music/3f/fc/56/mzi.akbofial.jpg/100x100bb.jpg",
+    "query": "Los Angeles Sharareh",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/281868505/instrumental.mp3",
+      "lead": "/audio/281868505/lead_vocal.mp3",
+      "back": "/audio/281868505/back_vocal.mp3"
+    },
+    "lyricsProvider": "LRCLIB (Plain)",
+    "hasLyrics": true
+  },
+  {
+    "id": "1440053120",
+    "title": "El Watar El Hassas",
+    "artist": "Sherine",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/9d/7e/42/9d7e42a4-bb6a-17a3-8545-d7f3a75a3fdf/942835.jpg/100x100bb.jpg",
+    "query": "El Watar El Hassas Sherine",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/1440053120/instrumental.mp3",
+      "lead": "/audio/1440053120/lead_vocal.mp3",
+      "back": "/audio/1440053120/back_vocal.mp3"
+    },
+    "lyricsProvider": "LRCLIB (Synced)",
+    "hasLyrics": true
+  },
+  {
+    "id": "1741114579",
+    "title": "Yarab",
+    "artist": "Sogand",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/ad/a8/e1/ada8e1bd-6d75-df64-17fe-b0c056b6294f/artwork.jpg/100x100bb.jpg",
+    "query": "Yarab Sogand",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/1741114579/instrumental.mp3",
+      "lead": "/audio/1741114579/lead_vocal.mp3",
+      "back": "/audio/1741114579/back_vocal.mp3"
+    },
+    "lyricsProvider": "Musixmatch (Synced)",
+    "hasLyrics": true
+  },
+  {
+    "id": "1573439068",
+    "title": "Bi Hamegan",
+    "artist": "Mohsen Namjoo",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/8d/a0/3d/8da03d26-4399-9ce7-ab23-1a592ec05b26/198000572846.jpg/100x100bb.jpg",
+    "query": "Bi Hamegan Mohsen Namjoo",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/1573439068/instrumental.mp3",
+      "lead": "/audio/1573439068/lead_vocal.mp3",
+      "back": "/audio/1573439068/back_vocal.mp3"
+    },
+    "lyricsProvider": "LRCLIB (Plain)",
+    "hasLyrics": true
+  },
+  {
+    "id": "1745532745",
+    "title": "Parvardamat",
+    "artist": "Mohsen Namjoo",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/b3/98/49/b39849a7-61fa-27bf-a14d-4b52ffa7c690/198500863246.jpg/100x100bb.jpg",
+    "query": "Parvardamat Mohsen Namjoo",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/1745532745/instrumental.mp3",
+      "lead": "/audio/1745532745/lead_vocal.mp3",
+      "back": "/audio/1745532745/back_vocal.mp3"
+    },
+    "lyricsProvider": null,
+    "hasLyrics": false,
+    "lyricsError": "No lyrics found across any provider."
+  },
+  {
+    "id": "291562966",
+    "title": "Sedaye Faryad",
+    "artist": "Habib",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music/f0/d6/5d/mzi.ssyzseei.jpg/100x100bb.jpg",
+    "query": "Sedaye Faryad Habib",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/291562966/instrumental.mp3",
+      "lead": "/audio/291562966/lead_vocal.mp3",
+      "back": "/audio/291562966/back_vocal.mp3"
+    },
+    "lyricsProvider": "LRCLIB (Synced)",
+    "hasLyrics": true
+  },
+  {
+    "id": "538287781",
+    "title": "Sabry Aalil",
+    "artist": "Sherine",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/83/ab/07/83ab076c-a8b3-0bc8-96d9-8e9e4b855ef4/dj.siwvayyg.jpg/100x100bb.jpg",
+    "query": "Sabry Aalil Sherine",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/538287781/instrumental.mp3",
+      "lead": "/audio/538287781/lead_vocal.mp3",
+      "back": "/audio/538287781/back_vocal.mp3"
+    },
+    "lyricsProvider": "Musixmatch (Synced)",
+    "hasLyrics": true
+  },
+  {
+    "id": "1689473877",
+    "title": "Barfe No",
+    "artist": "Mohsen Namjoo",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/18/6f/b1/186fb116-1a55-fb9e-6774-6d5d215c37fb/198025358562.jpg/100x100bb.jpg",
+    "query": "Barfe No Mohsen Namjoo",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/1689473877/instrumental.mp3",
+      "lead": "/audio/1689473877/lead_vocal.mp3",
+      "back": "/audio/1689473877/back_vocal.mp3"
+    },
+    "lyricsProvider": "LRCLIB (Synced)",
+    "hasLyrics": true
+  }
+]

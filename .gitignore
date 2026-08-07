@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+venv/
+.venv/
+env/
+ENV/
+
+# System Files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment / Secret Files
+.env
+.env.local
+.env.*.local
+
+# Downloads & Temp files
+backend/downloads/*
+!backend/downloads/.gitkeep
+
+# Build / Output directories
+dist/
+build/
+*.egg-info/
+__pycache__/
+*.pyc
+
+# IDE / Editor configuration
+.vscode/
+.idea/
+*.swp
+*.swo

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Display | Ctrl+Alt+Lyrics</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="display-container" id="displayContainer">
+    <div id="audioBlockedBanner" class="audio-blocked-banner" style="display: none;">
+      <span>⚠️ Browser sound paused. Click anywhere on Dashboard to enable audio playback!</span>
+    </div>
+    <canvas id="visualizer"></canvas>
+    
+    <!-- Left 1/3 Section: Song Info Sidebar -->
+    <aside class="song-info-sidebar glass" id="songSidebar">
+      <div class="sidebar-content">
+        <div class="cover-wrapper">
+          <img id="displaySongCover" src="https://via.placeholder.com/600/1e2235/ffffff?text=🎵" alt="Album Cover">
+        </div>
+        <div class="song-meta">
+          <h2 id="displaySongTitle" class="meta-title"></h2>
+          <p id="displaySongArtist" class="meta-artist"></p>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Right 2/3 Section: Main Scrollable Lyrics -->
+    <main class="lyrics-main-content">
+      <div class="lyrics-container" id="lyricsContainer" dir="auto"></div>
+    </main>
+
+    <!-- Bottom-Left Floating Control Buttons -->
+    <div class="display-floating-controls">
+      <button id="displayPlayPauseBtn" class="btn glass-btn floating-control-btn" title="Play / Pause (Space)">▶</button>
+      <button id="toggleSidebarBtn" class="btn glass-btn floating-control-btn disk-btn" title="Toggle Song Info">💿</button>
+    </div>
+  </div>
+  <script type="module" src="/display.js"></script>
+</body>
+</html>
