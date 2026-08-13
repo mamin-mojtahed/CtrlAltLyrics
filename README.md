@@ -1,5 +1,7 @@
 # CtrlAltLyrics
 
+![ctrl-alt-lyrics logo wide](./frontend/public/ctrlaltlyrics-logo-wide.webp)
+
 A local, full-stack Karaoke Player and Lyrics Studio designed for downloading, splitting audio stems, synchronizing lyrics, and playing high-quality karaoke tracks in real time.
 > Vibe-coded with Google Antigravity IDE & Gemini
 

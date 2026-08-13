@@ -1319,3 +1319,10 @@ canvas#visualizer {
   border-left: 4px solid #f59e0b;
   background: rgba(245, 158, 11, 0.1);
 }
+
+.main-menu-banner img {
+  width: 100%;
+  max-width: clamp(260px, 70vw, 380px);
+  height: auto;
+  border-radius: 16px;
+}
