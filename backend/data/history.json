@@ -109,8 +109,13 @@
       "back": "/audio/538287781/back_vocal.mp3",
       "full": "/audio/538287781/audio.mp3"
     },
+    "downloadMethod": "SpotDL",
+    "downloadAttempts": [],
+    "engineSettings": null,
+    "separationInfo": null,
     "lyricsProvider": "Musixmatch (Synced)",
-    "hasLyrics": false
+    "isSynced": true,
+    "hasLyrics": true
   },
   {
     "id": "1689473877",
@@ -174,7 +179,40 @@
       "back": "/audio/1860037156/back_vocal.mp3",
       "full": "/audio/1860037156/audio.mp3"
     },
+    "downloadMethod": "SpotDL",
+    "downloadAttempts": [
+      {
+        "provider": "SpotDL",
+        "status": "success",
+        "detail": "Official studio track acquired via SpotDL for \"Del Be Baad Daadeh Mohsen Namjoo\""
+      },
+      {
+        "provider": "yt-dlp Direct (Title + Artist)",
+        "status": "skipped",
+        "detail": "Not needed (acquired via SpotDL)"
+      },
+      {
+        "provider": "yt-dlp Title Fallback",
+        "status": "skipped",
+        "detail": "Not needed (acquired via SpotDL)"
+      }
+    ],
+    "engineSettings": {
+      "mode": "fast",
+      "format": "MP3",
+      "bitrate": "192k",
+      "isCustom": true
+    },
+    "separationInfo": {
+      "mode": "fast",
+      "format": "MP3",
+      "bitrate": "192k",
+      "primaryModel": "UVR-MDX-NET-Inst_1.onnx",
+      "karaokeModel": "5_HP-Karaoke-UVR.pth",
+      "isCustom": true
+    },
     "lyricsProvider": "Manual Import",
+    "isSynced": false,
     "hasLyrics": true
   },
   {
@@ -241,5 +279,54 @@
     "lyricsProvider": null,
     "hasLyrics": false,
     "lyricsError": "No lyrics found across any provider."
+  },
+  {
+    "id": "1440915693",
+    "title": "All Star",
+    "artist": "Smash Mouth",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/ab/6f/5f/ab6f5f79-fe60-a6b9-c47c-cecf0e491be0/06UMGIM04334.rgb.jpg/100x100bb.jpg",
+    "query": "All Star Smash Mouth",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/1440915693/instrumental.mp3",
+      "lead": "/audio/1440915693/lead_vocal.mp3",
+      "back": "/audio/1440915693/back_vocal.mp3",
+      "full": "/audio/1440915693/audio.mp3"
+    },
+    "downloadMethod": "SpotDL",
+    "downloadAttempts": [
+      {
+        "provider": "SpotDL",
+        "status": "success",
+        "detail": "Official studio track acquired via SpotDL for \"All Star Smash Mouth\""
+      },
+      {
+        "provider": "yt-dlp Direct (Title + Artist)",
+        "status": "skipped",
+        "detail": "Not needed (acquired via SpotDL)"
+      },
+      {
+        "provider": "yt-dlp Title Fallback",
+        "status": "skipped",
+        "detail": "Not needed (acquired via SpotDL)"
+      }
+    ],
+    "engineSettings": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "isCustom": false
+    },
+    "separationInfo": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "primaryModel": "UVR-MDX-NET-Inst_HQ_3.onnx",
+      "karaokeModel": "5_HP-Karaoke-UVR.pth",
+      "isCustom": false
+    },
+    "lyricsProvider": "LRCLIB (Synced)",
+    "isSynced": true,
+    "hasLyrics": true
   }
 ]

@@ -804,12 +804,26 @@ function renderLibrary() {
           <button class="emoji-btn emoji-btn-accent" onclick="enqueueSong('${song.id}')" title="Add to Queue">➕</button>
           <button class="emoji-btn" onclick="openFolder('${song.id}')" title="Open Folder">📁</button>
           <button class="emoji-btn" onclick="openComponentManagerModal('${song.id}')" title="Component Status & Retry">📝</button>
+          <button class="emoji-btn" onclick="openSongSourceLink('${song.id}')" title="Open Song Source (Spotify / YouTube)">🔗</button>
           <button class="emoji-btn emoji-btn-danger" onclick="confirmRemoveFromLibrary('${song.id}')" title="Delete from Library">🗑️</button>
         </div>
       </div>
     `;
   }).join('');
 }
+
+window.openSongSourceLink = (id) => {
+  const song = (rawLibraryData || []).find(s => s.id === id) || (currentSong && currentSong.id === id ? currentSong : null);
+  if (!song) return;
+  const query = `${song.title || ''} ${song.artist || ''}`.trim();
+  let url;
+  if (song.downloadMethod && song.downloadMethod.toLowerCase().includes('yt-dlp')) {
+    url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+  } else {
+    url = `https://open.spotify.com/search/${encodeURIComponent(query)}`;
+  }
+  window.open(url, '_blank', 'noopener,noreferrer');
+};
 
 async function fetchQueue() {
   try {
@@ -1242,7 +1256,7 @@ function renderComponentManagerModal(song, components = {}) {
 
   // 1. Audio Download Card
   let dlBadge = '<span class="status-badge success">✅ Ready</span>';
-  let dlDetails = `File: <code>${escapeHtml(dl.audioFile || 'audio.mp3')}</code>`;
+  let dlDetails = `Downloaded via: <strong>${escapeHtml(dl.method || song.downloadMethod || 'SpotDL')}</strong> <button class="btn" style="font-size:0.7rem; padding:0.15rem 0.45rem; margin-left:0.4rem; background:rgba(255,255,255,0.12);" onclick="openSongSourceLink('${song.id}')" title="Open in Spotify / YouTube">🔗 Open Source</button> &bull; File: <code>${escapeHtml(dl.audioFile || 'audio.mp3')}</code>`;
   if (dl.status === 'error' || song.downloadError) {
     dlBadge = '<span class="status-badge error">❌ Failed</span>';
     dlDetails = `<div style="color:#f87171;">Error: ${escapeHtml(dl.error || song.downloadError || 'Audio file missing')}</div>`;
@@ -1252,26 +1266,54 @@ function renderComponentManagerModal(song, components = {}) {
 
   let dlAttemptsHtml = '';
   if (dl.attempts && dl.attempts.length > 0) {
-    dlAttemptsHtml = dl.attempts.map(a => `
-      <div class="attempt-row ${a.status === 'success' ? 'success' : (a.status === 'failed' ? 'failed' : 'skipped')}">
-        <div>
-          <strong>${escapeHtml(a.provider)}</strong>
-          <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px;">${escapeHtml(a.detail)}</div>
+    dlAttemptsHtml = dl.attempts.map(a => {
+      let icon = '❌';
+      let rowClass = 'failed';
+      if (a.status === 'success') { icon = '✅'; rowClass = 'success'; }
+      else if (a.status === 'partial') { icon = '⚠️'; rowClass = 'partial'; }
+      else if (a.status === 'skipped') { icon = '⏭️'; rowClass = 'skipped'; }
+      return `
+        <div class="attempt-row ${rowClass}">
+          <div>
+            <strong>${icon} ${escapeHtml(a.provider)}</strong>
+            <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px;">${escapeHtml(a.detail)}</div>
+          </div>
+          <span style="font-size:0.75rem; font-weight:700;">${escapeHtml(a.status.toUpperCase())}</span>
         </div>
-        <span style="font-size:0.75rem; font-weight:700;">${escapeHtml(a.status)}</span>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   }
 
   // 2. Stem Separation Card
+  const sepInfo = sp.separationInfo || song.separationInfo || {};
+  const sepMode = sepInfo.mode || (song.engineSettings && song.engineSettings.mode) || 'balanced';
+  const sepFormat = sepInfo.format || (song.engineSettings && song.engineSettings.format) || 'MP3';
+  const sepBitrate = sepInfo.bitrate || (song.engineSettings && song.engineSettings.bitrate) || '192k';
+  const primaryModel = sepInfo.primaryModel || (sepMode === 'fast' ? 'UVR-MDX-NET-Inst_1.onnx' : (sepMode === 'high' ? 'MDX23C-InstVoc HQ' : (sepMode === 'ultra' ? 'BS-Roformer-Viperx-1297' : 'UVR-MDX-NET-Inst_HQ_3.onnx')));
+  const karaokeModel = sepInfo.karaokeModel || '5_HP-Karaoke-UVR.pth';
+
+  const modeLabels = {
+    balanced: '⚖️ Balanced (~30s)',
+    fast: '⚡ Fast (~10s)',
+    high: '🎯 High Precision (~60s)',
+    ultra: '👑 Ultra Quality (~2m)'
+  };
+
   let spBadge = '<span class="status-badge success">✅ 3 Stems Separated</span>';
-  let spDetails = `Instrumental, Lead Vocals & Backing Vocals ready`;
+  let spDetails = `
+    <div style="margin-bottom: 0.35rem;">
+      Status: <strong>${sp.isFallback || sp.status === 'fallback' ? '⚠️ Full Track Fallback' : '✅ 3 Distinct AI Stems'}</strong>
+    </div>
+    <div style="font-size:0.75rem; color:var(--text-secondary); line-height: 1.5; background: rgba(0,0,0,0.25); padding: 0.4rem 0.6rem; border-radius: 6px; border: 1px solid var(--border);">
+      <div>⚙️ Mode: <strong>${escapeHtml(modeLabels[sepMode] || sepMode)}</strong> &bull; Output: <strong>${escapeHtml(sepFormat)} ${escapeHtml(sepBitrate)}</strong></div>
+      <div>🤖 Stage 1 (Vocals/Inst): <code style="color:var(--accent); font-size: 0.72rem;">${escapeHtml(primaryModel)}</code></div>
+      <div>🎙️ Stage 2 (Lead/Back): <code style="color:var(--accent); font-size: 0.72rem;">${escapeHtml(karaokeModel)}</code></div>
+    </div>
+  `;
   if (sp.isFallback || sp.status === 'fallback') {
     spBadge = '<span class="status-badge warning">⚠️ Full Track Fallback</span>';
-    spDetails = `Stem separation unfulfilled (using original track fallback)`;
   } else if (sp.status === 'error' || song.splitError) {
     spBadge = '<span class="status-badge error">❌ Separation Error</span>';
-    spDetails = `<div style="color:#f87171;">${escapeHtml(sp.error || song.splitError || 'Stem separation failed')}</div>`;
   } else if (sp.status === 'pending' || song.status === 'splitting') {
     spBadge = '<span class="status-badge pending">⏳ Splitting</span>';
   }
@@ -1309,7 +1351,7 @@ function renderComponentManagerModal(song, components = {}) {
             <strong>${icon} ${escapeHtml(a.provider)}</strong>
             <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px;">${escapeHtml(a.detail)}</div>
           </div>
-          <span style="font-size:0.75rem; font-weight:700;">${escapeHtml(a.status)}</span>
+          <span style="font-size:0.75rem; font-weight:700;">${escapeHtml(a.status.toUpperCase())}</span>
         </div>
       `;
     }).join('');
@@ -1323,7 +1365,12 @@ function renderComponentManagerModal(song, components = {}) {
         ${dlBadge}
       </div>
       <div class="component-details">${dlDetails}</div>
-      <div class="component-action-row">
+      <div class="component-action-row" style="margin-top:0.5rem;">
+        <select id="dlSourceSelect_${song.id}" class="select-input" style="font-size:0.8rem; padding:0.35rem 0.6rem; width: 180px;">
+          <option value="auto" selected>Auto (SpotDL Preferred)</option>
+          <option value="spotdl">SpotDL Only (Spotify Studio)</option>
+          <option value="ytdlp">yt-dlp (YouTube Backup)</option>
+        </select>
         <button id="retryDlBtn_${song.id}" class="btn btn-secondary" style="font-size:0.8rem; padding:0.4rem 0.8rem;" onclick="retryComponentDownload('${song.id}', this)">🔄 Retry Audio Download</button>
       </div>
       <div id="dlReportContainer_${song.id}">
@@ -1338,9 +1385,44 @@ function renderComponentManagerModal(song, components = {}) {
         ${spBadge}
       </div>
       <div class="component-details">${spDetails}</div>
-      <div class="component-action-row">
+      <div class="component-action-row" style="justify-content: space-between; align-items: center; margin-top: 0.5rem;">
         <button id="retrySpBtn_${song.id}" class="btn btn-secondary" style="font-size:0.8rem; padding:0.4rem 0.8rem;" onclick="retryComponentSplitting('${song.id}', this)">✂️ Retry Stem Separation</button>
+        <label style="font-size: 0.75rem; display: flex; align-items: center; gap: 0.3rem; cursor: pointer; color: var(--text-secondary);">
+          <input type="checkbox" id="customSepToggle_${song.id}" onchange="toggleCustomSepSettings('${song.id}')"> Custom Settings
+        </label>
       </div>
+
+      <!-- Separation Settings Accordion -->
+      <div id="customSepPanel_${song.id}" style="display: none; background: rgba(15, 23, 42, 0.85); border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem; margin-top: 0.5rem; font-size: 0.8rem;">
+        <div style="display:flex; gap: 0.4rem; flex-wrap: wrap;">
+          <div>
+            <label style="display:block; font-size: 0.65rem; color: var(--text-secondary);">Mode & Model:</label>
+            <select id="sepModeSelect_${song.id}" style="background: rgba(0,0,0,0.6); color: #fff; border: 1px solid var(--border); border-radius: 4px; padding: 0.2rem; font-size: 0.75rem;">
+              <option value="balanced" ${sepMode === 'balanced' ? 'selected' : ''}>⚖️ Balanced (UVR-MDX-HQ-3)</option>
+              <option value="fast" ${sepMode === 'fast' ? 'selected' : ''}>⚡ Fast (UVR-MDX-Inst-1)</option>
+              <option value="high" ${sepMode === 'high' ? 'selected' : ''}>🎯 High Precision (MDX23C)</option>
+              <option value="ultra" ${sepMode === 'ultra' ? 'selected' : ''}>👑 Ultra Quality (BS-Roformer)</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block; font-size: 0.65rem; color: var(--text-secondary);">Format:</label>
+            <select id="sepFormatSelect_${song.id}" style="background: rgba(0,0,0,0.6); color: #fff; border: 1px solid var(--border); border-radius: 4px; padding: 0.2rem; font-size: 0.75rem;">
+              <option value="MP3" ${sepFormat === 'MP3' ? 'selected' : ''}>MP3 (Compact)</option>
+              <option value="M4A" ${sepFormat === 'M4A' ? 'selected' : ''}>M4A (AAC)</option>
+              <option value="WAV" ${sepFormat === 'WAV' ? 'selected' : ''}>WAV (Uncompressed)</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block; font-size: 0.65rem; color: var(--text-secondary);">Bitrate:</label>
+            <select id="sepBitrateSelect_${song.id}" style="background: rgba(0,0,0,0.6); color: #fff; border: 1px solid var(--border); border-radius: 4px; padding: 0.2rem; font-size: 0.75rem;">
+              <option value="192k" ${sepBitrate === '192k' ? 'selected' : ''}>192 kbps (Default)</option>
+              <option value="320k" ${sepBitrate === '320k' ? 'selected' : ''}>320 kbps (High)</option>
+              <option value="128k" ${sepBitrate === '128k' ? 'selected' : ''}>128 kbps (Draft)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       <div id="spReportContainer_${song.id}">
         ${sp.error ? `<div class="component-report-box" style="color:#f87171;">${escapeHtml(sp.error)}</div>` : ''}
       </div>
@@ -1381,6 +1463,14 @@ function renderComponentManagerModal(song, components = {}) {
   `;
 }
 
+window.toggleCustomSepSettings = (songId) => {
+  const toggle = document.getElementById(`customSepToggle_${songId}`);
+  const panel = document.getElementById(`customSepPanel_${songId}`);
+  if (panel && toggle) {
+    panel.style.display = toggle.checked ? 'block' : 'none';
+  }
+};
+
 window.toggleManualLyricsInput = (songId, val) => {
   const manualBox = document.getElementById(`manualLyricsContainer_${songId}`);
   const retryBtn = document.getElementById(`retryLyBtn_${songId}`);
@@ -1399,8 +1489,12 @@ window.toggleManualLyricsInput = (songId, val) => {
 
 window.retryComponentDownload = async (id, btn) => {
   const container = document.getElementById(`dlReportContainer_${id}`);
+  const sourceSel = document.getElementById(`dlSourceSelect_${id}`);
+  const source = sourceSel ? sourceSel.value : 'auto';
+
+  const sourceDesc = source === 'spotdl' ? 'SpotDL Studio' : (source === 'ytdlp' ? 'yt-dlp backup' : 'SpotDL priority');
   if (container) {
-    container.innerHTML = `<div class="component-report-box loading">⏳ Downloading audio track... please wait...</div>`;
+    container.innerHTML = `<div class="component-report-box loading">⏳ Downloading audio track (${sourceDesc})... please wait...</div>`;
   }
   if (btn) {
     btn.disabled = true;
@@ -1408,7 +1502,11 @@ window.retryComponentDownload = async (id, btn) => {
   }
 
   try {
-    const res = await fetch(`/api/retry_download/${id}`, { method: 'POST' });
+    const res = await fetch(`/api/retry_download/${id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source })
+    });
     await res.json();
     const detailsRes = await fetch(`/api/song_details/${id}`);
     const detailsData = await detailsRes.json();
@@ -1433,8 +1531,18 @@ window.retryComponentDownload = async (id, btn) => {
 
 window.retryComponentSplitting = async (id, btn) => {
   const container = document.getElementById(`spReportContainer_${id}`);
+  const customToggle = document.getElementById(`customSepToggle_${id}`);
+  const modeSel = document.getElementById(`sepModeSelect_${id}`);
+  const formatSel = document.getElementById(`sepFormatSelect_${id}`);
+  const bitrateSel = document.getElementById(`sepBitrateSelect_${id}`);
+
+  const isCustom = customToggle && customToggle.checked;
+  const mode = isCustom && modeSel ? modeSel.value : 'balanced';
+  const format = isCustom && formatSel ? formatSel.value : 'MP3';
+  const bitrate = isCustom && bitrateSel ? bitrateSel.value : '192k';
+
   if (container) {
-    container.innerHTML = `<div class="component-report-box loading">⏳ Running AI 3-stem separation... please wait...</div>`;
+    container.innerHTML = `<div class="component-report-box loading">⏳ Running AI 3-stem separation [${mode.toUpperCase()}, ${format} ${bitrate}]... please wait...</div>`;
   }
   if (btn) {
     btn.disabled = true;
@@ -1442,7 +1550,11 @@ window.retryComponentSplitting = async (id, btn) => {
   }
 
   try {
-    const res = await fetch(`/api/retry_splitting/${id}`, { method: 'POST' });
+    const res = await fetch(`/api/retry_splitting/${id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode, format, bitrate, isCustom })
+    });
     await res.json();
     const detailsRes = await fetch(`/api/song_details/${id}`);
     const detailsData = await detailsRes.json();

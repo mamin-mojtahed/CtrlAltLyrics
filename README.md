@@ -1,8 +1,8 @@
-# CtrlAltLyrics
+# Ctrl+Alt+Lyrics
 
 ![ctrl-alt-lyrics logo wide](./frontend/public/ctrlaltlyrics-logo-wide.webp)
 
-A local, full-stack Karaoke Player and Lyrics Studio designed for downloading, splitting audio stems, synchronizing lyrics, and playing high-quality karaoke tracks in real time.
+A local all-in-one full-stack Karaoke Player and Lyrics Studio designed for downloading, splitting audio stems, synchronizing lyrics, and playing high-quality karaoke tracks in real time.
 > Vibe-coded with Google Antigravity IDE & Gemini
 
 ---
@@ -106,6 +106,14 @@ CtrlAltLyrics/
 ├── requirements.txt    # Python dependencies list
 └── README.md           # Project documentation
 ```
+
+---
+
+## Demo
+
+![tabs side-by-side demo](/media/demo-screenshot-tabs-sidebyside.webp)
+
+![edit pop-up demo](/media/demo-screenshot-edit-popup.webp)
 
 ---
 

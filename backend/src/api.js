@@ -113,7 +113,12 @@ function saveLightweightHistoryItem(song) {
     query: song.query,
     status: song.status,
     stems: song.stems || {},
+    downloadMethod: song.downloadMethod || 'SpotDL',
+    downloadAttempts: song.downloadAttempts || [],
+    engineSettings: song.engineSettings || null,
+    separationInfo: song.separationInfo || null,
     lyricsProvider: song.lyricsProvider || null,
+    isSynced: song.isSynced !== undefined ? song.isSynced : true,
     hasLyrics: Array.isArray(song.lyrics) && song.lyrics.length > 0
   };
 
@@ -335,7 +340,7 @@ router.post('/enqueue', async (req, res) => {
   processSong(newSong, io).catch(err => console.error("Error processing song", err));
 });
 
-async function downloadSongAudio(song) {
+async function downloadSongAudio(song, requestedSource = 'auto') {
   const songDir = path.join(DOWNLOADS_DIR, song.id);
   if (!fs.existsSync(songDir)) {
     fs.mkdirSync(songDir, { recursive: true });
@@ -358,60 +363,118 @@ async function downloadSongAudio(song) {
     .trim();
 
   const cleanQuery = `${cleanTitle} ${mainArtist}`.trim();
+  const fullQuery = (song.query || `${song.title} ${song.artist}`).replace(/["\\]/g, ' ').trim();
 
   let audioDownloaded = false;
   let methodUsed = 'SpotDL';
   const attemptsLog = [];
 
-  // Stage 1: SpotDL (30s timeout to prevent hanging on metadata matching)
-  try {
-    const spotdlCmd = `source "${venvActivate}" && spotdl "${cleanQuery}" --output "${songDir}/{title}.{output-ext}"`;
-    attemptsLog.push({ provider: 'SpotDL', status: 'started', detail: `Searching SpotDL for "${cleanQuery}"` });
-    await execPromise(spotdlCmd, { shell: '/bin/bash', timeout: 30000 });
+  const checkAndAdoptAudio = () => {
+    if (!fs.existsSync(songDir)) return false;
     const currentFiles = fs.readdirSync(songDir);
-    if (currentFiles.some(f => f.endsWith('.mp3') || f.endsWith('.m4a') || f.endsWith('.wav'))) {
-      audioDownloaded = true;
-      attemptsLog.push({ provider: 'SpotDL', status: 'success', detail: `Audio track successfully downloaded via SpotDL` });
-    } else {
-      attemptsLog.push({ provider: 'SpotDL', status: 'failed', detail: 'SpotDL completed but output audio file missing' });
+    const downloadedAudio = currentFiles.find(f => 
+      f.endsWith('.mp3') || f.endsWith('.m4a') || f.endsWith('.wav') || 
+      f.endsWith('.opus') || f.endsWith('.flac') || f.endsWith('.ogg')
+    );
+    if (downloadedAudio) {
+      const mainAudioPath = path.join(songDir, 'audio.mp3');
+      const downloadedPath = path.join(songDir, downloadedAudio);
+      if (downloadedAudio !== 'audio.mp3') {
+        fs.copyFileSync(downloadedPath, mainAudioPath);
+      }
+      return true;
     }
-  } catch (spotdlErr) {
-    console.warn("SpotDL download failed/timed out, switching to yt-dlp fallback...", spotdlErr.message);
-    attemptsLog.push({ provider: 'SpotDL', status: 'failed', detail: spotdlErr.message || 'SpotDL lookup failed' });
+    return false;
+  };
+
+  const trySpotdlQuery = async (queryText, stageLabel) => {
+    if (!queryText) return false;
+    try {
+      // SpotDL with 75s timeout and mp3 192k direct format
+      const spotdlCmd = `source "${venvActivate}" && spotdl "${queryText}" --format mp3 --bitrate 192k --output "${songDir}/{title}.{output-ext}"`;
+      await execPromise(spotdlCmd, { shell: '/bin/bash', timeout: 75000 });
+      if (checkAndAdoptAudio()) {
+        return true;
+      }
+    } catch (err) {
+      console.warn(`SpotDL attempt (${stageLabel}: "${queryText}") error:`, err.message);
+    }
+    return checkAndAdoptAudio();
+  };
+
+  // ==========================================
+  // STAGE 1: SpotDL (Spotify Official Studio Match)
+  // ==========================================
+  if (requestedSource !== 'ytdlp') {
+    // Attempt 1A: Clean Title + Main Artist
+    const success1A = await trySpotdlQuery(cleanQuery, 'Clean Title + Main Artist');
+    if (success1A) {
+      audioDownloaded = true;
+      methodUsed = 'SpotDL';
+      attemptsLog.push({ provider: 'SpotDL', status: 'success', detail: `Official studio track acquired via SpotDL for "${cleanQuery}"` });
+      attemptsLog.push({ provider: 'yt-dlp Direct (Title + Artist)', status: 'skipped', detail: 'Not needed (acquired via SpotDL)' });
+      attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'skipped', detail: 'Not needed (acquired via SpotDL)' });
+    } else {
+      // Attempt 1B: Full Search Query
+      if (fullQuery && fullQuery !== cleanQuery) {
+        const success1B = await trySpotdlQuery(fullQuery, 'Full Query');
+        if (success1B) {
+          audioDownloaded = true;
+          methodUsed = 'SpotDL';
+          attemptsLog.push({ provider: 'SpotDL', status: 'success', detail: `Official studio track acquired via SpotDL for "${fullQuery}"` });
+          attemptsLog.push({ provider: 'yt-dlp Direct (Title + Artist)', status: 'skipped', detail: 'Not needed (acquired via SpotDL)' });
+          attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'skipped', detail: 'Not needed (acquired via SpotDL)' });
+        }
+      }
+    }
+
+    if (!audioDownloaded) {
+      attemptsLog.push({ provider: 'SpotDL', status: 'failed', detail: `SpotDL search failed on Spotify catalog for "${cleanQuery}"` });
+    }
   }
 
-  // Stage 2: Direct yt-dlp search (Title + Main Artist)
-  if (!audioDownloaded) {
+  // ==========================================
+  // STAGE 2: Direct yt-dlp Search (Title + Main Artist Official Audio)
+  // ==========================================
+  if (!audioDownloaded && requestedSource !== 'spotdl') {
     try {
       methodUsed = 'yt-dlp Direct (Title + Artist)';
-      const ytdlpCmd = `source "${venvActivate}" && yt-dlp --js-runtimes node "ytsearch1:${cleanQuery}" -x --audio-format mp3 -o "${songDir}/audio.%(ext)s"`;
-      attemptsLog.push({ provider: 'yt-dlp Direct', status: 'started', detail: `Searching YouTube for "${cleanQuery}"` });
-      await execPromise(ytdlpCmd, { shell: '/bin/bash', timeout: 45000 });
-      const currentFiles = fs.readdirSync(songDir);
-      if (currentFiles.some(f => f.endsWith('.mp3') || f.endsWith('.m4a') || f.endsWith('.wav'))) {
+      // Add "official audio" or "audio" search term to prevent downloading music videos, live concerts, or talk shows
+      const ytdlpCmd = `source "${venvActivate}" && yt-dlp --js-runtimes node --match-filter "!is_live" "ytsearch1:${cleanQuery} official audio" -x --audio-format mp3 -o "${songDir}/audio.%(ext)s"`;
+      await execPromise(ytdlpCmd, { shell: '/bin/bash', timeout: 50000 });
+      if (checkAndAdoptAudio()) {
         audioDownloaded = true;
-        attemptsLog.push({ provider: 'yt-dlp Direct', status: 'success', detail: `Audio extracted via YouTube search for "${cleanQuery}"` });
+        attemptsLog.push({ provider: 'yt-dlp Direct (Title + Artist)', status: 'success', detail: `Audio extracted via YouTube audio search for "${cleanQuery}"` });
+        attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'skipped', detail: 'Not needed (acquired via yt-dlp Direct)' });
+      } else {
+        attemptsLog.push({ provider: 'yt-dlp Direct (Title + Artist)', status: 'failed', detail: 'yt-dlp completed but output audio file missing' });
       }
     } catch (ytdlpErr) {
-      console.warn("yt-dlp direct search failed, trying title fallback...", ytdlpErr.message);
-      attemptsLog.push({ provider: 'yt-dlp Direct', status: 'failed', detail: ytdlpErr.message || 'yt-dlp direct search failed' });
+      console.warn("yt-dlp direct audio search failed, trying title fallback...", ytdlpErr.message);
+      attemptsLog.push({ provider: 'yt-dlp Direct (Title + Artist)', status: 'failed', detail: ytdlpErr.message || 'Direct YouTube search failed' });
     }
   }
 
-  // Stage 3: Direct yt-dlp search (Title only fallback)
-  if (!audioDownloaded && cleanTitle) {
-    try {
-      methodUsed = 'yt-dlp Direct (Title Only)';
-      const ytdlpCmd = `source "${venvActivate}" && yt-dlp --js-runtimes node "ytsearch1:${cleanTitle}" -x --audio-format mp3 -o "${songDir}/audio.%(ext)s"`;
-      attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'started', detail: `Searching YouTube for title: "${cleanTitle}"` });
-      await execPromise(ytdlpCmd, { shell: '/bin/bash', timeout: 45000 });
-      const currentFiles = fs.readdirSync(songDir);
-      if (currentFiles.some(f => f.endsWith('.mp3') || f.endsWith('.m4a') || f.endsWith('.wav'))) {
-        audioDownloaded = true;
-        attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'success', detail: `Audio extracted for title "${cleanTitle}"` });
+  // ==========================================
+  // STAGE 3: Direct yt-dlp Search (Title Only Fallback)
+  // ==========================================
+  if (!audioDownloaded && requestedSource !== 'spotdl') {
+    if (cleanTitle) {
+      try {
+        methodUsed = 'yt-dlp Direct (Title Only)';
+        const ytdlpCmd = `source "${venvActivate}" && yt-dlp --js-runtimes node --match-filter "!is_live" "ytsearch1:${cleanTitle} audio" -x --audio-format mp3 -o "${songDir}/audio.%(ext)s"`;
+        await execPromise(ytdlpCmd, { shell: '/bin/bash', timeout: 50000 });
+        if (checkAndAdoptAudio()) {
+          audioDownloaded = true;
+          attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'success', detail: `Audio extracted for title "${cleanTitle}"` });
+        } else {
+          attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'failed', detail: 'Title fallback completed but output audio missing' });
+        }
+      } catch (ytdlpTitleErr) {
+        attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'failed', detail: ytdlpTitleErr.message || 'Title fallback failed' });
       }
-    } catch (ytdlpTitleErr) {
-      attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'failed', detail: ytdlpTitleErr.message || 'Title fallback failed' });
+    } else {
+      attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'failed', detail: 'No title available for fallback' });
     }
   }
 
@@ -525,6 +588,13 @@ async function splitSongAudio(song) {
   const mainSize = fs.existsSync(mainAudioPath) ? fs.statSync(mainAudioPath).size : 0;
   const isSeparated = !splitFailed && instSize > 0 && Math.abs(instSize - mainSize) > 50000;
 
+  const primaryModels = {
+    fast: "UVR-MDX-NET-Inst_1.onnx",
+    balanced: "UVR-MDX-NET-Inst_HQ_3.onnx",
+    high: "MDX23C-InstVoc HQ",
+    ultra: "BS-Roformer-Viperx-1297"
+  };
+
   song.stems = {
     inst: `/audio/${song.id}/${instFile}`,
     lead: `/audio/${song.id}/${leadFile}`,
@@ -532,14 +602,22 @@ async function splitSongAudio(song) {
     full: `/audio/${song.id}/audio.mp3`
   };
   song.splitIsFallback = !isSeparated;
+  song.separationInfo = {
+    mode,
+    format,
+    bitrate,
+    primaryModel: primaryModels[mode.toLowerCase()] || "UVR-MDX-NET-Inst_HQ_3.onnx",
+    karaokeModel: "5_HP-Karaoke-UVR.pth",
+    isCustom: !!(song.engineSettings && song.engineSettings.isCustom)
+  };
   
   if (splitFailed) {
     song.splitError = splitErrorMsg;
-    return { success: true, isFallback: true, stems: song.stems, error: splitErrorMsg };
+    return { success: true, isFallback: true, stems: song.stems, separationInfo: song.separationInfo, error: splitErrorMsg };
   }
 
   delete song.splitError;
-  return { success: true, isFallback: !isSeparated, stems: song.stems, mode, bitrate };
+  return { success: true, isFallback: !isSeparated, stems: song.stems, separationInfo: song.separationInfo, mode, bitrate };
 }
 
 async function processSong(song, io) {
@@ -953,19 +1031,56 @@ router.get('/song_details/:id', (req, res) => {
   const leadFile = dirFiles.find(f => f.startsWith('lead_vocal.'));
   const backFile = dirFiles.find(f => f.startsWith('back_vocal.'));
 
+  const defaultDlAttempts = [];
+  const dlMethod = song.downloadMethod || 'SpotDL';
+  if (dlMethod === 'SpotDL') {
+    defaultDlAttempts.push({ provider: 'SpotDL', status: 'success', detail: 'Audio track acquired via SpotDL' });
+    defaultDlAttempts.push({ provider: 'yt-dlp Direct (Title + Artist)', status: 'skipped', detail: 'Not needed (acquired via SpotDL)' });
+    defaultDlAttempts.push({ provider: 'yt-dlp Title Fallback', status: 'skipped', detail: 'Not needed (acquired via SpotDL)' });
+  } else if (dlMethod.includes('Title + Artist')) {
+    defaultDlAttempts.push({ provider: 'SpotDL', status: 'failed', detail: 'No metadata match on SpotDL' });
+    defaultDlAttempts.push({ provider: 'yt-dlp Direct (Title + Artist)', status: 'success', detail: 'Audio extracted via YouTube search' });
+    defaultDlAttempts.push({ provider: 'yt-dlp Title Fallback', status: 'skipped', detail: 'Not needed (acquired via yt-dlp Direct)' });
+  } else {
+    defaultDlAttempts.push({ provider: 'SpotDL', status: 'failed', detail: 'No metadata match on SpotDL' });
+    defaultDlAttempts.push({ provider: 'yt-dlp Direct (Title + Artist)', status: 'failed', detail: 'Direct match not found' });
+    defaultDlAttempts.push({ provider: 'yt-dlp Title Fallback', status: 'success', detail: 'Audio extracted via title search' });
+  }
+
+  const primaryModels = {
+    fast: "UVR-MDX-NET-Inst_1.onnx",
+    balanced: "UVR-MDX-NET-Inst_HQ_3.onnx",
+    high: "MDX23C-InstVoc HQ",
+    ultra: "BS-Roformer-Viperx-1297"
+  };
+  const currentSepMode = (song.engineSettings && song.engineSettings.mode) || 'balanced';
+  const currentSepFormat = (song.engineSettings && song.engineSettings.format) || 'MP3';
+  const currentSepBitrate = (song.engineSettings && song.engineSettings.bitrate) || '192k';
+
+  const separationInfo = song.separationInfo || {
+    mode: currentSepMode,
+    format: currentSepFormat,
+    bitrate: currentSepBitrate,
+    primaryModel: primaryModels[currentSepMode.toLowerCase()] || "UVR-MDX-NET-Inst_HQ_3.onnx",
+    karaokeModel: "5_HP-Karaoke-UVR.pth",
+    isCustom: !!(song.engineSettings && song.engineSettings.isCustom)
+  };
+
   res.json({
     song,
     components: {
       download: {
         status: audioFile ? 'success' : (song.downloadError ? 'error' : 'pending'),
         audioFile: audioFile || null,
+        method: dlMethod,
         error: song.downloadError || null,
-        attempts: song.downloadAttempts || []
+        attempts: (song.downloadAttempts && song.downloadAttempts.length > 0) ? song.downloadAttempts : defaultDlAttempts
       },
       splitting: {
         status: (instFile && leadFile && backFile) ? 'separated' : (audioFile ? 'fallback' : 'pending'),
         isFallback: song.splitIsFallback || !instFile,
         stems: song.stems || {},
+        separationInfo,
         error: song.splitError || null
       },
       lyrics: {
@@ -982,6 +1097,7 @@ router.get('/song_details/:id', (req, res) => {
 
 router.post('/retry_download/:id', async (req, res) => {
   const songId = req.params.id;
+  const { source = 'auto' } = req.body || {};
   let song = queue.find(s => s.id === songId);
   const history = readHistory();
   if (!song) {
@@ -1004,7 +1120,7 @@ router.post('/retry_download/:id', async (req, res) => {
     io.emit('library_updated', readHistory());
   }
 
-  const result = await downloadSongAudio(song);
+  const result = await downloadSongAudio(song, source);
   
   if (result.success) {
     await splitSongAudio(song);
@@ -1028,6 +1144,8 @@ router.post('/retry_download/:id', async (req, res) => {
 
 router.post('/retry_splitting/:id', async (req, res) => {
   const songId = req.params.id;
+  const { mode, format, bitrate, isCustom } = req.body || {};
+
   let song = queue.find(s => s.id === songId);
   const history = readHistory();
   if (!song) {
@@ -1040,6 +1158,15 @@ router.post('/retry_splitting/:id', async (req, res) => {
 
   if (!song) {
     return res.status(404).json({ error: 'Song not found' });
+  }
+
+  if (mode) {
+    song.engineSettings = {
+      mode: mode || 'balanced',
+      format: format || 'MP3',
+      bitrate: bitrate || '192k',
+      isCustom: isCustom !== false
+    };
   }
 
   const io = req.app.get('io');
@@ -1062,6 +1189,7 @@ router.post('/retry_splitting/:id', async (req, res) => {
   res.json({
     success: result.success,
     song,
+    separationInfo: song.separationInfo,
     details: result
   });
 });
