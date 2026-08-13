@@ -397,8 +397,8 @@ function renderLyrics(lyrics) {
 
   lyricsContainer.innerHTML = lyrics.map((l, i) => `
     <div class="lyric-line" id="lyric_${i}" data-time="${l.time}" data-index="${i}">
-      <span class="lyric-text">${l.text}</span>
       ${l.transliteration ? `<span class="lyric-transliteration">${l.transliteration}</span>` : ''}
+      <span class="lyric-text">${l.text}</span>
       ${l.translation ? `<span class="lyric-translation">${l.translation}</span>` : ''}
     </div>
   `).join('');

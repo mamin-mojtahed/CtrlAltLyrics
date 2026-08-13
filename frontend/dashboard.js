@@ -51,10 +51,119 @@ let currentState = {};
 let currentSong = null;
 
 function formatTime(seconds) {
-  if (!seconds || isNaN(seconds)) return '0:00';
+  if (seconds === undefined || seconds === null || isNaN(seconds) || seconds < 0) return '0:00';
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+function formatTimeDisplay(currentTime, duration) {
+  if (!currentSong) return '--:-- / --:--';
+  const curStr = (currentTime !== undefined && currentTime !== null && !isNaN(currentTime)) ? formatTime(currentTime) : '--:--';
+  const durStr = (duration && !isNaN(duration) && duration > 0) ? formatTime(duration) : '--:--';
+  return `${curStr} / ${durStr}`;
+}
+
+// Adaptive Dynamic Theme Colors (matches Display Tab)
+function getHighResAlbumArt(url) {
+  if (!url) return null;
+  return url.replace(/\/\d+x\d+bb\./i, '/600x600bb.').replace(/\/\d+x\d+\./i, '/600x600.');
+}
+
+function applyDashboardThemeColors(bgPrimary, bgSecondary, accent) {
+  const bgPrimStr = `rgb(${bgPrimary.r}, ${bgPrimary.g}, ${bgPrimary.b})`;
+  const bgSecStr = `rgb(${bgSecondary.r}, ${bgSecondary.g}, ${bgSecondary.b})`;
+  const accentStr = `rgb(${accent.r}, ${accent.g}, ${accent.b})`;
+  const accentHoverStr = `rgb(${Math.max(0, Math.round(accent.r * 0.85))}, ${Math.max(0, Math.round(accent.g * 0.85))}, ${Math.max(0, Math.round(accent.b * 0.85))})`;
+  const accentGlowStr = `rgba(${accent.r}, ${accent.g}, ${accent.b}, 0.35)`;
+  const panelBgStr = `rgba(${Math.round(bgPrimary.r * 1.3 + 10)}, ${Math.round(bgPrimary.g * 1.3 + 12)}, ${Math.round(bgPrimary.b * 1.3 + 18)}, 0.65)`;
+
+  const root = document.documentElement;
+  root.style.setProperty('--bg-color', bgPrimStr);
+  root.style.setProperty('--dashboard-bg-primary', bgPrimStr);
+  root.style.setProperty('--dashboard-bg-secondary', bgSecStr);
+  root.style.setProperty('--accent', accentStr);
+  root.style.setProperty('--accent-hover', accentHoverStr);
+  root.style.setProperty('--accent-glow', accentGlowStr);
+  root.style.setProperty('--panel-bg', panelBgStr);
+
+  updateAllFaderTrackFills();
+}
+
+function extractColorsFromSongCover(imgUrl) {
+  if (!imgUrl || imgUrl.includes('placeholder')) {
+    applyDashboardThemeColors({ r: 15, g: 17, b: 26 }, { r: 30, g: 27, b: 75 }, { r: 99, g: 102, b: 241 });
+    return;
+  }
+
+  const img = new Image();
+  img.crossOrigin = 'Anonymous';
+  img.src = imgUrl;
+
+  img.onload = () => {
+    try {
+      const offCanvas = document.createElement('canvas');
+      const offCtx = offCanvas.getContext('2d');
+      offCanvas.width = 32;
+      offCanvas.height = 32;
+      offCtx.drawImage(img, 0, 0, 32, 32);
+
+      const imageData = offCtx.getImageData(0, 0, 32, 32).data;
+      let totalR = 0, totalG = 0, totalB = 0, count = 0;
+      let maxSat = -1;
+      let vibrantColor = { r: 99, g: 102, b: 241 };
+
+      for (let i = 0; i < imageData.length; i += 4) {
+        const r = imageData[i];
+        const g = imageData[i + 1];
+        const b = imageData[i + 2];
+        const a = imageData[i + 3];
+
+        if (a < 128) continue;
+
+        totalR += r;
+        totalG += g;
+        totalB += b;
+        count++;
+
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const l = (max + min) / 510;
+        const sat = max === 0 ? 0 : (max - min) / max;
+
+        if (sat > maxSat && l > 0.2 && l < 0.85) {
+          maxSat = sat;
+          vibrantColor = { r, g, b };
+        }
+      }
+
+      if (count > 0) {
+        const avgR = Math.round(totalR / count);
+        const avgG = Math.round(totalG / count);
+        const avgB = Math.round(totalB / count);
+
+        const darkColor = {
+          r: Math.round(avgR * 0.25),
+          g: Math.round(avgG * 0.25),
+          b: Math.round(avgB * 0.25)
+        };
+
+        const secondaryBg = {
+          r: Math.round(vibrantColor.r * 0.25),
+          g: Math.round(vibrantColor.g * 0.25),
+          b: Math.round(vibrantColor.b * 0.25)
+        };
+
+        applyDashboardThemeColors(darkColor, secondaryBg, vibrantColor);
+      }
+    } catch (e) {
+      applyDashboardThemeColors({ r: 15, g: 17, b: 26 }, { r: 30, g: 27, b: 75 }, { r: 99, g: 102, b: 241 });
+    }
+  };
+
+  img.onerror = () => {
+    applyDashboardThemeColors({ r: 15, g: 17, b: 26 }, { r: 30, g: 27, b: 75 }, { r: 99, g: 102, b: 241 });
+  };
 }
 
 function updateLyricsCounter(time = 0) {
@@ -143,7 +252,7 @@ function setupAudio(song) {
     timelineSlider.disabled = false;
     const dur = sources.leadBuf ? sources.leadBuf.duration : (sources.instBuf ? sources.instBuf.duration : (sources.backBuf ? sources.backBuf.duration : 0));
     timelineSlider.max = dur;
-    if (timeDisplay) timeDisplay.innerText = `0:00 / ${formatTime(dur)}`;
+    if (timeDisplay) timeDisplay.innerText = formatTimeDisplay(0, dur);
     updateLyricsCounter(0);
   }).catch(e => console.error("Error loading audio:", e));
 
@@ -342,7 +451,7 @@ function seekToTime(time) {
 
   pauseTime = targetTime;
   timelineSlider.value = targetTime;
-  if (timeDisplay) timeDisplay.innerText = `${formatTime(targetTime)} / ${formatTime(timelineSlider.max)}`;
+  if (timeDisplay) timeDisplay.innerText = formatTimeDisplay(targetTime, maxDur);
   updateLyricsCounter(targetTime);
 
   socket.emit('player_command', { command: 'seek', time: targetTime });
@@ -362,7 +471,7 @@ timelineSlider.addEventListener('input', (e) => {
     audioStartTime = audioCtx.currentTime - target;
   }
   pauseTime = target;
-  if (timeDisplay) timeDisplay.innerText = `${formatTime(target)} / ${formatTime(timelineSlider.max)}`;
+  if (timeDisplay) timeDisplay.innerText = formatTimeDisplay(target, parseFloat(timelineSlider.max) || 0);
   updateLyricsCounter(target);
 });
 
@@ -391,6 +500,22 @@ if (linkBackLeadBtn) {
   });
 }
 
+function updateFaderTrackFill(input) {
+  if (!input) return;
+  const val = parseFloat(input.value) || 0;
+  const max = parseFloat(input.max) || 1;
+  const min = parseFloat(input.min) || 0;
+  const pct = Math.max(0, Math.min(100, ((val - min) / (max - min)) * 100));
+  input.style.background = `linear-gradient(to top, var(--accent, #6366f1) ${pct}%, #ffffff ${pct}%)`;
+  input.style.backgroundClip = 'content-box';
+}
+
+function updateAllFaderTrackFills() {
+  updateFaderTrackFill(volInst);
+  updateFaderTrackFill(volBackVoc);
+  updateFaderTrackFill(volLeadVoc);
+}
+
 // Stem Volumes & Dual Linking
 volInst.addEventListener('input', (e) => {
   const val = e.target.value;
@@ -404,6 +529,7 @@ volInst.addEventListener('input', (e) => {
       if (gainNodes.leadVoc) gainNodes.leadVoc.gain.value = val;
     }
   }
+  updateAllFaderTrackFills();
   socket.emit('update_state', { 
     volumes: { 
       ...currentState.volumes, 
@@ -426,6 +552,7 @@ volBackVoc.addEventListener('input', (e) => {
     volLeadVoc.value = val;
     if (gainNodes.leadVoc) gainNodes.leadVoc.gain.value = val;
   }
+  updateAllFaderTrackFills();
   socket.emit('update_state', { 
     volumes: { 
       ...currentState.volumes, 
@@ -448,6 +575,7 @@ volLeadVoc.addEventListener('input', (e) => {
       if (gainNodes.inst) gainNodes.inst.gain.value = val;
     }
   }
+  updateAllFaderTrackFills();
   socket.emit('update_state', { 
     volumes: { 
       ...currentState.volumes, 
@@ -457,6 +585,8 @@ volLeadVoc.addEventListener('input', (e) => {
     } 
   });
 });
+
+updateAllFaderTrackFills();
 
 // Keyboard Shortcuts
 window.addEventListener('keydown', (e) => {
@@ -673,7 +803,7 @@ function renderLibrary() {
         <div class="emoji-btn-group">
           <button class="emoji-btn emoji-btn-accent" onclick="enqueueSong('${song.id}')" title="Add to Queue">➕</button>
           <button class="emoji-btn" onclick="openFolder('${song.id}')" title="Open Folder">📁</button>
-          <button class="emoji-btn" onclick="retryLyrics('${song.id}', 'auto', event)" title="Retry Lyrics">🔄</button>
+          <button class="emoji-btn" onclick="openComponentManagerModal('${song.id}')" title="Component Status & Retry">📝</button>
           <button class="emoji-btn emoji-btn-danger" onclick="confirmRemoveFromLibrary('${song.id}')" title="Delete from Library">🗑️</button>
         </div>
       </div>
@@ -977,11 +1107,13 @@ window.selectSong = async (id, forcePlay = null) => {
       currentSong = song;
       isHandlingSongEnd = false;
       currentSongTitle.innerText = song.title;
+      extractColorsFromSongCover(getHighResAlbumArt(song.albumArt || (song.id ? `/api/cover/${song.id}` : null)));
       pauseTime = 0;
       currentState.currentTime = 0;
       currentState.isPlaying = false;
       timelineSlider.value = 0;
-      if (timeDisplay) timeDisplay.innerText = `0:00 / ${formatTime(timelineSlider.max)}`;
+      timelineSlider.max = 0;
+      if (timeDisplay) timeDisplay.innerText = '--:-- / --:--';
       socket.emit('update_state', { songId: song.id, currentTime: 0, isPlaying: false, songData: song });
       
       await setupAudio(song);
@@ -1007,6 +1139,7 @@ function clearCurrentSong() {
   sources.backVoc = null;
   sources.inst = null;
   currentSong = null;
+  extractColorsFromSongCover(null);
   pauseTime = 0;
   currentState.isPlaying = false;
   currentState.currentTime = 0;
@@ -1015,8 +1148,9 @@ function clearCurrentSong() {
   playPauseBtn.innerText = '▶';
   if (currentSongTitle) currentSongTitle.innerText = 'None';
   timelineSlider.value = 0;
+  timelineSlider.max = 0;
   timelineSlider.disabled = true;
-  if (timeDisplay) timeDisplay.innerText = '0:00 / 0:00';
+  if (timeDisplay) timeDisplay.innerText = '--:-- / --:--';
   updateLyricsCounter(0);
   renderLyricsEditor([]);
   socket.emit('update_state', { songId: null, currentTime: 0, isPlaying: false, songData: null });
@@ -1030,7 +1164,7 @@ async function handleSongFinished() {
   const maxDur = parseFloat(timelineSlider.max) || 0;
   timelineSlider.value = maxDur;
   if (timeDisplay) {
-    timeDisplay.innerText = `${formatTime(maxDur)} / ${formatTime(maxDur)}`;
+    timeDisplay.innerText = formatTimeDisplay(maxDur, maxDur);
   }
   updateLyricsCounter(maxDur);
 
@@ -1062,84 +1196,365 @@ window.openFolder = (id) => {
   fetch(`/api/open_folder/${id}`, { method: 'POST' });
 };
 
-function showLyricsReportModal(songTitle, attempts = [], provider = null, lyricsCount = 0, lyricsError = null) {
-  const modal = document.getElementById('lyricsReportModal');
-  const titleEl = document.getElementById('lyricsReportTitle');
-  const bodyEl = document.getElementById('lyricsReportBody');
+// Component Manager Modal Event Listeners
+const closeCompManagerBtn = document.getElementById('closeComponentManagerBtn');
+const dismissCompManagerBtn = document.getElementById('dismissComponentManagerBtn');
+const compManagerModalOverlay = document.getElementById('componentManagerModal');
 
+if (closeCompManagerBtn) closeCompManagerBtn.addEventListener('click', () => compManagerModalOverlay.style.display = 'none');
+if (dismissCompManagerBtn) dismissCompManagerBtn.addEventListener('click', () => compManagerModalOverlay.style.display = 'none');
+if (compManagerModalOverlay) {
+  compManagerModalOverlay.addEventListener('click', (e) => {
+    if (e.target === compManagerModalOverlay) compManagerModalOverlay.style.display = 'none';
+  });
+}
+
+window.openComponentManagerModal = async (id) => {
+  const modal = document.getElementById('componentManagerModal');
+  const titleEl = document.getElementById('componentManagerTitle');
+  const bodyEl = document.getElementById('componentManagerBody');
   if (!modal || !bodyEl) return;
 
-  // 1. Console Logging Report
-  console.group(`🎵 Lyrics Search Report: "${songTitle}"`);
-  console.log(`Final Outcome: ${provider ? 'SUCCESS via ' + provider : 'FAILED (' + (lyricsError || 'No lyrics found') + ')'}`);
-  console.log(`Lyrics count: ${lyricsCount} lines`);
-  console.log("Provider attempts checklist:");
-  (attempts || []).forEach((a, i) => {
-    const icon = a.status === 'success' ? '✅' : (a.status === 'failed' ? '❌' : (a.status === 'partial' ? '⚠️' : '⏭️'));
-    console.log(`  ${i + 1}. [${icon} ${a.status.toUpperCase()}] ${a.provider}: ${a.detail}`);
-  });
-  console.groupEnd();
+  if (titleEl) titleEl.innerText = `📝 Component Status & Manager`;
+  bodyEl.innerHTML = `<div class="empty-state">⏳ Loading component status...</div>`;
+  modal.style.display = 'flex';
 
-  // 2. UI Pop-Up Modal
-  if (titleEl) titleEl.innerText = `🎵 Lyrics Report: "${songTitle}"`;
+  try {
+    const res = await fetch(`/api/song_details/${id}`);
+    if (!res.ok) throw new Error("Failed to load song details");
+    const data = await res.json();
+    renderComponentManagerModal(data.song, data.components);
+  } catch (err) {
+    bodyEl.innerHTML = `<div class="error-state">⚠️ Error loading song details: ${escapeHtml(err.message)}</div>`;
+  }
+};
 
-  const outcomeStyle = provider ? 'color: #34d399; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3);' : 'color: #f87171; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3);';
-  const outcomeText = provider 
-    ? `✅ Successfully loaded <strong>${lyricsCount}</strong> lyric lines via <strong>${escapeHtml(provider)}</strong>`
-    : `❌ Failed to fetch lyrics (${escapeHtml(lyricsError || 'No match across any provider')})`;
+function renderComponentManagerModal(song, components = {}) {
+  const titleEl = document.getElementById('componentManagerTitle');
+  const bodyEl = document.getElementById('componentManagerBody');
+  if (!bodyEl) return;
 
-  let attemptsHtml = '';
-  if (attempts && attempts.length > 0) {
-    attemptsHtml = attempts.map(a => {
+  if (titleEl) titleEl.innerText = `📝 Component Manager: "${escapeHtml(song.title || 'Song')}"`;
+
+  const dl = components.download || {};
+  const sp = components.splitting || {};
+  const ly = components.lyrics || {};
+
+  // 1. Audio Download Card
+  let dlBadge = '<span class="status-badge success">✅ Ready</span>';
+  let dlDetails = `File: <code>${escapeHtml(dl.audioFile || 'audio.mp3')}</code>`;
+  if (dl.status === 'error' || song.downloadError) {
+    dlBadge = '<span class="status-badge error">❌ Failed</span>';
+    dlDetails = `<div style="color:#f87171;">Error: ${escapeHtml(dl.error || song.downloadError || 'Audio file missing')}</div>`;
+  } else if (dl.status === 'pending' || song.status === 'downloading') {
+    dlBadge = '<span class="status-badge pending">⏳ Downloading</span>';
+  }
+
+  let dlAttemptsHtml = '';
+  if (dl.attempts && dl.attempts.length > 0) {
+    dlAttemptsHtml = dl.attempts.map(a => `
+      <div class="attempt-row ${a.status === 'success' ? 'success' : (a.status === 'failed' ? 'failed' : 'skipped')}">
+        <div>
+          <strong>${escapeHtml(a.provider)}</strong>
+          <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px;">${escapeHtml(a.detail)}</div>
+        </div>
+        <span style="font-size:0.75rem; font-weight:700;">${escapeHtml(a.status)}</span>
+      </div>
+    `).join('');
+  }
+
+  // 2. Stem Separation Card
+  let spBadge = '<span class="status-badge success">✅ 3 Stems Separated</span>';
+  let spDetails = `Instrumental, Lead Vocals & Backing Vocals ready`;
+  if (sp.isFallback || sp.status === 'fallback') {
+    spBadge = '<span class="status-badge warning">⚠️ Full Track Fallback</span>';
+    spDetails = `Stem separation unfulfilled (using original track fallback)`;
+  } else if (sp.status === 'error' || song.splitError) {
+    spBadge = '<span class="status-badge error">❌ Separation Error</span>';
+    spDetails = `<div style="color:#f87171;">${escapeHtml(sp.error || song.splitError || 'Stem separation failed')}</div>`;
+  } else if (sp.status === 'pending' || song.status === 'splitting') {
+    spBadge = '<span class="status-badge pending">⏳ Splitting</span>';
+  }
+
+  // 3. Lyrics Card
+  const lineCount = ly.count || (song.lyrics ? song.lyrics.length : 0);
+  const isManual = (ly.provider === 'Manual Import' || song.lyricsProvider === 'Manual Import');
+  let lyBadge = '<span class="status-badge success">✅ Synced Lyrics</span>';
+  if (isManual || song.isSynced === false || ly.isSynced === false) {
+    lyBadge = '<span class="status-badge success" style="background: rgba(147, 51, 234, 0.15); color: #c084fc; border: 1px solid rgba(147, 51, 234, 0.3);">✍️ Unsynced Lyrics</span>';
+  }
+  let lyDetails = `Loaded <strong>${lineCount}</strong> lines via <strong>${escapeHtml(ly.provider || song.lyricsProvider || 'LRC Provider')}</strong>`;
+  
+  if (!ly.hasLyrics && lineCount === 0) {
+    if (ly.status === 'failed' || song.lyricsError) {
+      lyBadge = '<span class="status-badge error">❌ No Lyrics Found</span>';
+      lyDetails = `<div style="color:#f87171;">Error: ${escapeHtml(ly.error || song.lyricsError || 'Lyrics fetch failed across all providers')}</div>`;
+    } else {
+      lyBadge = '<span class="status-badge warning">⚠️ No Lyrics</span>';
+      lyDetails = `No lyrics currently loaded`;
+    }
+  }
+
+  let lyAttemptsHtml = '';
+  if (ly.attempts && ly.attempts.length > 0) {
+    lyAttemptsHtml = ly.attempts.map(a => {
       let icon = '❌';
       let rowClass = 'failed';
-      if (a.status === 'success') {
-        icon = '✅';
-        rowClass = 'success';
-      } else if (a.status === 'partial') {
-        icon = '⚠️';
-        rowClass = 'partial';
-      } else if (a.status === 'skipped') {
-        icon = '⏭️';
-        rowClass = 'skipped';
-      }
+      if (a.status === 'success') { icon = '✅'; rowClass = 'success'; }
+      else if (a.status === 'partial') { icon = '⚠️'; rowClass = 'partial'; }
+      else if (a.status === 'skipped') { icon = '⏭️'; rowClass = 'skipped'; }
       return `
         <div class="attempt-row ${rowClass}">
           <div>
             <strong>${icon} ${escapeHtml(a.provider)}</strong>
             <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px;">${escapeHtml(a.detail)}</div>
           </div>
-          <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing: 0.05em;">${escapeHtml(a.status)}</span>
+          <span style="font-size:0.75rem; font-weight:700;">${escapeHtml(a.status)}</span>
         </div>
       `;
     }).join('');
-  } else {
-    attemptsHtml = `<div class="empty-state">No attempt details logged.</div>`;
   }
 
   bodyEl.innerHTML = `
-    <div style="margin-bottom: 1rem; padding: 0.75rem 1rem; border-radius: 8px; ${outcomeStyle} font-size: 0.9rem;">
-      ${outcomeText}
+    <!-- Component 1: Audio Download -->
+    <div class="component-card component-card-download">
+      <div class="component-card-header">
+        <div class="component-title">📥 1. Audio Download</div>
+        ${dlBadge}
+      </div>
+      <div class="component-details">${dlDetails}</div>
+      <div class="component-action-row">
+        <button id="retryDlBtn_${song.id}" class="btn btn-secondary" style="font-size:0.8rem; padding:0.4rem 0.8rem;" onclick="retryComponentDownload('${song.id}', this)">🔄 Retry Audio Download</button>
+      </div>
+      <div id="dlReportContainer_${song.id}">
+        ${dlAttemptsHtml ? `<div class="component-report-box">${dlAttemptsHtml}</div>` : ''}
+      </div>
     </div>
-    <h4 style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">Provider Attempt History</h4>
-    ${attemptsHtml}
+
+    <!-- Component 2: Stem Separation -->
+    <div class="component-card component-card-splitting">
+      <div class="component-card-header">
+        <div class="component-title">✂️ 2. Stem Separation</div>
+        ${spBadge}
+      </div>
+      <div class="component-details">${spDetails}</div>
+      <div class="component-action-row">
+        <button id="retrySpBtn_${song.id}" class="btn btn-secondary" style="font-size:0.8rem; padding:0.4rem 0.8rem;" onclick="retryComponentSplitting('${song.id}', this)">✂️ Retry Stem Separation</button>
+      </div>
+      <div id="spReportContainer_${song.id}">
+        ${sp.error ? `<div class="component-report-box" style="color:#f87171;">${escapeHtml(sp.error)}</div>` : ''}
+      </div>
+    </div>
+
+    <!-- Component 3: Lyrics Fetching -->
+    <div class="component-card component-card-lyrics">
+      <div class="component-card-header">
+        <div class="component-title">📜 3. Lyrics</div>
+        ${lyBadge}
+      </div>
+      <div class="component-details">${lyDetails}</div>
+      <div class="component-action-row">
+        <select id="lyricsProviderSelect_${song.id}" class="select-input" onchange="toggleManualLyricsInput('${song.id}', this.value)" style="font-size:0.8rem; padding:0.35rem 0.6rem; width: 145px;">
+          <option value="auto">Auto (All Providers)</option>
+          <option value="LRCLIB">LRCLIB</option>
+          <option value="Musixmatch">Musixmatch</option>
+          <option value="NetEase">NetEase</option>
+          <option value="Genius">Genius</option>
+          <option value="Megalobiz">Megalobiz</option>
+          <option value="manual">✍️ Manual Import</option>
+        </select>
+        <button id="retryLyBtn_${song.id}" class="btn btn-secondary" style="font-size:0.8rem; padding:0.4rem 0.8rem;" onclick="retryComponentLyrics('${song.id}', this)">📜 Retry Lyrics</button>
+      </div>
+      
+      <!-- Manual Lyrics Paste Area (Shown when Manual Import is chosen) -->
+      <div id="manualLyricsContainer_${song.id}" style="display: none; margin-top: 0.75rem;">
+        <textarea id="manualLyricsText_${song.id}" class="manual-lyrics-textarea" placeholder="Paste song lyrics here... Each line will be split into unsynced lyrics." rows="5"></textarea>
+        <div style="display: flex; justify-content: flex-end; margin-top: 0.5rem;">
+          <button id="importManualBtn_${song.id}" class="btn btn-primary" style="font-size:0.8rem; padding:0.4rem 0.9rem;" onclick="importManualLyrics('${song.id}', this)">✍️ Import Lyrics</button>
+        </div>
+      </div>
+
+      <div id="lyReportContainer_${song.id}">
+        ${lyAttemptsHtml ? `<div class="component-report-box">${lyAttemptsHtml}</div>` : ''}
+      </div>
+    </div>
   `;
-
-  modal.style.display = 'flex';
 }
 
-// Modal Event Listeners
-const closeModalBtn = document.getElementById('closeLyricsReportBtn');
-const dismissModalBtn = document.getElementById('dismissLyricsReportBtn');
-const modalOverlay = document.getElementById('lyricsReportModal');
+window.toggleManualLyricsInput = (songId, val) => {
+  const manualBox = document.getElementById(`manualLyricsContainer_${songId}`);
+  const retryBtn = document.getElementById(`retryLyBtn_${songId}`);
+  if (val === 'manual') {
+    if (manualBox) {
+      manualBox.style.display = 'block';
+      const ta = document.getElementById(`manualLyricsText_${songId}`);
+      if (ta) ta.focus();
+    }
+    if (retryBtn) retryBtn.style.display = 'none';
+  } else {
+    if (manualBox) manualBox.style.display = 'none';
+    if (retryBtn) retryBtn.style.display = 'inline-block';
+  }
+};
 
-if (closeModalBtn) closeModalBtn.addEventListener('click', () => modalOverlay.style.display = 'none');
-if (dismissModalBtn) dismissModalBtn.addEventListener('click', () => modalOverlay.style.display = 'none');
-if (modalOverlay) {
-  modalOverlay.addEventListener('click', (e) => {
-    if (e.target === modalOverlay) modalOverlay.style.display = 'none';
-  });
-}
+window.retryComponentDownload = async (id, btn) => {
+  const container = document.getElementById(`dlReportContainer_${id}`);
+  if (container) {
+    container.innerHTML = `<div class="component-report-box loading">⏳ Downloading audio track... please wait...</div>`;
+  }
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = '⏳ Downloading...';
+  }
+
+  try {
+    const res = await fetch(`/api/retry_download/${id}`, { method: 'POST' });
+    await res.json();
+    const detailsRes = await fetch(`/api/song_details/${id}`);
+    const detailsData = await detailsRes.json();
+    renderComponentManagerModal(detailsData.song, detailsData.components);
+    if (currentSong && currentSong.id === id) {
+      currentSong = detailsData.song;
+      setupAudio(currentSong);
+    }
+  } catch (err) {
+    if (container) {
+      container.innerHTML = `<div class="component-report-box" style="color:#f87171;">⚠️ Download failed: ${escapeHtml(err.message)}</div>`;
+    }
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = '🔄 Retry Audio Download';
+    }
+  } finally {
+    fetchLibrary();
+    fetchQueue();
+  }
+};
+
+window.retryComponentSplitting = async (id, btn) => {
+  const container = document.getElementById(`spReportContainer_${id}`);
+  if (container) {
+    container.innerHTML = `<div class="component-report-box loading">⏳ Running AI 3-stem separation... please wait...</div>`;
+  }
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = '⏳ Splitting...';
+  }
+
+  try {
+    const res = await fetch(`/api/retry_splitting/${id}`, { method: 'POST' });
+    await res.json();
+    const detailsRes = await fetch(`/api/song_details/${id}`);
+    const detailsData = await detailsRes.json();
+    renderComponentManagerModal(detailsData.song, detailsData.components);
+    if (currentSong && currentSong.id === id) {
+      currentSong = detailsData.song;
+      setupAudio(currentSong);
+    }
+  } catch (err) {
+    if (container) {
+      container.innerHTML = `<div class="component-report-box" style="color:#f87171;">⚠️ Splitting failed: ${escapeHtml(err.message)}</div>`;
+    }
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = '✂️ Retry Stem Separation';
+    }
+  } finally {
+    fetchLibrary();
+    fetchQueue();
+  }
+};
+
+window.retryComponentLyrics = async (id, btn) => {
+  const container = document.getElementById(`lyReportContainer_${id}`);
+  if (container) {
+    container.innerHTML = `<div class="component-report-box loading">⏳ Fetching synced lyrics from providers... please wait...</div>`;
+  }
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = '⏳ Fetching...';
+  }
+
+  const sel = document.getElementById(`lyricsProviderSelect_${id}`);
+  const provider = sel ? sel.value : 'auto';
+
+  try {
+    const res = await fetch(`/api/retry_lyrics/${id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider })
+    });
+    await res.json();
+    const detailsRes = await fetch(`/api/song_details/${id}`);
+    const detailsData = await detailsRes.json();
+    renderComponentManagerModal(detailsData.song, detailsData.components);
+    if (currentSong && currentSong.id === id) {
+      currentSong = detailsData.song;
+      socket.emit('update_state', { songId: currentSong.id, songData: currentSong });
+      renderLyricsEditor(currentSong.lyrics || []);
+    }
+  } catch (err) {
+    if (container) {
+      container.innerHTML = `<div class="component-report-box" style="color:#f87171;">⚠️ Lyrics retry failed: ${escapeHtml(err.message)}</div>`;
+    }
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = '📜 Retry Lyrics';
+    }
+  } finally {
+    fetchLibrary();
+    fetchQueue();
+  }
+};
+
+window.importManualLyrics = async (id, btn) => {
+  const ta = document.getElementById(`manualLyricsText_${id}`);
+  const text = ta ? ta.value : '';
+  if (!text.trim()) {
+    alert('Please paste some lyrics text first.');
+    return;
+  }
+
+  const container = document.getElementById(`lyReportContainer_${id}`);
+  if (container) {
+    container.innerHTML = `<div class="component-report-box loading">⏳ Importing lyrics lines, transliterating & translating... please wait...</div>`;
+  }
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = '⏳ Importing...';
+  }
+
+  try {
+    const res = await fetch(`/api/import_lyrics/${id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to import lyrics');
+
+    const detailsRes = await fetch(`/api/song_details/${id}`);
+    const detailsData = await detailsRes.json();
+    renderComponentManagerModal(detailsData.song, detailsData.components);
+
+    if (currentSong && currentSong.id === id) {
+      currentSong = detailsData.song;
+      socket.emit('update_state', { songId: currentSong.id, songData: currentSong });
+      renderLyricsEditor(currentSong.lyrics || []);
+    }
+  } catch (err) {
+    if (container) {
+      container.innerHTML = `<div class="component-report-box" style="color:#f87171;">⚠️ Manual import failed: ${escapeHtml(err.message)}</div>`;
+    }
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = '✍️ Import Lyrics';
+    }
+  } finally {
+    fetchLibrary();
+    fetchQueue();
+  }
+};
 
 window.retryLyrics = async (id, provider = 'auto', e) => {
   if (e && e.target) {
@@ -1159,13 +1574,6 @@ window.retryLyrics = async (id, provider = 'auto', e) => {
         socket.emit('update_state', { songId: currentSong.id, songData: currentSong });
         renderLyricsEditor(currentSong.lyrics || []);
       }
-      showLyricsReportModal(
-        data.song.title || 'Song',
-        data.attempts || [],
-        data.provider,
-        data.lyricsCount || (data.song.lyrics ? data.song.lyrics.length : 0),
-        data.lyricsError
-      );
     }
   } catch (err) {
     console.error("Retry lyrics fetch error:", err);
@@ -1269,19 +1677,15 @@ socket.on('library_updated', (data) => {
     fetchLibrary();
   }
 });
-socket.on('lyrics_report', (report) => {
-  if (report) {
-    showLyricsReportModal(
-      report.songTitle || 'Song',
-      report.attempts || [],
-      report.provider,
-      report.lyricsCount || 0,
-      report.lyricsError
-    );
-  }
-});
 socket.on('sync_state', (state) => {
   currentState = { ...currentState, ...state };
+
+  if (state.showTranslit !== undefined && toggleTranslit) {
+    toggleTranslit.checked = !!state.showTranslit;
+  }
+  if (state.showTranslat !== undefined && toggleTranslat) {
+    toggleTranslat.checked = !!state.showTranslat;
+  }
 
   if (state.isPlaying === false) {
     stopSource(sources.leadVoc);
@@ -1295,15 +1699,18 @@ socket.on('sync_state', (state) => {
   if (state.songData && (!currentSong || currentSong.id !== state.songData.id)) {
     currentSong = state.songData;
     if (currentSongTitle) currentSongTitle.innerText = currentSong.title || 'None';
+    extractColorsFromSongCover(getHighResAlbumArt(currentSong.albumArt || (currentSong.id ? `/api/cover/${currentSong.id}` : null)));
     setupAudio(currentSong);
     renderLyricsEditor(currentSong.lyrics || []);
     updateLyricsCounter(state.currentTime || 0);
   } else if (!state.songId || !state.songData) {
     currentSong = null;
+    extractColorsFromSongCover(null);
     if (currentSongTitle) currentSongTitle.innerText = 'None';
     timelineSlider.value = 0;
+    timelineSlider.max = 0;
     timelineSlider.disabled = true;
-    if (timeDisplay) timeDisplay.innerText = '0:00 / 0:00';
+    if (timeDisplay) timeDisplay.innerText = '--:-- / --:--';
     updateLyricsCounter(0);
     renderLyricsEditor([]);
   }
@@ -1312,7 +1719,7 @@ socket.on('sync_state', (state) => {
     pauseTime = state.currentTime;
     timelineSlider.value = state.currentTime;
     const maxDur = parseFloat(timelineSlider.max) || 0;
-    if (timeDisplay) timeDisplay.innerText = `${formatTime(state.currentTime)} / ${formatTime(maxDur)}`;
+    if (timeDisplay) timeDisplay.innerText = formatTimeDisplay(state.currentTime, maxDur);
     updateLyricsCounter(state.currentTime);
   }
 
@@ -1333,7 +1740,7 @@ socket.on('player_command', (cmd) => {
     pauseTime = cmd.time;
     timelineSlider.value = cmd.time;
     const maxDur = parseFloat(timelineSlider.max) || 0;
-    if (timeDisplay) timeDisplay.innerText = `${formatTime(cmd.time)} / ${formatTime(maxDur)}`;
+    if (timeDisplay) timeDisplay.innerText = formatTimeDisplay(cmd.time, maxDur);
     updateLyricsCounter(cmd.time);
     if (currentState.isPlaying && (sources.leadVoc || sources.inst || sources.backVoc)) {
       playAudio(cmd.time);
@@ -1365,7 +1772,7 @@ setInterval(() => {
       if (!isDraggingSlider) {
         timelineSlider.value = curTime;
         if (timeDisplay) {
-          timeDisplay.innerText = `${formatTime(curTime)} / ${formatTime(maxDur)}`;
+          timeDisplay.innerText = formatTimeDisplay(curTime, maxDur);
         }
         updateLyricsCounter(curTime);
       }

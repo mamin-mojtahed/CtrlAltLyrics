@@ -124,8 +124,8 @@
 
           <!-- Timeline Slider & Time Display -->
           <div style="display:flex; align-items:center; gap: 0.75rem; width: 100%; justify-content: center; margin-top: 0.25rem;">
-            <input type="range" id="timelineSlider" min="0" max="100" value="0" style="flex:1; width: 100%; height: 8px; writing-mode: horizontal-tb; -webkit-appearance: slider-horizontal;" disabled>
-            <span id="timeDisplay" style="font-family: monospace; font-size: 0.85rem; color: var(--text-secondary); min-width: 85px; text-align: right;">0:00 / 0:00</span>
+            <input type="range" id="timelineSlider" min="0" max="0" value="0" style="flex:1; width: 100%; height: 8px; writing-mode: horizontal-tb; -webkit-appearance: slider-horizontal;" disabled>
+            <span id="timeDisplay" style="font-family: monospace; font-size: 0.85rem; color: var(--text-secondary); min-width: 85px; text-align: right;">--:-- / --:--</span>
           </div>
         </div>
 
@@ -134,9 +134,15 @@
           <!-- Toggles for Pronunciation & Translation on top of mixer -->
           <div class="mixer-toggles-row" style="justify-content: center; width: 100%;">
             <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">Subtitles:</span>
-            <div style="display:flex; align-items:center; gap: 1rem; font-size: 0.85rem;">
-              <label style="cursor: pointer;"><input type="checkbox" id="toggleTranslit"> Pronunciation</label>
-              <label style="cursor: pointer;"><input type="checkbox" id="toggleTranslat"> Translation</label>
+            <div style="display:flex; align-items:center; gap: 0.5rem; font-size: 0.85rem;">
+              <label class="subtitle-toggle-btn" title="Pronunciation">
+                <input type="checkbox" id="toggleTranslit">
+                <span class="toggle-content">🗣️</span>
+              </label>
+              <label class="subtitle-toggle-btn" title="Translation">
+                <input type="checkbox" id="toggleTranslat">
+                <span class="toggle-content">🌐</span>
+              </label>
             </div>
           </div>
 
@@ -174,15 +180,15 @@
     </div>
   </div>
 
-  <!-- Lyrics Fetch Report Modal -->
-  <div id="lyricsReportModal" class="modal-backdrop" style="display: none;">
+  <!-- Component Status & Manager Modal -->
+  <div id="componentManagerModal" class="modal-backdrop" style="display: none;">
     <div class="modal-box">
       <div class="modal-header">
-        <h3 id="lyricsReportTitle">🎵 Lyrics Provider Report</h3>
-        <button id="closeLyricsReportBtn" class="btn-close">✕</button>
+        <h3 id="componentManagerTitle">📝 Component Status & Manager</h3>
+        <button id="closeComponentManagerBtn" class="btn-close">✕</button>
       </div>
-      <div id="lyricsReportBody" class="modal-body"></div>
-      <button id="dismissLyricsReportBtn" class="btn" style="width: 100%;">Dismiss</button>
+      <div id="componentManagerBody" class="modal-body"></div>
+      <button id="dismissComponentManagerBtn" class="btn" style="width: 100%;">Close</button>
     </div>
   </div>
 
