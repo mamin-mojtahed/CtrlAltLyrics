@@ -335,6 +335,213 @@ router.post('/enqueue', async (req, res) => {
   processSong(newSong, io).catch(err => console.error("Error processing song", err));
 });
 
+async function downloadSongAudio(song) {
+  const songDir = path.join(DOWNLOADS_DIR, song.id);
+  if (!fs.existsSync(songDir)) {
+    fs.mkdirSync(songDir, { recursive: true });
+  }
+
+  const venvActivate = path.resolve(__dirname, '../../venv/bin/activate');
+  
+  // Clean title & main artist extraction
+  const cleanTitle = (song.title || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/["\\]/g, ' ')
+    .trim();
+
+  const mainArtist = (song.artist || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .split(/&|,|feat\.?|ft\.?/i)[0]
+    .replace(/["\\]/g, ' ')
+    .trim();
+
+  const cleanQuery = `${cleanTitle} ${mainArtist}`.trim();
+
+  let audioDownloaded = false;
+  let methodUsed = 'SpotDL';
+  const attemptsLog = [];
+
+  // Stage 1: SpotDL (30s timeout to prevent hanging on metadata matching)
+  try {
+    const spotdlCmd = `source "${venvActivate}" && spotdl "${cleanQuery}" --output "${songDir}/{title}.{output-ext}"`;
+    attemptsLog.push({ provider: 'SpotDL', status: 'started', detail: `Searching SpotDL for "${cleanQuery}"` });
+    await execPromise(spotdlCmd, { shell: '/bin/bash', timeout: 30000 });
+    const currentFiles = fs.readdirSync(songDir);
+    if (currentFiles.some(f => f.endsWith('.mp3') || f.endsWith('.m4a') || f.endsWith('.wav'))) {
+      audioDownloaded = true;
+      attemptsLog.push({ provider: 'SpotDL', status: 'success', detail: `Audio track successfully downloaded via SpotDL` });
+    } else {
+      attemptsLog.push({ provider: 'SpotDL', status: 'failed', detail: 'SpotDL completed but output audio file missing' });
+    }
+  } catch (spotdlErr) {
+    console.warn("SpotDL download failed/timed out, switching to yt-dlp fallback...", spotdlErr.message);
+    attemptsLog.push({ provider: 'SpotDL', status: 'failed', detail: spotdlErr.message || 'SpotDL lookup failed' });
+  }
+
+  // Stage 2: Direct yt-dlp search (Title + Main Artist)
+  if (!audioDownloaded) {
+    try {
+      methodUsed = 'yt-dlp Direct (Title + Artist)';
+      const ytdlpCmd = `source "${venvActivate}" && yt-dlp --js-runtimes node "ytsearch1:${cleanQuery}" -x --audio-format mp3 -o "${songDir}/audio.%(ext)s"`;
+      attemptsLog.push({ provider: 'yt-dlp Direct', status: 'started', detail: `Searching YouTube for "${cleanQuery}"` });
+      await execPromise(ytdlpCmd, { shell: '/bin/bash', timeout: 45000 });
+      const currentFiles = fs.readdirSync(songDir);
+      if (currentFiles.some(f => f.endsWith('.mp3') || f.endsWith('.m4a') || f.endsWith('.wav'))) {
+        audioDownloaded = true;
+        attemptsLog.push({ provider: 'yt-dlp Direct', status: 'success', detail: `Audio extracted via YouTube search for "${cleanQuery}"` });
+      }
+    } catch (ytdlpErr) {
+      console.warn("yt-dlp direct search failed, trying title fallback...", ytdlpErr.message);
+      attemptsLog.push({ provider: 'yt-dlp Direct', status: 'failed', detail: ytdlpErr.message || 'yt-dlp direct search failed' });
+    }
+  }
+
+  // Stage 3: Direct yt-dlp search (Title only fallback)
+  if (!audioDownloaded && cleanTitle) {
+    try {
+      methodUsed = 'yt-dlp Direct (Title Only)';
+      const ytdlpCmd = `source "${venvActivate}" && yt-dlp --js-runtimes node "ytsearch1:${cleanTitle}" -x --audio-format mp3 -o "${songDir}/audio.%(ext)s"`;
+      attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'started', detail: `Searching YouTube for title: "${cleanTitle}"` });
+      await execPromise(ytdlpCmd, { shell: '/bin/bash', timeout: 45000 });
+      const currentFiles = fs.readdirSync(songDir);
+      if (currentFiles.some(f => f.endsWith('.mp3') || f.endsWith('.m4a') || f.endsWith('.wav'))) {
+        audioDownloaded = true;
+        attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'success', detail: `Audio extracted for title "${cleanTitle}"` });
+      }
+    } catch (ytdlpTitleErr) {
+      attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'failed', detail: ytdlpTitleErr.message || 'Title fallback failed' });
+    }
+  }
+
+  const files = fs.readdirSync(songDir);
+  const audioFile = files.find(f => f.endsWith('.mp3') || f.endsWith('.m4a') || f.endsWith('.wav'));
+  
+  if (!audioFile) {
+    song.downloadError = "Audio download failed across all fallback stages (SpotDL & yt-dlp).";
+    song.downloadAttempts = attemptsLog;
+    return { success: false, error: song.downloadError, attempts: attemptsLog };
+  }
+
+  // Guarantee standard audio.mp3 exists
+  const mainAudioPath = path.join(songDir, 'audio.mp3');
+  if (!fs.existsSync(mainAudioPath)) {
+    fs.copyFileSync(path.join(songDir, audioFile), mainAudioPath);
+  }
+
+  // Clean up any redundant downloaded file (e.g. <Title>.mp3)
+  const allowedDownloadFiles = new Set(['audio.mp3', 'instrumental.mp3', 'lead_vocal.mp3', 'back_vocal.mp3', 'lyrics.json']);
+  for (const f of fs.readdirSync(songDir)) {
+    if (!allowedDownloadFiles.has(f)) {
+      try { fs.unlinkSync(path.join(songDir, f)); } catch (e) {}
+    }
+  }
+
+  // Guarantee all 4 expected audio files exist initially (fallback copies until split)
+  const ext = '.mp3';
+  for (const stemName of ['instrumental', 'lead_vocal', 'back_vocal']) {
+    const stemPath = path.join(songDir, `${stemName}${ext}`);
+    if (!fs.existsSync(stemPath)) {
+      fs.copyFileSync(mainAudioPath, stemPath);
+    }
+  }
+
+  delete song.downloadError;
+  song.downloadAttempts = attemptsLog;
+  song.audioFile = 'audio.mp3';
+  song.downloadMethod = methodUsed;
+  song.stems = {
+    inst: `/audio/${song.id}/instrumental.mp3`,
+    lead: `/audio/${song.id}/lead_vocal.mp3`,
+    back: `/audio/${song.id}/back_vocal.mp3`,
+    full: `/audio/${song.id}/audio.mp3`
+  };
+
+  return { success: true, audioFile: 'audio.mp3', method: methodUsed, attempts: attemptsLog };
+}
+
+async function splitSongAudio(song) {
+  const songDir = path.join(DOWNLOADS_DIR, song.id);
+  const venvActivate = path.resolve(__dirname, '../../venv/bin/activate');
+  const files = fs.existsSync(songDir) ? fs.readdirSync(songDir) : [];
+  let audioFile = files.find(f => f.endsWith('.mp3') || f.endsWith('.m4a') || f.endsWith('.wav'));
+
+  if (!audioFile) {
+    song.splitError = "No downloaded audio file found to perform stem separation.";
+    song.stems = {};
+    return { success: false, error: song.splitError };
+  }
+
+  // Ensure audio.mp3 exists
+  const mainAudioPath = path.join(songDir, 'audio.mp3');
+  if (!fs.existsSync(mainAudioPath)) {
+    fs.copyFileSync(path.join(songDir, audioFile), mainAudioPath);
+    audioFile = 'audio.mp3';
+  }
+
+  const audioPath = path.join(songDir, audioFile);
+  const engine = song.engineSettings || currentEngineSettings;
+  const mode = engine.mode || 'balanced';
+  const format = engine.format || 'MP3';
+  const bitrate = engine.bitrate || '192k';
+
+  let splitFailed = false;
+  let splitErrorMsg = null;
+
+  try {
+    const separateCmd = `source "${venvActivate}" && python "${path.join(__dirname, 'separate.py')}" --input "${audioPath}" --output_dir "${songDir}" --mode "${mode}" --format "${format}" --bitrate "${bitrate}"`;
+    await execPromise(separateCmd, { shell: '/bin/bash' });
+  } catch (e) {
+    console.warn("Splitting failed. Using fallback stem copies.", e);
+    splitFailed = true;
+    splitErrorMsg = e.stderr || e.message || "Stem separation failed. Using full track fallback.";
+  }
+
+  // Guarantee ALL 4 files exist on disk
+  const ext = '.mp3';
+  for (const stemName of ['instrumental', 'lead_vocal', 'back_vocal']) {
+    const stemPath = path.join(songDir, `${stemName}${ext}`);
+    if (!fs.existsSync(stemPath)) {
+      fs.copyFileSync(mainAudioPath, stemPath);
+    }
+  }
+
+  // Clean up any extraneous files so strictly only the 4 audio files + lyrics.json remain
+  const allowedFiles = new Set(['audio.mp3', 'instrumental.mp3', 'lead_vocal.mp3', 'back_vocal.mp3', 'lyrics.json']);
+  for (const f of fs.readdirSync(songDir)) {
+    if (!allowedFiles.has(f)) {
+      try { fs.unlinkSync(path.join(songDir, f)); } catch (e) {}
+    }
+  }
+
+  const dirFiles = fs.readdirSync(songDir);
+  const instFile = dirFiles.find(f => f.startsWith('instrumental.')) || 'instrumental.mp3';
+  const leadFile = dirFiles.find(f => f.startsWith('lead_vocal.')) || 'lead_vocal.mp3';
+  const backFile = dirFiles.find(f => f.startsWith('back_vocal.')) || 'back_vocal.mp3';
+
+  // Compare file sizes to detect if true separation occurred vs fallback copies
+  const instSize = fs.existsSync(path.join(songDir, instFile)) ? fs.statSync(path.join(songDir, instFile)).size : 0;
+  const mainSize = fs.existsSync(mainAudioPath) ? fs.statSync(mainAudioPath).size : 0;
+  const isSeparated = !splitFailed && instSize > 0 && Math.abs(instSize - mainSize) > 50000;
+
+  song.stems = {
+    inst: `/audio/${song.id}/${instFile}`,
+    lead: `/audio/${song.id}/${leadFile}`,
+    back: `/audio/${song.id}/${backFile}`,
+    full: `/audio/${song.id}/audio.mp3`
+  };
+  song.splitIsFallback = !isSeparated;
+  
+  if (splitFailed) {
+    song.splitError = splitErrorMsg;
+    return { success: true, isFallback: true, stems: song.stems, error: splitErrorMsg };
+  }
+
+  delete song.splitError;
+  return { success: true, isFallback: !isSeparated, stems: song.stems, mode, bitrate };
+}
+
 async function processSong(song, io) {
   const songDir = path.join(DOWNLOADS_DIR, song.id);
   if (fs.existsSync(songDir)) {
@@ -364,52 +571,18 @@ async function processSong(song, io) {
   delete song.splitError;
 
   try {
-    // 1. Download using spotdl
+    // 1. Download Audio
     updateStatus('downloading');
-    const venvActivate = path.resolve(__dirname, '../../venv/bin/activate');
-    const spotdlCmd = `source "${venvActivate}" && spotdl "${song.query}" --output "${songDir}/{title}.{output-ext}"`;
-    await execPromise(spotdlCmd, { shell: '/bin/bash' });
-
-    const files = fs.readdirSync(songDir);
-    const audioFile = files.find(f => f.endsWith('.mp3') || f.endsWith('.m4a') || f.endsWith('.wav'));
-    
-    if (!audioFile) throw new Error("Downloaded file not found");
-
-    delete song.downloadError;
-
-    // 2. Split into 3 stems (Instrumental, Lead Vocal, Backing Vocal)
-    updateStatus('splitting');
-    const audioPath = path.join(songDir, audioFile);
-
-    const engine = song.engineSettings || currentEngineSettings;
-    const mode = engine.mode || 'balanced';
-    const format = engine.format || 'MP3';
-    const bitrate = engine.bitrate || '192k';
-    
-    try {
-      const separateCmd = `source "${venvActivate}" && python "${path.join(__dirname, 'separate.py')}" --input "${audioPath}" --output_dir "${songDir}" --mode "${mode}" --format "${format}" --bitrate "${bitrate}"`;
-      await execPromise(separateCmd, { shell: '/bin/bash' });
-
-      const dirFiles = fs.readdirSync(songDir);
-      const instFile = dirFiles.find(f => f.startsWith('instrumental.')) || audioFile;
-      const leadFile = dirFiles.find(f => f.startsWith('lead_vocal.')) || audioFile;
-      const backFile = dirFiles.find(f => f.startsWith('back_vocal.')) || audioFile;
-      
-      song.stems = {
-        inst: `/audio/${song.id}/${instFile}`,
-        lead: `/audio/${song.id}/${leadFile}`,
-        back: `/audio/${song.id}/${backFile}`
-      };
-    } catch (e) {
-      console.warn("Splitting failed. Using fallback stems.", e);
-      song.stems = {
-        inst: `/audio/${song.id}/${audioFile}`,
-        lead: `/audio/${song.id}/${audioFile}`,
-        back: `/audio/${song.id}/${audioFile}`
-      };
+    const dlResult = await downloadSongAudio(song);
+    if (!dlResult.success) {
+      throw new Error(dlResult.error || "Audio download failed");
     }
 
-    // 3. Fetch Lyrics from providers with real-time status tracking
+    // 2. Stem Separation
+    updateStatus('splitting');
+    await splitSongAudio(song);
+
+    // 3. Lyrics Fetching
     updateStatus('fetching_lyrics');
     await fetchAndProcessLyrics(song, 'auto', io);
 
@@ -426,66 +599,6 @@ async function processSong(song, io) {
     updateStatus('error');
   }
 }
-
-async function fetchAndProcessLyrics(song, requestedProvider = 'auto', io = null) {
-  const updateLyricsStatus = (statusText) => {
-    song.lyricsStatus = statusText;
-    saveLightweightHistoryItem(song);
-
-    const qIdx = queue.findIndex(s => s.id === song.id);
-    if (qIdx !== -1) {
-      queue[qIdx].lyricsStatus = statusText;
-    }
-    if (io) {
-      io.emit('queue_updated', queue);
-      io.emit('library_updated', readHistory());
-    }
-  };
-
-  try {
-    updateLyricsStatus('Starting search...');
-    const venvPython = path.resolve(__dirname, '../../venv/bin/activate');
-    const scriptPath = path.join(__dirname, 'fetch_lyrics.py');
-    const safeTitle = (song.title || "").replace(/["\\]/g, " ");
-    const safeArtist = (song.artist || "").replace(/["\\]/g, " ");
-    const safeQuery = (song.query || `${song.title} ${song.artist}`).replace(/["\\]/g, " ");
-
-    const cmd = `source "${venvPython}" && python "${scriptPath}" --title "${safeTitle}" --artist "${safeArtist}" --query "${safeQuery}" --provider "${requestedProvider}"`;
-    
-    const child = spawn('/bin/bash', ['-c', cmd]);
-
-    let stdoutData = "";
-    let stderrData = "";
-
-    child.stdout.on('data', (data) => {
-      const str = data.toString();
-      stdoutData += str;
-      const lines = str.split('\n');
-      for (const line of lines) {
-        if (line.startsWith('PROGRESS:')) {
-          const statusText = line.replace('PROGRESS:', '').trim();
-          updateLyricsStatus(statusText);
-        }
-      }
-    });
-
-    child.stderr.on('data', (data) => {
-      stderrData += data.toString();
-    });
-
-    await new Promise((resolve, reject) => {
-      child.on('close', (code) => resolve(code));
-      child.on('error', (err) => reject(err));
-    });
-
-    const outLines = stdoutData.trim().split('\n').filter(l => l.trim() && !l.startsWith('PROGRESS:'));
-    const jsonStr = outLines[outLines.length - 1] || "{}";
-    let resData = { success: false, error: 'No response from lyrics engine' };
-    try {
-      resData = JSON.parse(jsonStr);
-    } catch (e) {
-      console.error("JSON parse error from fetch_lyrics.py:", e, stdoutData);
-    }
 
 async function fetchLyricsTranslationAndPronunciation(parsedLines) {
   if (!Array.isArray(parsedLines) || parsedLines.length === 0) {
@@ -600,6 +713,66 @@ async function fetchLyricsTranslationAndPronunciation(parsedLines) {
   return results;
 }
 
+async function fetchAndProcessLyrics(song, requestedProvider = 'auto', io = null) {
+  const updateLyricsStatus = (statusText) => {
+    song.lyricsStatus = statusText;
+    saveLightweightHistoryItem(song);
+
+    const qIdx = queue.findIndex(s => s.id === song.id);
+    if (qIdx !== -1) {
+      queue[qIdx].lyricsStatus = statusText;
+    }
+    if (io) {
+      io.emit('queue_updated', queue);
+      io.emit('library_updated', readHistory());
+    }
+  };
+
+  try {
+    updateLyricsStatus('Starting search...');
+    const venvPython = path.resolve(__dirname, '../../venv/bin/activate');
+    const scriptPath = path.join(__dirname, 'fetch_lyrics.py');
+    const safeTitle = (song.title || "").replace(/["\\]/g, " ");
+    const safeArtist = (song.artist || "").replace(/["\\]/g, " ");
+    const safeQuery = (song.query || `${song.title} ${song.artist}`).replace(/["\\]/g, " ");
+
+    const cmd = `source "${venvPython}" && python "${scriptPath}" --title "${safeTitle}" --artist "${safeArtist}" --query "${safeQuery}" --provider "${requestedProvider}"`;
+    
+    const child = spawn('/bin/bash', ['-c', cmd]);
+
+    let stdoutData = "";
+    let stderrData = "";
+
+    child.stdout.on('data', (data) => {
+      const str = data.toString();
+      stdoutData += str;
+      const lines = str.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('PROGRESS:')) {
+          const statusText = line.replace('PROGRESS:', '').trim();
+          updateLyricsStatus(statusText);
+        }
+      }
+    });
+
+    child.stderr.on('data', (data) => {
+      stderrData += data.toString();
+    });
+
+    await new Promise((resolve, reject) => {
+      child.on('close', (code) => resolve(code));
+      child.on('error', (err) => reject(err));
+    });
+
+    const outLines = stdoutData.trim().split('\n').filter(l => l.trim() && !l.startsWith('PROGRESS:'));
+    const jsonStr = outLines[outLines.length - 1] || "{}";
+    let resData = { success: false, error: 'No response from lyrics engine' };
+    try {
+      resData = JSON.parse(jsonStr);
+    } catch (e) {
+      console.error("JSON parse error from fetch_lyrics.py:", e, stdoutData);
+    }
+
     if (resData.success && resData.lrc) {
       let parsed = parseLrc(resData.lrc);
 
@@ -683,21 +856,251 @@ router.post('/retry_lyrics/:id', async (req, res) => {
   });
 });
 
+router.post('/import_lyrics/:id', async (req, res) => {
+  const songId = req.params.id;
+  const { text = '' } = req.body || {};
+
+  let song = queue.find(s => s.id === songId);
+  const history = readHistory();
+  if (!song) {
+    song = history.find(s => s.id === songId);
+    if (song) {
+      const lyricsData = readSongLyrics(songId);
+      song = { ...song, ...lyricsData };
+    }
+  }
+
+  if (!song) {
+    return res.status(404).json({ error: 'Song not found' });
+  }
+
+  const lines = text
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
+
+  if (lines.length === 0) {
+    return res.status(400).json({ error: 'No lyric lines provided. Please paste lyrics with at least one non-empty line.' });
+  }
+
+  const defaultGap = 4.0; // 4 seconds default gap per line for unsynced lyrics
+  const rawLyrics = lines.map((line, idx) => ({
+    time: parseFloat((idx * defaultGap).toFixed(1)),
+    text: line
+  }));
+  const processedLyrics = await fetchLyricsTranslationAndPronunciation(rawLyrics);
+
+  const attemptsLog = [{
+    provider: 'Manual Import',
+    status: 'success',
+    detail: `Imported ${lines.length} lines (unsynced, 4s gap)`
+  }];
+
+  writeSongLyrics(songId, {
+    id: songId,
+    title: song.title,
+    artist: song.artist,
+    lyricsProvider: 'Manual Import',
+    isSynced: false,
+    lyricsAttempts: attemptsLog,
+    lyricsError: null,
+    lyrics: processedLyrics
+  });
+
+  song.hasLyrics = true;
+  song.lyricsProvider = 'Manual Import';
+  song.isSynced = false;
+  song.lyrics = processedLyrics;
+  song.lyricsAttempts = attemptsLog;
+  delete song.lyricsError;
+
+  saveLightweightHistoryItem(song);
+
+  const io = req.app.get('io');
+  if (io) {
+    io.emit('queue_updated', queue);
+  }
+
+  res.json({
+    success: true,
+    song,
+    count: lines.length,
+    attempts: attemptsLog,
+    provider: 'Manual Import'
+  });
+});
+
+router.get('/song_details/:id', (req, res) => {
+  const songId = req.params.id;
+  let song = queue.find(s => s.id === songId);
+  const history = readHistory();
+  if (!song) {
+    song = history.find(s => s.id === songId);
+    if (song) {
+      const lyricsData = readSongLyrics(songId);
+      song = { ...song, ...lyricsData };
+    }
+  }
+
+  if (!song) {
+    return res.status(404).json({ error: 'Song not found' });
+  }
+
+  const songDir = path.join(DOWNLOADS_DIR, song.id);
+  const dirFiles = fs.existsSync(songDir) ? fs.readdirSync(songDir) : [];
+  const audioFile = dirFiles.find(f => f.endsWith('.mp3') || f.endsWith('.m4a') || f.endsWith('.wav'));
+  const instFile = dirFiles.find(f => f.startsWith('instrumental.'));
+  const leadFile = dirFiles.find(f => f.startsWith('lead_vocal.'));
+  const backFile = dirFiles.find(f => f.startsWith('back_vocal.'));
+
+  res.json({
+    song,
+    components: {
+      download: {
+        status: audioFile ? 'success' : (song.downloadError ? 'error' : 'pending'),
+        audioFile: audioFile || null,
+        error: song.downloadError || null,
+        attempts: song.downloadAttempts || []
+      },
+      splitting: {
+        status: (instFile && leadFile && backFile) ? 'separated' : (audioFile ? 'fallback' : 'pending'),
+        isFallback: song.splitIsFallback || !instFile,
+        stems: song.stems || {},
+        error: song.splitError || null
+      },
+      lyrics: {
+        status: song.lyricsProvider ? 'success' : (song.lyricsError ? 'failed' : 'pending'),
+        provider: song.lyricsProvider || null,
+        count: (song.lyrics || []).length,
+        hasLyrics: !!song.hasLyrics,
+        attempts: song.lyricsAttempts || [],
+        error: song.lyricsError || null
+      }
+    }
+  });
+});
+
+router.post('/retry_download/:id', async (req, res) => {
+  const songId = req.params.id;
+  let song = queue.find(s => s.id === songId);
+  const history = readHistory();
+  if (!song) {
+    song = history.find(s => s.id === songId);
+    if (song) {
+      const lyricsData = readSongLyrics(songId);
+      song = { ...song, ...lyricsData };
+    }
+  }
+
+  if (!song) {
+    return res.status(404).json({ error: 'Song not found' });
+  }
+
+  const io = req.app.get('io');
+  song.status = 'downloading';
+  saveLightweightHistoryItem(song);
+  if (io) {
+    io.emit('queue_updated', queue);
+    io.emit('library_updated', readHistory());
+  }
+
+  const result = await downloadSongAudio(song);
+  
+  if (result.success) {
+    await splitSongAudio(song);
+    song.status = 'ready';
+  } else {
+    song.status = 'error';
+  }
+  saveLightweightHistoryItem(song);
+
+  if (io) {
+    io.emit('queue_updated', queue);
+    io.emit('library_updated', readHistory());
+  }
+
+  res.json({
+    success: result.success,
+    song,
+    details: result
+  });
+});
+
+router.post('/retry_splitting/:id', async (req, res) => {
+  const songId = req.params.id;
+  let song = queue.find(s => s.id === songId);
+  const history = readHistory();
+  if (!song) {
+    song = history.find(s => s.id === songId);
+    if (song) {
+      const lyricsData = readSongLyrics(songId);
+      song = { ...song, ...lyricsData };
+    }
+  }
+
+  if (!song) {
+    return res.status(404).json({ error: 'Song not found' });
+  }
+
+  const io = req.app.get('io');
+  song.status = 'splitting';
+  saveLightweightHistoryItem(song);
+  if (io) {
+    io.emit('queue_updated', queue);
+    io.emit('library_updated', readHistory());
+  }
+
+  const result = await splitSongAudio(song);
+  song.status = 'ready';
+  saveLightweightHistoryItem(song);
+
+  if (io) {
+    io.emit('queue_updated', queue);
+    io.emit('library_updated', readHistory());
+  }
+
+  res.json({
+    success: result.success,
+    song,
+    details: result
+  });
+});
+
 function parseLrc(lrcString) {
+  if (!lrcString) return [];
   const lines = lrcString.split('\n');
   const result = [];
   const timeRegex = /\[(\d{2}):(\d{2}(?:\.\d{1,3})?)\]/;
   
+  let hasTimestamps = false;
   for (const line of lines) {
     const match = line.match(timeRegex);
     if (match) {
+      hasTimestamps = true;
       const min = parseInt(match[1]);
       const sec = parseFloat(match[2]);
       const time = min * 60 + sec;
       const text = line.replace(timeRegex, '').trim();
-      result.push({ time, text, translation: '', transliteration: '' });
+      if (text) {
+        result.push({ time, text, translation: '', transliteration: '' });
+      }
     }
   }
+
+  // Fallback for unsynced/plain lyrics without timestamps: spread out lines with default 4s gap
+  if (!hasTimestamps) {
+    const defaultGap = 4.0;
+    let lineIdx = 0;
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed) {
+        const time = parseFloat((lineIdx * defaultGap).toFixed(1));
+        result.push({ time, text: trimmed, translation: '', transliteration: '' });
+        lineIdx++;
+      }
+    }
+  }
+
   return result;
 }
 

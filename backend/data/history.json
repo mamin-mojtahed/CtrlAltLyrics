@@ -1,19 +1,5 @@
 [
   {
-    "id": "1535707980",
-    "title": "Toranj",
-    "artist": "Mohsen Namjoo",
-    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/db/68/89/db68893e-a3f1-b3d2-bc5d-a8badab38725/195448577280.jpg/100x100bb.jpg",
-    "query": "Toranj Mohsen Namjoo",
-    "status": "ready",
-    "stems": {
-      "inst": "/audio/1535707980/instrumental.wav",
-      "lead": "/audio/1535707980/lead_vocal.wav",
-      "back": "/audio/1535707980/back_vocal.wav"
-    },
-    "hasLyrics": true
-  },
-  {
     "id": "281868505",
     "title": "Los Angeles",
     "artist": "Sharareh",
@@ -23,7 +9,8 @@
     "stems": {
       "inst": "/audio/281868505/instrumental.mp3",
       "lead": "/audio/281868505/lead_vocal.mp3",
-      "back": "/audio/281868505/back_vocal.mp3"
+      "back": "/audio/281868505/back_vocal.mp3",
+      "full": "/audio/281868505/audio.mp3"
     },
     "lyricsProvider": "LRCLIB (Plain)",
     "hasLyrics": true
@@ -38,7 +25,8 @@
     "stems": {
       "inst": "/audio/1440053120/instrumental.mp3",
       "lead": "/audio/1440053120/lead_vocal.mp3",
-      "back": "/audio/1440053120/back_vocal.mp3"
+      "back": "/audio/1440053120/back_vocal.mp3",
+      "full": "/audio/1440053120/audio.mp3"
     },
     "lyricsProvider": "LRCLIB (Synced)",
     "hasLyrics": true
@@ -53,7 +41,8 @@
     "stems": {
       "inst": "/audio/1741114579/instrumental.mp3",
       "lead": "/audio/1741114579/lead_vocal.mp3",
-      "back": "/audio/1741114579/back_vocal.mp3"
+      "back": "/audio/1741114579/back_vocal.mp3",
+      "full": "/audio/1741114579/audio.mp3"
     },
     "lyricsProvider": "Musixmatch (Synced)",
     "hasLyrics": true
@@ -68,7 +57,8 @@
     "stems": {
       "inst": "/audio/1573439068/instrumental.mp3",
       "lead": "/audio/1573439068/lead_vocal.mp3",
-      "back": "/audio/1573439068/back_vocal.mp3"
+      "back": "/audio/1573439068/back_vocal.mp3",
+      "full": "/audio/1573439068/audio.mp3"
     },
     "lyricsProvider": "LRCLIB (Plain)",
     "hasLyrics": true
@@ -83,7 +73,8 @@
     "stems": {
       "inst": "/audio/1745532745/instrumental.mp3",
       "lead": "/audio/1745532745/lead_vocal.mp3",
-      "back": "/audio/1745532745/back_vocal.mp3"
+      "back": "/audio/1745532745/back_vocal.mp3",
+      "full": "/audio/1745532745/audio.mp3"
     },
     "lyricsProvider": null,
     "hasLyrics": false,
@@ -99,7 +90,8 @@
     "stems": {
       "inst": "/audio/291562966/instrumental.mp3",
       "lead": "/audio/291562966/lead_vocal.mp3",
-      "back": "/audio/291562966/back_vocal.mp3"
+      "back": "/audio/291562966/back_vocal.mp3",
+      "full": "/audio/291562966/audio.mp3"
     },
     "lyricsProvider": "LRCLIB (Synced)",
     "hasLyrics": true
@@ -114,10 +106,11 @@
     "stems": {
       "inst": "/audio/538287781/instrumental.mp3",
       "lead": "/audio/538287781/lead_vocal.mp3",
-      "back": "/audio/538287781/back_vocal.mp3"
+      "back": "/audio/538287781/back_vocal.mp3",
+      "full": "/audio/538287781/audio.mp3"
     },
     "lyricsProvider": "Musixmatch (Synced)",
-    "hasLyrics": true
+    "hasLyrics": false
   },
   {
     "id": "1689473877",
@@ -129,9 +122,124 @@
     "stems": {
       "inst": "/audio/1689473877/instrumental.mp3",
       "lead": "/audio/1689473877/lead_vocal.mp3",
-      "back": "/audio/1689473877/back_vocal.mp3"
+      "back": "/audio/1689473877/back_vocal.mp3",
+      "full": "/audio/1689473877/audio.mp3"
     },
     "lyricsProvider": "LRCLIB (Synced)",
     "hasLyrics": true
+  },
+  {
+    "id": "1441409718",
+    "title": "Ey Sareban",
+    "artist": "Mohsen Namjoo",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/21/34/4d/21344d59-58da-f182-5a58-594815967c1b/193428185944.jpg/100x100bb.jpg",
+    "query": "Ey Sareban Mohsen Namjoo",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/1441409718/instrumental.mp3",
+      "lead": "/audio/1441409718/lead_vocal.mp3",
+      "back": "/audio/1441409718/back_vocal.mp3",
+      "full": "/audio/1441409718/audio.mp3"
+    },
+    "lyricsProvider": null,
+    "hasLyrics": false,
+    "lyricsError": "No lyrics found across any provider."
+  },
+  {
+    "id": "1544491998",
+    "title": "Someone Like You",
+    "artist": "Adele",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/eb/ca/25/ebca2596-cd1e-b295-91a3-771c868d0a79/191404113868.png/100x100bb.jpg",
+    "query": "Someone Like You Adele",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/1544491998/instrumental.mp3",
+      "lead": "/audio/1544491998/lead_vocal.mp3",
+      "back": "/audio/1544491998/back_vocal.mp3",
+      "full": "/audio/1544491998/audio.mp3"
+    },
+    "lyricsProvider": "LRCLIB (Synced)",
+    "hasLyrics": true
+  },
+  {
+    "id": "1860037156",
+    "title": "Del Be Baad Daadeh",
+    "artist": "Mohsen Namjoo & Kābin",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/e3/88/ae/e388ae02-4df4-3fd6-9c10-605df64dac5c/199900302564.jpg/100x100bb.jpg",
+    "query": "Del Be Baad Daadeh Mohsen Namjoo & Kābin",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/1860037156/instrumental.mp3",
+      "lead": "/audio/1860037156/lead_vocal.mp3",
+      "back": "/audio/1860037156/back_vocal.mp3",
+      "full": "/audio/1860037156/audio.mp3"
+    },
+    "lyricsProvider": "Manual Import",
+    "hasLyrics": true
+  },
+  {
+    "id": "1502162082",
+    "title": "An Man Navaran",
+    "artist": "Mohsen Namjoo",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/d1/f9/db/d1f9dbe2-9e39-ac44-d2f6-412fa779e9d9/676868225055.jpg/100x100bb.jpg",
+    "query": "An Man Navaran Mohsen Namjoo",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/1502162082/instrumental.mp3",
+      "lead": "/audio/1502162082/lead_vocal.mp3",
+      "back": "/audio/1502162082/back_vocal.mp3",
+      "full": "/audio/1502162082/audio.mp3"
+    },
+    "lyricsProvider": "LRCLIB (Synced)",
+    "hasLyrics": true
+  },
+  {
+    "id": "1535707980",
+    "title": "Toranj",
+    "artist": "Mohsen Namjoo",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/db/68/89/db68893e-a3f1-b3d2-bc5d-a8badab38725/195448577280.jpg/100x100bb.jpg",
+    "query": "Toranj Mohsen Namjoo",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/1535707980/instrumental.mp3",
+      "lead": "/audio/1535707980/lead_vocal.mp3",
+      "back": "/audio/1535707980/back_vocal.mp3",
+      "full": "/audio/1535707980/audio.mp3"
+    },
+    "lyricsProvider": "Musixmatch (Synced)",
+    "hasLyrics": true
+  },
+  {
+    "id": "1860037168",
+    "title": "Che Daanestam",
+    "artist": "Mohsen Namjoo & Kābin",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/e3/88/ae/e388ae02-4df4-3fd6-9c10-605df64dac5c/199900302564.jpg/100x100bb.jpg",
+    "query": "Che Daanestam Mohsen Namjoo & Kābin",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/1860037168/instrumental.mp3",
+      "lead": "/audio/1860037168/lead_vocal.mp3",
+      "back": "/audio/1860037168/back_vocal.mp3",
+      "full": "/audio/1860037168/audio.mp3"
+    },
+    "lyricsProvider": "Manual Import",
+    "hasLyrics": true
+  },
+  {
+    "id": "1860037158",
+    "title": "Hanooz",
+    "artist": "Mohsen Namjoo & Kābin",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/e3/88/ae/e388ae02-4df4-3fd6-9c10-605df64dac5c/199900302564.jpg/100x100bb.jpg",
+    "query": "Hanooz Mohsen Namjoo & Kābin",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/1860037158/instrumental.mp3",
+      "lead": "/audio/1860037158/lead_vocal.mp3",
+      "back": "/audio/1860037158/back_vocal.mp3",
+      "full": "/audio/1860037158/audio.mp3"
+    },
+    "lyricsProvider": null,
+    "hasLyrics": false,
+    "lyricsError": "No lyrics found across any provider."
   }
 ]
