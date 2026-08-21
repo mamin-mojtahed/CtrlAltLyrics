@@ -68,7 +68,7 @@ function applyThemeColors(bgPrimary, bgSecondary, accent) {
 }
 
 function extractColorsFromImage(imgUrl) {
-  if (!imgUrl || imgUrl.includes('placeholder')) {
+  if (!imgUrl || imgUrl.includes('placeholder') || imgUrl.includes('logo')) {
     applyThemeColors({ r: 15, g: 17, b: 26 }, { r: 30, g: 27, b: 75 }, { r: 99, g: 102, b: 241 });
     return;
   }
@@ -178,11 +178,12 @@ function setupDisplayAudio(song) {
   displayGainNodes.leadVoc.gain.value = parseFloat(vols.lead || 1);
   displayGainNodes.backVoc.gain.value = parseFloat(vols.back || 1);
 
+  const currentLoadingSongId = song ? song.id : null;
   const fetchPromises = [];
   if (song && song.stems) {
-    if (song.stems.lead) fetchPromises.push(fetch(song.stems.lead).then(r => r.arrayBuffer()).then(b => audioCtx.decodeAudioData(b)).then(b => displaySources.leadBuf = b));
-    if (song.stems.back) fetchPromises.push(fetch(song.stems.back).then(r => r.arrayBuffer()).then(b => audioCtx.decodeAudioData(b)).then(b => displaySources.backBuf = b));
-    if (song.stems.inst) fetchPromises.push(fetch(song.stems.inst).then(r => r.arrayBuffer()).then(b => audioCtx.decodeAudioData(b)).then(b => displaySources.instBuf = b));
+    if (song.stems.lead) fetchPromises.push(fetch(song.stems.lead).then(r => r.arrayBuffer()).then(b => audioCtx.decodeAudioData(b)).then(b => { if (songData && songData.id === currentLoadingSongId) displaySources.leadBuf = b; }));
+    if (song.stems.back) fetchPromises.push(fetch(song.stems.back).then(r => r.arrayBuffer()).then(b => audioCtx.decodeAudioData(b)).then(b => { if (songData && songData.id === currentLoadingSongId) displaySources.backBuf = b; }));
+    if (song.stems.inst) fetchPromises.push(fetch(song.stems.inst).then(r => r.arrayBuffer()).then(b => audioCtx.decodeAudioData(b)).then(b => { if (songData && songData.id === currentLoadingSongId) displaySources.instBuf = b; }));
   }
 
   displayAudioLoadingPromise = Promise.all(fetchPromises).catch(e => console.error("Error loading display audio:", e));
@@ -208,10 +209,19 @@ async function playDisplayAudio(offset = 0) {
 
   stopDisplayAudio();
 
+  const onDisplayEndedHandler = () => {
+    const curTime = audioCtx.currentTime - displayAudioStartTime;
+    const dur = displaySources.leadBuf ? displaySources.leadBuf.duration : (displaySources.instBuf ? displaySources.instBuf.duration : (displaySources.backBuf ? displaySources.backBuf.duration : 0));
+    if (dur > 0 && curTime >= dur - 0.5) {
+      socket.emit('player_command', { command: 'play_next' });
+    }
+  };
+
   if (displaySources.leadBuf) {
     displaySources.leadVoc = audioCtx.createBufferSource();
     displaySources.leadVoc.buffer = displaySources.leadBuf;
     displaySources.leadVoc.connect(displayGainNodes.leadVoc);
+    displaySources.leadVoc.onended = onDisplayEndedHandler;
     displaySources.leadVoc.start(0, offset);
   }
 
@@ -226,6 +236,7 @@ async function playDisplayAudio(offset = 0) {
     displaySources.inst = audioCtx.createBufferSource();
     displaySources.inst.buffer = displaySources.instBuf;
     displaySources.inst.connect(displayGainNodes.inst);
+    if (!displaySources.leadBuf) displaySources.inst.onended = onDisplayEndedHandler;
     displaySources.inst.start(0, offset);
   }
 
@@ -321,6 +332,7 @@ socket.on('sync_state', (state) => {
     } else {
       songData = state.songData;
       updateSidebarMeta(songData);
+      renderLyrics(songData.lyrics); // Re-render in case of live sync edit
     }
   } else if (!state.songId || !state.songData) {
     songData = null;
@@ -366,7 +378,8 @@ function updateSidebarMeta(data) {
     displaySongCover.style.display = 'block';
     const coverUrl = getHighResAlbumArt(data.albumArt);
     displaySongCover.src = coverUrl;
-    extractColorsFromImage(coverUrl);
+    const colorSrc = data.id ? `/api/cover/${data.id}` : coverUrl;
+    extractColorsFromImage(colorSrc);
   } else {
     displaySongTitle.innerText = '';
     displaySongArtist.innerText = '';
@@ -388,8 +401,14 @@ function updatePlaybackStatusUI() {
   }
 }
 
+let lastRenderedLyricsJson = '';
 function renderLyrics(lyrics) {
   if (!lyricsContainer) return;
+  
+  const currentLyricsJson = JSON.stringify(lyrics || []);
+  if (lastRenderedLyricsJson === currentLyricsJson) return;
+  lastRenderedLyricsJson = currentLyricsJson;
+
   if (!lyrics || lyrics.length === 0) {
     lyricsContainer.innerHTML = '';
     return;
@@ -489,7 +508,13 @@ window.addEventListener('keydown', (e) => {
       const cur = currentState.currentTime || 0;
       const pastLines = songData.lyrics.filter(l => l.time < cur - 0.5);
       const targetTime = pastLines.length > 0 ? pastLines[pastLines.length - 1].time : 0;
+      displayPauseTime = targetTime;
+      currentState.currentTime = targetTime;
+      updateLyrics(targetTime);
       socket.emit('player_command', { command: 'seek', time: targetTime });
+      if (currentState.isPlaying && (displaySources.leadVoc || displaySources.inst)) {
+        playDisplayAudio(targetTime);
+      }
     }
     return;
   }
@@ -499,7 +524,13 @@ window.addEventListener('keydown', (e) => {
       const cur = currentState.currentTime || 0;
       const nextLine = songData.lyrics.find(l => l.time > cur + 0.3);
       if (nextLine) {
+        displayPauseTime = nextLine.time;
+        currentState.currentTime = nextLine.time;
+        updateLyrics(nextLine.time);
         socket.emit('player_command', { command: 'seek', time: nextLine.time });
+        if (currentState.isPlaying && (displaySources.leadVoc || displaySources.inst)) {
+          playDisplayAudio(nextLine.time);
+        }
       }
     }
     return;
@@ -509,13 +540,27 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowLeft') {
     e.preventDefault();
     const cur = currentState.currentTime || 0;
-    socket.emit('player_command', { command: 'seek', time: Math.max(0, cur - 5) });
+    const targetTime = Math.max(0, cur - 5);
+    displayPauseTime = targetTime;
+    currentState.currentTime = targetTime;
+    updateLyrics(targetTime);
+    socket.emit('player_command', { command: 'seek', time: targetTime });
+    if (currentState.isPlaying && (displaySources.leadVoc || displaySources.inst)) {
+      playDisplayAudio(targetTime);
+    }
     return;
   }
   if (e.key === 'ArrowRight') {
     e.preventDefault();
     const cur = currentState.currentTime || 0;
-    socket.emit('player_command', { command: 'seek', time: cur + 5 });
+    const targetTime = cur + 5;
+    displayPauseTime = targetTime;
+    currentState.currentTime = targetTime;
+    updateLyrics(targetTime);
+    socket.emit('player_command', { command: 'seek', time: targetTime });
+    if (currentState.isPlaying && (displaySources.leadVoc || displaySources.inst)) {
+      playDisplayAudio(targetTime);
+    }
     return;
   }
 
@@ -566,8 +611,13 @@ window.addEventListener('keydown', (e) => {
 setInterval(() => {
   if (currentState.isPlaying && audioCtx.state === 'running' && (displaySources.leadVoc || displaySources.inst)) {
     const curTime = audioCtx.currentTime - displayAudioStartTime;
-    currentState.currentTime = curTime;
-    updateLyrics(curTime);
-    socket.emit('update_state', { currentTime: curTime });
+    const dur = displaySources.leadBuf ? displaySources.leadBuf.duration : (displaySources.instBuf ? displaySources.instBuf.duration : 0);
+    if (dur > 0 && curTime >= dur) {
+      socket.emit('player_command', { command: 'play_next' });
+    } else {
+      currentState.currentTime = curTime;
+      updateLyrics(curTime);
+      socket.emit('update_state', { currentTime: curTime });
+    }
   }
 }, 100);

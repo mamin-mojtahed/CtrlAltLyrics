@@ -67,7 +67,9 @@ io.on('connection', (socket) => {
       currentState.volumes = { ...currentState.volumes, ...cmd.volumes };
     }
 
-    io.emit('sync_state', currentState);
+    if (['toggle_play', 'play', 'pause', 'seek', 'set_volumes'].includes(cmd.command)) {
+      io.emit('sync_state', currentState);
+    }
     io.emit('player_command', cmd);
   });
 

@@ -13,6 +13,7 @@ def parse_args():
     parser.add_argument("--title", required=True, help="Song title")
     parser.add_argument("--artist", default="", help="Artist name")
     parser.add_argument("--query", default="", help="Full search query")
+    parser.add_argument("--spotify_track_id", default="", help="Spotify Track ID")
     parser.add_argument("--spotify_cookie", default="", help="Spotify sp_dc cookie")
     parser.add_argument("--musixmatch_token", default="", help="Musixmatch user token")
     parser.add_argument("--provider", default="auto", help="Provider choice: auto, lrclib, musixmatch, netease, megalobiz, spotify, genius")
@@ -79,7 +80,7 @@ def fetch_syncedlyrics_provider(search_term, provider_name, musixmatch_token=Non
         sys.stderr.write(f"Syncedlyrics error for {provider_name}: {e}\n")
     return None
 
-def fetch_spotify_session(title, artist, query, sp_dc_cookie):
+def fetch_spotify_session(title, artist, query, sp_dc_cookie, track_id=None):
     """Method 3a: Spotify Logged-in Session API using sp_dc cookie"""
     log_progress("Trying Spotify Session API...")
     if not sp_dc_cookie:
@@ -107,21 +108,35 @@ def fetch_spotify_session(title, artist, query, sp_dc_cookie):
             'User-Agent': 'Mozilla/5.0'
         }
         
-        search_term = query or f"{title} {artist}".strip()
-        search_res = session.get(
-            f"https://api.spotify.com/v1/search?q={urllib.parse.quote(search_term)}&type=track&limit=1",
-            headers=headers,
-            timeout=5
-        )
-        if search_res.status_code != 200:
-            return None
-            
-        tracks = search_res.json().get('tracks', {}).get('items', [])
-        if not tracks:
-            return None
-            
-        track_id = tracks[0]['id']
-        album_id = tracks[0]['album']['id']
+        album_id = None
+        if track_id:
+            try:
+                track_res = session.get(
+                    f"https://api.spotify.com/v1/tracks/{track_id}",
+                    headers=headers,
+                    timeout=5
+                )
+                if track_res.status_code == 200:
+                    album_id = track_res.json().get('album', {}).get('id')
+            except Exception:
+                pass
+
+        if not album_id:
+            search_term = query or f"{title} {artist}".strip()
+            search_res = session.get(
+                f"https://api.spotify.com/v1/search?q={urllib.parse.quote(search_term)}&type=track&limit=1",
+                headers=headers,
+                timeout=5
+            )
+            if search_res.status_code != 200:
+                return None
+                
+            tracks = search_res.json().get('tracks', {}).get('items', [])
+            if not tracks:
+                return None
+                
+            track_id = tracks[0]['id']
+            album_id = tracks[0]['album']['id']
 
         lyrics_res = session.get(
             f"https://spclient.wg.spotify.com/color-lyrics/v2/album/{album_id}/track/{track_id}?format=json",
@@ -191,6 +206,8 @@ def main():
     sp_dc = args.spotify_cookie.strip() or os.environ.get("SPOTIFY_COOKIE_SP_DC", "")
     mxm_token = args.musixmatch_token.strip() or os.environ.get("MUSIXMATCH_USER_TOKEN", "")
 
+    spotify_track_id = args.spotify_track_id.strip()
+
     result = None
     attempts = []
 
@@ -205,7 +222,7 @@ def main():
         elif p == "megalobiz":
             result = fetch_syncedlyrics_provider(search_term, 'Megalobiz')
         elif p == "spotify":
-            result = fetch_spotify_session(title, artist, query, sp_dc)
+            result = fetch_spotify_session(title, artist, query, sp_dc, spotify_track_id)
         elif p == "genius":
             result = fetch_genius_or_plain(title, artist, query)
         
@@ -263,7 +280,7 @@ def main():
         # 5. Spotify Session
         if not result or not result.get('is_synced'):
             if sp_dc:
-                res_sp = fetch_spotify_session(title, artist, query, sp_dc)
+                res_sp = fetch_spotify_session(title, artist, query, sp_dc, spotify_track_id)
                 if res_sp:
                     attempts.append({'provider': 'Spotify Session', 'status': 'success', 'detail': 'Found Spotify color-lyrics'})
                     result = res_sp

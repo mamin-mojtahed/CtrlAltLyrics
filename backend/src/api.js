@@ -4,6 +4,8 @@ const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
 const util = require('util');
+const multer = require('multer');
+const mm = require('music-metadata');
 const execPromise = util.promisify(exec);
 
 const router = express.Router();
@@ -21,6 +23,31 @@ if (!fs.existsSync(DOWNLOADS_DIR)) {
 if (!fs.existsSync(HISTORY_FILE)) {
   fs.writeFileSync(HISTORY_FILE, JSON.stringify([]));
 }
+
+// Multer storage for uploaded audio files
+const UPLOAD_TEMP_DIR = path.join(__dirname, '..', 'data', 'temp_uploads');
+if (!fs.existsSync(UPLOAD_TEMP_DIR)) {
+  fs.mkdirSync(UPLOAD_TEMP_DIR, { recursive: true });
+}
+
+const uploadStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    if (!fs.existsSync(UPLOAD_TEMP_DIR)) {
+      fs.mkdirSync(UPLOAD_TEMP_DIR, { recursive: true });
+    }
+    cb(null, UPLOAD_TEMP_DIR);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname) || '.mp3';
+    cb(null, `upload-${uniqueSuffix}${ext}`);
+  }
+});
+
+const upload = multer({
+  storage: uploadStorage,
+  limits: { fileSize: 150 * 1024 * 1024 } // 150 MB max
+});
 
 const readHistory = () => JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf-8'));
 const writeHistory = (data) => fs.writeFileSync(HISTORY_FILE, JSON.stringify(data, null, 2));
@@ -74,15 +101,22 @@ function writeSongLyrics(songId, data) {
       fs.mkdirSync(songDir, { recursive: true });
     }
     const filePath = getLyricsFilePath(songId);
+    const existing = readSongLyrics(songId);
+    
+    // Preserve existing lyrics array if data.lyrics is empty or not provided
+    const finalLyrics = (Array.isArray(data.lyrics) && data.lyrics.length > 0)
+      ? data.lyrics
+      : (Array.isArray(existing.lyrics) && existing.lyrics.length > 0 ? existing.lyrics : (data.lyrics || []));
+
     const payload = {
       id: songId,
-      title: data.title || '',
-      artist: data.artist || '',
-      lyricsProvider: data.lyricsProvider || null,
-      isSynced: data.isSynced !== undefined ? data.isSynced : true,
-      lyricsAttempts: data.lyricsAttempts || [],
-      lyricsError: data.lyricsError || null,
-      lyrics: data.lyrics || []
+      title: data.title || existing.title || '',
+      artist: data.artist || existing.artist || '',
+      lyricsProvider: data.lyricsProvider || existing.lyricsProvider || null,
+      isSynced: data.isSynced !== undefined ? data.isSynced : (existing.isSynced !== undefined ? existing.isSynced : true),
+      lyricsAttempts: (Array.isArray(data.lyricsAttempts) && data.lyricsAttempts.length > 0) ? data.lyricsAttempts : (existing.lyricsAttempts || []),
+      lyricsError: data.lyricsError !== undefined ? data.lyricsError : (existing.lyricsError || null),
+      lyrics: finalLyrics
     };
     fs.writeFileSync(filePath, JSON.stringify(payload, null, 2));
 
@@ -97,13 +131,22 @@ function writeSongLyrics(songId, data) {
 }
 
 function saveLightweightHistoryItem(song) {
-  // 1. Save lyrics to per-song folder
-  writeSongLyrics(song.id, song);
+  // 1. Save lyrics to per-song folder only if lyrics are explicitly provided or file missing
+  if (Array.isArray(song.lyrics) && song.lyrics.length > 0) {
+    writeSongLyrics(song.id, song);
+  } else {
+    const existingLyrics = readSongLyrics(song.id);
+    if (!Array.isArray(existingLyrics.lyrics) || existingLyrics.lyrics.length === 0) {
+      writeSongLyrics(song.id, song);
+    }
+  }
 
   // 2. Save lightweight song metadata to history.json
   const history = readHistory();
   const hasAudio = (song.stems && (song.stems.inst || song.stems.lead)) || song.status === 'splitting' || song.status === 'fetching_lyrics' || song.status === 'ready';
   const hasSplitStems = (song.stems && song.stems.inst && song.stems.lead && song.stems.inst !== song.stems.lead) || song.status === 'fetching_lyrics' || song.status === 'ready';
+  const lyricsOnDisk = readSongLyrics(song.id);
+  const hasLyrics = (Array.isArray(song.lyrics) && song.lyrics.length > 0) || (Array.isArray(lyricsOnDisk.lyrics) && lyricsOnDisk.lyrics.length > 0);
 
   const lightItem = {
     id: song.id,
@@ -117,9 +160,13 @@ function saveLightweightHistoryItem(song) {
     downloadAttempts: song.downloadAttempts || [],
     engineSettings: song.engineSettings || null,
     separationInfo: song.separationInfo || null,
-    lyricsProvider: song.lyricsProvider || null,
-    isSynced: song.isSynced !== undefined ? song.isSynced : true,
-    hasLyrics: Array.isArray(song.lyrics) && song.lyrics.length > 0
+    lyricsProvider: song.lyricsProvider || lyricsOnDisk.lyricsProvider || null,
+    isSynced: song.isSynced !== undefined ? song.isSynced : (lyricsOnDisk.isSynced !== undefined ? lyricsOnDisk.isSynced : true),
+    hasLyrics: hasLyrics,
+    spotifyUrl: song.spotifyUrl || null,
+    spotifyTrackId: song.spotifyTrackId || null,
+    isSpotify: !!song.spotifyUrl,
+    isUploaded: !!(song.isUploaded || song.downloadMethod === 'Uploaded')
   };
 
   if (song.downloadError && !hasAudio) lightItem.downloadError = song.downloadError;
@@ -143,18 +190,21 @@ function migrateHistoryLyrics() {
     const cleanHistory = history.map(song => {
       if (song.lyrics !== undefined || song.lyricsAttempts !== undefined || song.lyricsError !== undefined) {
         modified = true;
-        writeSongLyrics(song.id, {
-          title: song.title,
-          artist: song.artist,
-          lyrics: song.lyrics || [],
-          lyricsProvider: song.lyricsProvider || null,
-          isSynced: song.isSynced !== undefined ? song.isSynced : true,
-          lyricsAttempts: song.lyricsAttempts || [],
-          lyricsError: song.lyricsError || null
-        });
+        if (Array.isArray(song.lyrics) && song.lyrics.length > 0) {
+          writeSongLyrics(song.id, {
+            title: song.title,
+            artist: song.artist,
+            lyrics: song.lyrics || [],
+            lyricsProvider: song.lyricsProvider || null,
+            isSynced: song.isSynced !== undefined ? song.isSynced : true,
+            lyricsAttempts: song.lyricsAttempts || [],
+            lyricsError: song.lyricsError || null
+          });
+        }
 
         const { lyrics, lyricsAttempts, lyricsError, ...lightSong } = song;
-        lightSong.hasLyrics = Array.isArray(lyrics) && lyrics.length > 0;
+        const diskLyrics = readSongLyrics(song.id);
+        lightSong.hasLyrics = (Array.isArray(lyrics) && lyrics.length > 0) || (Array.isArray(diskLyrics.lyrics) && diskLyrics.lyrics.length > 0);
         if (lyricsError) lightSong.lyricsError = lyricsError;
         return lightSong;
       }
@@ -238,6 +288,19 @@ router.get('/history', (req, res) => {
     cleanSong.hasLyrics = hasLyrics;
     cleanSong.lyricsProvider = lyricsData.lyricsProvider || song.lyricsProvider || null;
     cleanSong.lyricsError = lyricsData.lyricsError || song.lyricsError || null;
+
+    if (fs.existsSync(songDir)) {
+      const files = fs.readdirSync(songDir);
+      const coverFile = files.find(f => f.startsWith('cover.'));
+      if (coverFile && (!cleanSong.albumArt || cleanSong.albumArt === '/ctrlaltlyrics-logo.webp')) {
+        const localCoverUrl = `/audio/${song.id}/${coverFile}`;
+        if (cleanSong.albumArt !== localCoverUrl) {
+          cleanSong.albumArt = localCoverUrl;
+          modified = true;
+        }
+      }
+    }
+
     return cleanSong;
   });
 
@@ -258,9 +321,21 @@ router.get('/song/:id', (req, res) => {
   if (!song) {
     return res.status(404).json({ error: 'Song not found' });
   }
+  const songDir = path.join(DOWNLOADS_DIR, songId);
+  let albumArt = song.albumArt;
+  if (!albumArt || albumArt === '/ctrlaltlyrics-logo.webp') {
+    if (fs.existsSync(songDir)) {
+      const files = fs.readdirSync(songDir);
+      const coverFile = files.find(f => f.startsWith('cover.'));
+      if (coverFile) {
+        albumArt = `/audio/${songId}/${coverFile}`;
+      }
+    }
+  }
   const lyricsData = readSongLyrics(songId);
   res.json({
     ...song,
+    albumArt: albumArt || song.albumArt || '/ctrlaltlyrics-logo.webp',
     lyrics: lyricsData.lyrics || song.lyrics || [],
     lyricsProvider: lyricsData.lyricsProvider || song.lyricsProvider || null,
     isSynced: lyricsData.isSynced !== undefined ? lyricsData.isSynced : song.isSynced,
@@ -279,9 +354,122 @@ router.post('/open_folder/:id', (req, res) => {
   }
 });
 
+async function resolveSpotifyLink(query) {
+  if (!query || typeof query !== 'string') return null;
+  const trimmed = query.trim();
+
+  let trackId = null;
+
+  // Match spotify:track:{id} or open.spotify.com/(intl-.../)?track/{id}
+  const directMatch = trimmed.match(/(?:open\.spotify\.com\/(?:intl-[a-zA-Z0-9-]+\/)?track\/|spotify:track:)([a-zA-Z0-9]{22})/i);
+  if (directMatch) {
+    trackId = directMatch[1];
+  }
+
+  // Short URL / redirect (e.g. spotify.link or spoti.fi)
+  if (!trackId && (trimmed.startsWith('http://') || trimmed.startsWith('https://')) && (trimmed.includes('spotify') || trimmed.includes('spoti.fi'))) {
+    try {
+      const resp = await axios.get(trimmed, {
+        maxRedirects: 5,
+        validateStatus: () => true,
+        headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36' },
+        timeout: 7000
+      });
+      const finalUrl = resp.request?.res?.responseUrl || resp.headers?.location || '';
+      const redMatch = finalUrl.match(/open\.spotify\.com\/(?:intl-[a-z]{2}(?:-[a-z]{2})?\/)?track\/([a-zA-Z0-9]{22})/i);
+      if (redMatch) {
+        trackId = redMatch[1];
+      }
+    } catch (err) {
+      console.warn('Spotify redirect resolution failed:', err.message);
+    }
+  }
+
+  if (!trackId) return null;
+
+  let title = '';
+  let artist = '';
+  let albumArt = '';
+  let duration = 0;
+
+  // Primary Metadata extraction: Spotify Embed Next.js data
+  try {
+    const embedUrl = `https://open.spotify.com/embed/track/${trackId}`;
+    const embedRes = await axios.get(embedUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      },
+      timeout: 8000
+    });
+
+    const match = embedRes.data.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+    if (match) {
+      const json = JSON.parse(match[1]);
+      const entity = json.props?.pageProps?.state?.data?.entity;
+      if (entity) {
+        title = entity.name || entity.title || '';
+        artist = (entity.artists || []).map(a => a.name).join(', ');
+        const images = entity.visualIdentity?.image || [];
+        const bestImg = images.find(i => i.maxHeight === 640) || images[0];
+        albumArt = bestImg?.url || '';
+        duration = entity.duration ? Math.round(entity.duration / 1000) : 0;
+      }
+    }
+  } catch (err) {
+    console.warn('Spotify embed fetch error:', err.message);
+  }
+
+  // Fallback 1: Spotify oEmbed endpoint
+  if (!title) {
+    try {
+      const oembedRes = await axios.get(`https://open.spotify.com/oembed?url=https://open.spotify.com/track/${trackId}`, { timeout: 5000 });
+      title = oembedRes.data?.title || '';
+      if (!albumArt) albumArt = oembedRes.data?.thumbnail_url || '';
+    } catch (err) {
+      console.warn('Spotify oEmbed error:', err.message);
+    }
+  }
+
+  // Fallback 2: iTunes search if artist is missing
+  if (title && !artist) {
+    try {
+      const itunesRes = await axios.get(`https://itunes.apple.com/search?term=${encodeURIComponent(title)}&media=music&limit=1`, { timeout: 5000 });
+      if (itunesRes.data?.results?.length > 0) {
+        artist = itunesRes.data.results[0].artistName || '';
+        if (!albumArt) albumArt = itunesRes.data.results[0].artworkUrl100 || '';
+      }
+    } catch (err) {}
+  }
+
+  if (!title) return null;
+
+  return {
+    id: `spotify_${trackId}`,
+    title: title.trim(),
+    artist: artist.trim(),
+    albumArt: albumArt,
+    duration: duration,
+    query: `${title} ${artist}`.trim(),
+    spotifyUrl: `https://open.spotify.com/track/${trackId}`,
+    spotifyTrackId: trackId,
+    isSpotify: true
+  };
+}
+
 router.post('/search', async (req, res) => {
   const { query } = req.body;
+  if (!query || typeof query !== 'string') {
+    return res.json([]);
+  }
+
   try {
+    // 1. Check if query is a Spotify link or Spotify URI
+    const spotifySong = await resolveSpotifyLink(query);
+    if (spotifySong) {
+      return res.json([spotifySong]);
+    }
+
+    // 2. Default iTunes search
     const response = await axios.get(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=music&limit=3`);
     const results = response.data.results.map(item => ({
       id: item.trackId.toString(),
@@ -340,6 +528,196 @@ router.post('/enqueue', async (req, res) => {
   processSong(newSong, io).catch(err => console.error("Error processing song", err));
 });
 
+router.post('/upload', upload.single('audioFile'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No audio file uploaded.' });
+    }
+
+    let { title, artist, engineSettings } = req.body;
+    if (typeof engineSettings === 'string') {
+      try {
+        engineSettings = JSON.parse(engineSettings);
+      } catch (e) {
+        engineSettings = null;
+      }
+    }
+
+    const songId = `upload_${Date.now()}`;
+    const songDir = path.join(DOWNLOADS_DIR, songId);
+    if (!fs.existsSync(songDir)) {
+      fs.mkdirSync(songDir, { recursive: true });
+    }
+
+    // Copy uploaded file to song directory as audio.mp3
+    const mainAudioPath = path.join(songDir, 'audio.mp3');
+    fs.copyFileSync(req.file.path, mainAudioPath);
+
+    const originalName = req.file.originalname || 'Uploaded Song.mp3';
+    const origExt = path.extname(originalName).toLowerCase();
+    if (origExt && origExt !== '.mp3') {
+      fs.copyFileSync(req.file.path, path.join(songDir, `audio${origExt}`));
+    }
+
+    // Parse audio metadata & embedded cover art via music-metadata
+    let tagTitle = '';
+    let tagArtist = '';
+    let albumArt = null;
+
+    try {
+      const metadata = await mm.parseFile(mainAudioPath);
+      if (metadata && metadata.common) {
+        if (metadata.common.title) tagTitle = metadata.common.title.trim();
+        if (metadata.common.artist) tagArtist = metadata.common.artist.trim();
+
+        if (Array.isArray(metadata.common.picture) && metadata.common.picture.length > 0) {
+          const pic = metadata.common.picture[0];
+          const ext = (pic.format && pic.format.includes('png')) ? '.png' : ((pic.format && pic.format.includes('webp')) ? '.webp' : '.jpg');
+          const coverFileName = `cover${ext}`;
+          const coverFilePath = path.join(songDir, coverFileName);
+          fs.writeFileSync(coverFilePath, pic.data);
+          albumArt = `/audio/${songId}/${coverFileName}`;
+          console.log(`[Upload] Extracted embedded cover image (${ext}) for ${songId}`);
+        }
+      }
+    } catch (mmErr) {
+      console.warn('[Upload] Failed to parse ID3 tags:', mmErr.message);
+    }
+
+    // Clean up temporary upload file
+    try {
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+    } catch (e) {}
+
+    // Resolve title and artist
+    const baseName = path.basename(originalName, path.extname(originalName));
+    let resolvedTitle = (title && title.trim()) ? title.trim() : (tagTitle || '');
+    let resolvedArtist = (artist && artist.trim()) ? artist.trim() : (tagArtist || '');
+
+    if (!resolvedTitle) {
+      if (baseName.includes(' - ')) {
+        const parts = baseName.split(' - ');
+        resolvedArtist = resolvedArtist || parts[0].trim();
+        resolvedTitle = parts.slice(1).join(' - ').trim();
+      } else {
+        resolvedTitle = baseName.replace(/_/g, ' ').trim();
+      }
+    }
+    if (!resolvedArtist) {
+      resolvedArtist = 'Unknown Artist';
+    }
+
+    // Clean up typical noise from filenames
+    resolvedTitle = resolvedTitle.replace(/\s*[\(\[](?:official\s*(?:audio|video|music\s*video|lyric\s*video|lyrics)?|hq|hd|320kbps|remastered)[\)\]]\s*/gi, ' ').trim();
+
+    // If no embedded cover art, search online for high-res cover via iTunes
+    if (!albumArt) {
+      try {
+        const searchTerms = `${resolvedTitle} ${resolvedArtist !== 'Unknown Artist' ? resolvedArtist : ''}`.trim();
+        const itunesRes = await axios.get(`https://itunes.apple.com/search?term=${encodeURIComponent(searchTerms)}&media=music&limit=1`, { timeout: 4000 });
+        if (itunesRes.data && Array.isArray(itunesRes.data.results) && itunesRes.data.results.length > 0) {
+          const item = itunesRes.data.results[0];
+          if (item.artworkUrl100) {
+            const highResArt = item.artworkUrl100.replace(/100x100bb\./i, '600x600bb.');
+            try {
+              const imgRes = await axios.get(highResArt, { responseType: 'arraybuffer', timeout: 5000 });
+              const coverFilePath = path.join(songDir, 'cover.jpg');
+              fs.writeFileSync(coverFilePath, Buffer.from(imgRes.data));
+              albumArt = `/audio/${songId}/cover.jpg`;
+            } catch (dlErr) {
+              albumArt = highResArt;
+            }
+          }
+        }
+      } catch (itErr) {
+        console.warn('[Upload] Cover search fallback error:', itErr.message);
+      }
+    }
+
+    if (!albumArt) {
+      albumArt = '/ctrlaltlyrics-logo.webp';
+    }
+
+    const fileSizeMB = (req.file.size / (1024 * 1024)).toFixed(2);
+    const newSong = {
+      id: songId,
+      title: resolvedTitle,
+      artist: resolvedArtist,
+      albumArt: albumArt,
+      query: `${resolvedTitle} ${resolvedArtist}`.trim(),
+      status: 'pending',
+      downloadMethod: 'Uploaded',
+      downloadAttempts: [
+        { provider: 'Local File Upload', status: 'success', detail: `Uploaded "${originalName}" (${fileSizeMB} MB)` }
+      ],
+      engineSettings: engineSettings || currentEngineSettings,
+      stems: {},
+      lyrics: [],
+      isUploaded: true
+    };
+
+    saveLightweightHistoryItem(newSong);
+    queue.push(newSong);
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('queue_updated', queue);
+      io.emit('library_updated', readHistory());
+    }
+
+    res.json(newSong);
+
+    // Background processing through stem separation and lyrics retrieval
+    processSong(newSong, io).catch(err => console.error("Error processing uploaded song:", err));
+
+  } catch (error) {
+    console.error('Upload handling error:', error);
+    res.status(500).json({ error: error.message || 'Failed to process uploaded file' });
+  }
+});
+
+router.get('/cover/:id', async (req, res) => {
+  const songId = req.params.id;
+  const history = readHistory();
+  const song = history.find(s => s.id === songId) || queue.find(s => s.id === songId);
+  const songDir = path.join(DOWNLOADS_DIR, songId);
+
+  // If song has an explicit albumArt URL or custom local path
+  if (song && song.albumArt && song.albumArt !== '/ctrlaltlyrics-logo.webp') {
+    if (song.albumArt.startsWith('http')) {
+      try {
+        const imgRes = await axios.get(song.albumArt, { responseType: 'stream', timeout: 6000 });
+        res.setHeader('Content-Type', imgRes.headers['content-type'] || 'image/jpeg');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Cache-Control', 'no-cache');
+        return imgRes.data.pipe(res);
+      } catch (e) {
+        return res.redirect(song.albumArt);
+      }
+    } else if (song.albumArt.startsWith('/audio/')) {
+      const cleanPath = song.albumArt.split('?')[0].replace(/^\/audio\//, '');
+      const filePath = path.join(DOWNLOADS_DIR, cleanPath);
+      if (fs.existsSync(filePath)) {
+        res.setHeader('Cache-Control', 'no-cache');
+        return res.sendFile(filePath);
+      }
+    }
+  }
+
+  // Fallback to disk scan
+  if (fs.existsSync(songDir)) {
+    const files = fs.readdirSync(songDir);
+    const coverFile = files.find(f => f.startsWith('cover.'));
+    if (coverFile) {
+      res.setHeader('Cache-Control', 'no-cache');
+      return res.sendFile(path.join(songDir, coverFile));
+    }
+  }
+
+  res.redirect('/ctrlaltlyrics-logo.webp');
+});
+
 async function downloadSongAudio(song, requestedSource = 'auto') {
   const songDir = path.join(DOWNLOADS_DIR, song.id);
   if (!fs.existsSync(songDir)) {
@@ -366,7 +744,7 @@ async function downloadSongAudio(song, requestedSource = 'auto') {
   const fullQuery = (song.query || `${song.title} ${song.artist}`).replace(/["\\]/g, ' ').trim();
 
   let audioDownloaded = false;
-  let methodUsed = 'SpotDL';
+  let methodUsed = song.downloadMethod || 'SpotDL';
   const attemptsLog = [];
 
   const checkAndAdoptAudio = () => {
@@ -387,12 +765,36 @@ async function downloadSongAudio(song, requestedSource = 'auto') {
     return false;
   };
 
+  // If this song was uploaded directly or audio file is already present
+  if (song.downloadMethod === 'Uploaded' || song.isUploaded || checkAndAdoptAudio()) {
+    attemptsLog.push({ provider: 'Local File Upload', status: 'success', detail: 'Audio file loaded from local upload' });
+    return { success: true, audioFile: 'audio.mp3', method: 'Uploaded', attempts: attemptsLog };
+  }
+
+  const isInstRequested = /(?:karaoke|instrumental|backing track|off vocal|minus one)/i.test(song.title || '');
+
   const trySpotdlQuery = async (queryText, stageLabel) => {
     if (!queryText) return false;
     try {
-      // SpotDL with 75s timeout and mp3 192k direct format
-      const spotdlCmd = `source "${venvActivate}" && spotdl "${queryText}" --format mp3 --bitrate 192k --output "${songDir}/{title}.{output-ext}"`;
-      await execPromise(spotdlCmd, { shell: '/bin/bash', timeout: 75000 });
+      // SpotDL with verified results filter and direct mp3 output
+      const spotdlCmd = `source "${venvActivate}" && spotdl "${queryText}" --only-verified-results --format mp3 --bitrate 192k --output "${songDir}/{title}.{output-ext}"`;
+      const result = await execPromise(spotdlCmd, { shell: '/bin/bash', timeout: 35000 });
+      const fullLog = (result.stdout || '') + ' ' + (result.stderr || '');
+      
+      // If SpotDL grabbed a karaoke/instrumental video when original song is not instrumental, reject it
+      if (!isInstRequested && /(?:karaoke|instrumental|backing track|off vocal|minus one|piano cover)/i.test(fullLog)) {
+        console.warn(`SpotDL downloaded an instrumental/karaoke version for "${song.title}", rejecting SpotDL output...`);
+        if (fs.existsSync(songDir)) {
+          const files = fs.readdirSync(songDir);
+          for (const f of files) {
+            if (f.endsWith('.mp3') || f.endsWith('.m4a') || f.endsWith('.wav') || f.endsWith('.opus') || f.endsWith('.webm')) {
+              fs.unlinkSync(path.join(songDir, f));
+            }
+          }
+        }
+        return false;
+      }
+
       if (checkAndAdoptAudio()) {
         return true;
       }
@@ -406,42 +808,64 @@ async function downloadSongAudio(song, requestedSource = 'auto') {
   // STAGE 1: SpotDL (Spotify Official Studio Match)
   // ==========================================
   if (requestedSource !== 'ytdlp') {
-    // Attempt 1A: Clean Title + Main Artist
-    const success1A = await trySpotdlQuery(cleanQuery, 'Clean Title + Main Artist');
-    if (success1A) {
-      audioDownloaded = true;
-      methodUsed = 'SpotDL';
-      attemptsLog.push({ provider: 'SpotDL', status: 'success', detail: `Official studio track acquired via SpotDL for "${cleanQuery}"` });
-      attemptsLog.push({ provider: 'yt-dlp Direct (Title + Artist)', status: 'skipped', detail: 'Not needed (acquired via SpotDL)' });
-      attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'skipped', detail: 'Not needed (acquired via SpotDL)' });
-    } else {
-      // Attempt 1B: Full Search Query
-      if (fullQuery && fullQuery !== cleanQuery) {
-        const success1B = await trySpotdlQuery(fullQuery, 'Full Query');
-        if (success1B) {
-          audioDownloaded = true;
-          methodUsed = 'SpotDL';
-          attemptsLog.push({ provider: 'SpotDL', status: 'success', detail: `Official studio track acquired via SpotDL for "${fullQuery}"` });
-          attemptsLog.push({ provider: 'yt-dlp Direct (Title + Artist)', status: 'skipped', detail: 'Not needed (acquired via SpotDL)' });
-          attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'skipped', detail: 'Not needed (acquired via SpotDL)' });
-        }
+    // Attempt 1A: Direct Spotify URL if song was searched/created from a Spotify link
+    if (song.spotifyUrl) {
+      const successUrl = await trySpotdlQuery(song.spotifyUrl, 'Direct Spotify URL');
+      if (successUrl) {
+        audioDownloaded = true;
+        methodUsed = 'SpotDL (Spotify Link)';
+        attemptsLog.push({ provider: 'SpotDL (Spotify Link)', status: 'success', detail: `Official studio track acquired directly via Spotify link` });
+        attemptsLog.push({ provider: 'yt-dlp Direct (Title + Artist)', status: 'skipped', detail: 'Not needed (acquired via SpotDL)' });
+        attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'skipped', detail: 'Not needed (acquired via SpotDL)' });
+      } else {
+        attemptsLog.push({ provider: 'SpotDL (Spotify Link)', status: 'failed', detail: `SpotDL verified match not found for Spotify link` });
       }
     }
 
-    if (!audioDownloaded) {
-      attemptsLog.push({ provider: 'SpotDL', status: 'failed', detail: `SpotDL search failed on Spotify catalog for "${cleanQuery}"` });
+    if (!audioDownloaded && !song.spotifyUrl) {
+      // Attempt 1B: Clean Title + Main Artist (only for non-Spotify URL searches)
+      const success1A = await trySpotdlQuery(cleanQuery, 'Clean Title + Main Artist');
+      if (success1A) {
+        audioDownloaded = true;
+        methodUsed = 'SpotDL';
+        attemptsLog.push({ provider: 'SpotDL', status: 'success', detail: `Official studio track acquired via SpotDL for "${cleanQuery}"` });
+        attemptsLog.push({ provider: 'yt-dlp Direct (Title + Artist)', status: 'skipped', detail: 'Not needed (acquired via SpotDL)' });
+        attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'skipped', detail: 'Not needed (acquired via SpotDL)' });
+      } else {
+        // Attempt 1C: Full Search Query
+        if (fullQuery && fullQuery !== cleanQuery) {
+          const success1B = await trySpotdlQuery(fullQuery, 'Full Query');
+          if (success1B) {
+            audioDownloaded = true;
+            methodUsed = 'SpotDL';
+            attemptsLog.push({ provider: 'SpotDL', status: 'success', detail: `Official studio track acquired via SpotDL for "${fullQuery}"` });
+            attemptsLog.push({ provider: 'yt-dlp Direct (Title + Artist)', status: 'skipped', detail: 'Not needed (acquired via SpotDL)' });
+            attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'skipped', detail: 'Not needed (acquired via SpotDL)' });
+          }
+        }
+      }
+
+      if (!audioDownloaded) {
+        attemptsLog.push({ provider: 'SpotDL', status: 'failed', detail: `SpotDL verified search failed on Spotify catalog for "${cleanQuery}"` });
+      }
     }
   }
 
   // ==========================================
   // STAGE 2: Direct yt-dlp Search (Title + Main Artist Official Audio)
   // ==========================================
+  const ytFilter = isInstRequested ? '!is_live' : `!is_live & title !~= '(?i)(karaoke|instrumental|backing track|off vocal|minus one|piano cover|8d audio)'`;
+
   if (!audioDownloaded && requestedSource !== 'spotdl') {
     try {
       methodUsed = 'yt-dlp Direct (Title + Artist)';
-      // Add "official audio" or "audio" search term to prevent downloading music videos, live concerts, or talk shows
-      const ytdlpCmd = `source "${venvActivate}" && yt-dlp --js-runtimes node --match-filter "!is_live" "ytsearch1:${cleanQuery} official audio" -x --audio-format mp3 -o "${songDir}/audio.%(ext)s"`;
-      await execPromise(ytdlpCmd, { shell: '/bin/bash', timeout: 50000 });
+      const ytdlpCmd = `source "${venvActivate}" && yt-dlp --js-runtimes node --max-downloads 1 --match-filter "${ytFilter}" "ytsearch5:${cleanQuery} official audio" -x --audio-format mp3 -o "${songDir}/audio.%(ext)s"`;
+      try {
+        await execPromise(ytdlpCmd, { shell: '/bin/bash', timeout: 50000 });
+      } catch (e) {
+        // Exit code 101 is standard when reaching --max-downloads 1
+      }
+
       if (checkAndAdoptAudio()) {
         audioDownloaded = true;
         attemptsLog.push({ provider: 'yt-dlp Direct (Title + Artist)', status: 'success', detail: `Audio extracted via YouTube audio search for "${cleanQuery}"` });
@@ -462,8 +886,13 @@ async function downloadSongAudio(song, requestedSource = 'auto') {
     if (cleanTitle) {
       try {
         methodUsed = 'yt-dlp Direct (Title Only)';
-        const ytdlpCmd = `source "${venvActivate}" && yt-dlp --js-runtimes node --match-filter "!is_live" "ytsearch1:${cleanTitle} audio" -x --audio-format mp3 -o "${songDir}/audio.%(ext)s"`;
-        await execPromise(ytdlpCmd, { shell: '/bin/bash', timeout: 50000 });
+        const ytdlpCmd = `source "${venvActivate}" && yt-dlp --js-runtimes node --max-downloads 1 --match-filter "${ytFilter}" "ytsearch5:${cleanTitle} official audio" -x --audio-format mp3 -o "${songDir}/audio.%(ext)s"`;
+        try {
+          await execPromise(ytdlpCmd, { shell: '/bin/bash', timeout: 50000 });
+        } catch (e) {
+          // Exit code 101 is standard when reaching --max-downloads 1
+        }
+
         if (checkAndAdoptAudio()) {
           audioDownloaded = true;
           attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'success', detail: `Audio extracted for title "${cleanTitle}"` });
@@ -493,10 +922,10 @@ async function downloadSongAudio(song, requestedSource = 'auto') {
     fs.copyFileSync(path.join(songDir, audioFile), mainAudioPath);
   }
 
-  // Clean up any redundant downloaded file (e.g. <Title>.mp3)
+  // Clean up any redundant downloaded file (e.g. <Title>.mp3) while preserving covers & main audio
   const allowedDownloadFiles = new Set(['audio.mp3', 'instrumental.mp3', 'lead_vocal.mp3', 'back_vocal.mp3', 'lyrics.json']);
   for (const f of fs.readdirSync(songDir)) {
-    if (!allowedDownloadFiles.has(f)) {
+    if (!allowedDownloadFiles.has(f) && !f.startsWith('cover.') && !f.startsWith('audio.')) {
       try { fs.unlinkSync(path.join(songDir, f)); } catch (e) {}
     }
   }
@@ -570,10 +999,10 @@ async function splitSongAudio(song) {
     }
   }
 
-  // Clean up any extraneous files so strictly only the 4 audio files + lyrics.json remain
+  // Clean up any extraneous files so strictly only the 4 audio files + lyrics.json + cover remain
   const allowedFiles = new Set(['audio.mp3', 'instrumental.mp3', 'lead_vocal.mp3', 'back_vocal.mp3', 'lyrics.json']);
   for (const f of fs.readdirSync(songDir)) {
-    if (!allowedFiles.has(f)) {
+    if (!allowedFiles.has(f) && !f.startsWith('cover.') && !f.startsWith('audio.')) {
       try { fs.unlinkSync(path.join(songDir, f)); } catch (e) {}
     }
   }
@@ -814,7 +1243,8 @@ async function fetchAndProcessLyrics(song, requestedProvider = 'auto', io = null
     const safeArtist = (song.artist || "").replace(/["\\]/g, " ");
     const safeQuery = (song.query || `${song.title} ${song.artist}`).replace(/["\\]/g, " ");
 
-    const cmd = `source "${venvPython}" && python "${scriptPath}" --title "${safeTitle}" --artist "${safeArtist}" --query "${safeQuery}" --provider "${requestedProvider}"`;
+    const spotifyTrackArg = song.spotifyTrackId ? ` --spotify_track_id "${song.spotifyTrackId}"` : '';
+    const cmd = `source "${venvPython}" && python "${scriptPath}" --title "${safeTitle}" --artist "${safeArtist}" --query "${safeQuery}" --provider "${requestedProvider}"${spotifyTrackArg}`;
     
     const child = spawn('/bin/bash', ['-c', cmd]);
 
@@ -1032,8 +1462,10 @@ router.get('/song_details/:id', (req, res) => {
   const backFile = dirFiles.find(f => f.startsWith('back_vocal.'));
 
   const defaultDlAttempts = [];
-  const dlMethod = song.downloadMethod || 'SpotDL';
-  if (dlMethod === 'SpotDL') {
+  const dlMethod = song.downloadMethod || (song.isUploaded ? 'Uploaded' : 'SpotDL');
+  if (dlMethod === 'Uploaded' || song.isUploaded) {
+    defaultDlAttempts.push({ provider: 'Local File Upload', status: 'success', detail: 'Audio track provided via direct user upload' });
+  } else if (dlMethod === 'SpotDL') {
     defaultDlAttempts.push({ provider: 'SpotDL', status: 'success', detail: 'Audio track acquired via SpotDL' });
     defaultDlAttempts.push({ provider: 'yt-dlp Direct (Title + Artist)', status: 'skipped', detail: 'Not needed (acquired via SpotDL)' });
     defaultDlAttempts.push({ provider: 'yt-dlp Title Fallback', status: 'skipped', detail: 'Not needed (acquired via SpotDL)' });
@@ -1254,6 +1686,74 @@ router.post('/edit_lyrics', (req, res) => {
   }
   
   res.json({ success: true });
+});
+
+// Metadata editing endpoint
+router.post('/edit_metadata', upload.single('coverImage'), (req, res) => {
+  const { songId, title, artist, coverUrl } = req.body;
+  const history = readHistory();
+  const idx = history.findIndex(s => s.id === songId);
+
+  let newAlbumArt = coverUrl;
+
+  // Handle uploaded cover image
+  if (req.file) {
+    const songDir = path.join(DOWNLOADS_DIR, songId);
+    if (!fs.existsSync(songDir)) {
+      fs.mkdirSync(songDir, { recursive: true });
+    }
+    const ext = path.extname(req.file.originalname) || '.jpg';
+    const newCoverName = `cover${ext}`;
+    const newCoverPath = path.join(songDir, newCoverName);
+    
+    // Remove any existing cover files to avoid stale covers
+    try {
+      const existingFiles = fs.readdirSync(songDir);
+      for (const f of existingFiles) {
+        if (f.startsWith('cover.') || f.startsWith('cover-')) {
+          try { fs.unlinkSync(path.join(songDir, f)); } catch(e){}
+        }
+      }
+    } catch (e) {}
+
+    // Move uploaded file
+    try {
+      fs.copyFileSync(req.file.path, newCoverPath);
+      fs.unlinkSync(req.file.path);
+      newAlbumArt = `/audio/${songId}/${newCoverName}?t=${Date.now()}`;
+    } catch (e) {
+      console.error('Error saving uploaded cover image:', e);
+    }
+  }
+
+  const existingLyricsData = readSongLyrics(songId);
+  if (title !== undefined) existingLyricsData.title = title;
+  if (artist !== undefined) existingLyricsData.artist = artist;
+  writeSongLyrics(songId, existingLyricsData);
+
+  let updatedSong = null;
+
+  if (idx !== -1) {
+    if (title !== undefined) history[idx].title = title;
+    if (artist !== undefined) history[idx].artist = artist;
+    if (newAlbumArt !== undefined && newAlbumArt.trim() !== '') history[idx].albumArt = newAlbumArt;
+    updatedSong = history[idx];
+    writeHistory(history);
+  }
+
+  const qIdx = queue.findIndex(s => s.id === songId);
+  if (qIdx !== -1) {
+    if (title !== undefined) queue[qIdx].title = title;
+    if (artist !== undefined) queue[qIdx].artist = artist;
+    if (newAlbumArt !== undefined && newAlbumArt.trim() !== '') queue[qIdx].albumArt = newAlbumArt;
+    if (!updatedSong) updatedSong = queue[qIdx];
+  }
+
+  // Notify all clients to refresh queue and library
+  req.app.get('io').emit('queue_updated', queue);
+  req.app.get('io').emit('library_updated');
+
+  res.json({ success: true, updatedSong });
 });
 
 router.delete('/history/:id', (req, res) => {

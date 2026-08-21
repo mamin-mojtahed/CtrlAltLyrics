@@ -12,8 +12,17 @@
       "back": "/audio/281868505/back_vocal.mp3",
       "full": "/audio/281868505/audio.mp3"
     },
+    "downloadMethod": "SpotDL",
+    "downloadAttempts": [],
+    "engineSettings": null,
+    "separationInfo": null,
     "lyricsProvider": "LRCLIB (Plain)",
-    "hasLyrics": true
+    "isSynced": false,
+    "hasLyrics": true,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false
   },
   {
     "id": "1440053120",
@@ -28,8 +37,17 @@
       "back": "/audio/1440053120/back_vocal.mp3",
       "full": "/audio/1440053120/audio.mp3"
     },
+    "downloadMethod": "SpotDL",
+    "downloadAttempts": [],
+    "engineSettings": null,
+    "separationInfo": null,
     "lyricsProvider": "LRCLIB (Synced)",
-    "hasLyrics": true
+    "isSynced": true,
+    "hasLyrics": true,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false
   },
   {
     "id": "1741114579",
@@ -44,8 +62,17 @@
       "back": "/audio/1741114579/back_vocal.mp3",
       "full": "/audio/1741114579/audio.mp3"
     },
+    "downloadMethod": "SpotDL",
+    "downloadAttempts": [],
+    "engineSettings": null,
+    "separationInfo": null,
     "lyricsProvider": "Musixmatch (Synced)",
-    "hasLyrics": true
+    "isSynced": true,
+    "hasLyrics": true,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false
   },
   {
     "id": "1573439068",
@@ -60,8 +87,17 @@
       "back": "/audio/1573439068/back_vocal.mp3",
       "full": "/audio/1573439068/audio.mp3"
     },
+    "downloadMethod": "SpotDL",
+    "downloadAttempts": [],
+    "engineSettings": null,
+    "separationInfo": null,
     "lyricsProvider": "LRCLIB (Plain)",
-    "hasLyrics": true
+    "isSynced": false,
+    "hasLyrics": true,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false
   },
   {
     "id": "1745532745",
@@ -76,8 +112,17 @@
       "back": "/audio/1745532745/back_vocal.mp3",
       "full": "/audio/1745532745/audio.mp3"
     },
+    "downloadMethod": "SpotDL",
+    "downloadAttempts": [],
+    "engineSettings": null,
+    "separationInfo": null,
     "lyricsProvider": null,
+    "isSynced": true,
     "hasLyrics": false,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false,
     "lyricsError": "No lyrics found across any provider."
   },
   {
@@ -93,8 +138,17 @@
       "back": "/audio/291562966/back_vocal.mp3",
       "full": "/audio/291562966/audio.mp3"
     },
+    "downloadMethod": "SpotDL",
+    "downloadAttempts": [],
+    "engineSettings": null,
+    "separationInfo": null,
     "lyricsProvider": "LRCLIB (Synced)",
-    "hasLyrics": true
+    "isSynced": true,
+    "hasLyrics": true,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false
   },
   {
     "id": "538287781",
@@ -113,9 +167,13 @@
     "downloadAttempts": [],
     "engineSettings": null,
     "separationInfo": null,
-    "lyricsProvider": "Musixmatch (Synced)",
-    "isSynced": true,
-    "hasLyrics": true
+    "lyricsProvider": "LRCLIB (Plain)",
+    "isSynced": false,
+    "hasLyrics": true,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false
   },
   {
     "id": "1689473877",
@@ -130,8 +188,17 @@
       "back": "/audio/1689473877/back_vocal.mp3",
       "full": "/audio/1689473877/audio.mp3"
     },
+    "downloadMethod": "SpotDL",
+    "downloadAttempts": [],
+    "engineSettings": null,
+    "separationInfo": null,
     "lyricsProvider": "LRCLIB (Synced)",
-    "hasLyrics": true
+    "isSynced": true,
+    "hasLyrics": true,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false
   },
   {
     "id": "1441409718",
@@ -146,9 +213,17 @@
       "back": "/audio/1441409718/back_vocal.mp3",
       "full": "/audio/1441409718/audio.mp3"
     },
-    "lyricsProvider": null,
-    "hasLyrics": false,
-    "lyricsError": "No lyrics found across any provider."
+    "downloadMethod": "SpotDL",
+    "downloadAttempts": [],
+    "engineSettings": null,
+    "separationInfo": null,
+    "lyricsProvider": "LRCLIB (Synced)",
+    "isSynced": true,
+    "hasLyrics": true,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false
   },
   {
     "id": "1544491998",
@@ -163,8 +238,29 @@
       "back": "/audio/1544491998/back_vocal.mp3",
       "full": "/audio/1544491998/audio.mp3"
     },
+    "downloadMethod": "SpotDL",
+    "downloadAttempts": [],
+    "engineSettings": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "isCustom": false
+    },
+    "separationInfo": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "primaryModel": "UVR-MDX-NET-Inst_HQ_3.onnx",
+      "karaokeModel": "5_HP-Karaoke-UVR.pth",
+      "isCustom": false
+    },
     "lyricsProvider": "LRCLIB (Synced)",
-    "hasLyrics": true
+    "isSynced": true,
+    "hasLyrics": true,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false
   },
   {
     "id": "1860037156",
@@ -211,41 +307,14 @@
       "karaokeModel": "5_HP-Karaoke-UVR.pth",
       "isCustom": true
     },
-    "lyricsProvider": "Manual Import",
+    "lyricsProvider": null,
     "isSynced": false,
-    "hasLyrics": true
-  },
-  {
-    "id": "1502162082",
-    "title": "An Man Navaran",
-    "artist": "Mohsen Namjoo",
-    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/d1/f9/db/d1f9dbe2-9e39-ac44-d2f6-412fa779e9d9/676868225055.jpg/100x100bb.jpg",
-    "query": "An Man Navaran Mohsen Namjoo",
-    "status": "ready",
-    "stems": {
-      "inst": "/audio/1502162082/instrumental.mp3",
-      "lead": "/audio/1502162082/lead_vocal.mp3",
-      "back": "/audio/1502162082/back_vocal.mp3",
-      "full": "/audio/1502162082/audio.mp3"
-    },
-    "lyricsProvider": "LRCLIB (Synced)",
-    "hasLyrics": true
-  },
-  {
-    "id": "1535707980",
-    "title": "Toranj",
-    "artist": "Mohsen Namjoo",
-    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/db/68/89/db68893e-a3f1-b3d2-bc5d-a8badab38725/195448577280.jpg/100x100bb.jpg",
-    "query": "Toranj Mohsen Namjoo",
-    "status": "ready",
-    "stems": {
-      "inst": "/audio/1535707980/instrumental.mp3",
-      "lead": "/audio/1535707980/lead_vocal.mp3",
-      "back": "/audio/1535707980/back_vocal.mp3",
-      "full": "/audio/1535707980/audio.mp3"
-    },
-    "lyricsProvider": "Musixmatch (Synced)",
-    "hasLyrics": true
+    "hasLyrics": false,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false,
+    "lyricsError": "No lyrics found across any provider."
   },
   {
     "id": "1860037168",
@@ -260,8 +329,18 @@
       "back": "/audio/1860037168/back_vocal.mp3",
       "full": "/audio/1860037168/audio.mp3"
     },
+    "downloadMethod": "SpotDL",
+    "downloadAttempts": [],
+    "engineSettings": null,
+    "separationInfo": null,
     "lyricsProvider": "Manual Import",
-    "hasLyrics": true
+    "isSynced": true,
+    "hasLyrics": false,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false,
+    "lyricsError": "No lyrics found across any provider."
   },
   {
     "id": "1860037158",
@@ -276,8 +355,17 @@
       "back": "/audio/1860037158/back_vocal.mp3",
       "full": "/audio/1860037158/audio.mp3"
     },
+    "downloadMethod": "SpotDL",
+    "downloadAttempts": [],
+    "engineSettings": null,
+    "separationInfo": null,
     "lyricsProvider": null,
+    "isSynced": true,
     "hasLyrics": false,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false,
     "lyricsError": "No lyrics found across any provider."
   },
   {
@@ -327,6 +415,269 @@
     },
     "lyricsProvider": "LRCLIB (Synced)",
     "isSynced": true,
-    "hasLyrics": true
+    "hasLyrics": true,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false
+  },
+  {
+    "id": "1570098305",
+    "title": "Toranj (feat. MUD Band & Omid Nikbin)",
+    "artist": "Mohsen Namjoo",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/2c/8e/de/2c8edef4-ffb6-4421-87a3-b761a39aad31/196006672270.jpg/100x100bb.jpg",
+    "query": "Toranj (feat. MUD Band & Omid Nikbin) Mohsen Namjoo",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/1570098305/instrumental.mp3",
+      "lead": "/audio/1570098305/lead_vocal.mp3",
+      "back": "/audio/1570098305/back_vocal.mp3",
+      "full": "/audio/1570098305/audio.mp3"
+    },
+    "downloadMethod": "SpotDL",
+    "downloadAttempts": [
+      {
+        "provider": "SpotDL",
+        "status": "success",
+        "detail": "Official studio track acquired via SpotDL for \"Toranj (feat. MUD Band & Omid Nikbin) Mohsen Namjoo\""
+      },
+      {
+        "provider": "yt-dlp Direct (Title + Artist)",
+        "status": "skipped",
+        "detail": "Not needed (acquired via SpotDL)"
+      },
+      {
+        "provider": "yt-dlp Title Fallback",
+        "status": "skipped",
+        "detail": "Not needed (acquired via SpotDL)"
+      }
+    ],
+    "engineSettings": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "isCustom": false
+    },
+    "separationInfo": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "primaryModel": "UVR-MDX-NET-Inst_HQ_3.onnx",
+      "karaokeModel": "5_HP-Karaoke-UVR.pth",
+      "isCustom": false
+    },
+    "lyricsProvider": "Musixmatch (Synced)",
+    "isSynced": true,
+    "hasLyrics": true,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false
+  },
+  {
+    "id": "spotify_5aTY5Mw6DnDuBQupkCgEiI",
+    "title": "Shekveh",
+    "artist": "Mohsen Namjoo",
+    "albumArt": "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b2736202e4b2d240308377e8c3ca",
+    "query": "Shekveh Mohsen Namjoo",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/spotify_5aTY5Mw6DnDuBQupkCgEiI/instrumental.mp3",
+      "lead": "/audio/spotify_5aTY5Mw6DnDuBQupkCgEiI/lead_vocal.mp3",
+      "back": "/audio/spotify_5aTY5Mw6DnDuBQupkCgEiI/back_vocal.mp3",
+      "full": "/audio/spotify_5aTY5Mw6DnDuBQupkCgEiI/audio.mp3"
+    },
+    "downloadMethod": "SpotDL",
+    "downloadAttempts": [
+      {
+        "provider": "SpotDL (Spotify Link)",
+        "status": "failed",
+        "detail": "SpotDL direct URL download failed for \"https://open.spotify.com/track/5aTY5Mw6DnDuBQupkCgEiI\""
+      },
+      {
+        "provider": "SpotDL",
+        "status": "success",
+        "detail": "Official studio track acquired via SpotDL for \"Shekveh Mohsen Namjoo\""
+      },
+      {
+        "provider": "yt-dlp Direct (Title + Artist)",
+        "status": "skipped",
+        "detail": "Not needed (acquired via SpotDL)"
+      },
+      {
+        "provider": "yt-dlp Title Fallback",
+        "status": "skipped",
+        "detail": "Not needed (acquired via SpotDL)"
+      }
+    ],
+    "engineSettings": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "isCustom": false
+    },
+    "separationInfo": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "primaryModel": "UVR-MDX-NET-Inst_HQ_3.onnx",
+      "karaokeModel": "5_HP-Karaoke-UVR.pth",
+      "isCustom": false
+    },
+    "lyricsProvider": "LRCLIB (Synced)",
+    "isSynced": true,
+    "hasLyrics": true,
+    "spotifyUrl": "https://open.spotify.com/track/5aTY5Mw6DnDuBQupkCgEiI",
+    "spotifyTrackId": "5aTY5Mw6DnDuBQupkCgEiI",
+    "isSpotify": true,
+    "isUploaded": false
+  },
+  {
+    "id": "spotify_0yXKYYBPxOuakAOshy1cah",
+    "title": "Btmanna Ansak",
+    "artist": "Sherine",
+    "albumArt": "https://i.scdn.co/image/ab67616d0000b27315d73b80a65041264d7b5bcd",
+    "query": "Btmanna Ansak Sherine",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/spotify_0yXKYYBPxOuakAOshy1cah/instrumental.mp3",
+      "lead": "/audio/spotify_0yXKYYBPxOuakAOshy1cah/lead_vocal.mp3",
+      "back": "/audio/spotify_0yXKYYBPxOuakAOshy1cah/back_vocal.mp3",
+      "full": "/audio/spotify_0yXKYYBPxOuakAOshy1cah/audio.mp3"
+    },
+    "downloadMethod": "yt-dlp Direct (Title + Artist)",
+    "downloadAttempts": [
+      {
+        "provider": "SpotDL (Spotify Link)",
+        "status": "failed",
+        "detail": "SpotDL verified match not found for Spotify link"
+      },
+      {
+        "provider": "yt-dlp Direct (Title + Artist)",
+        "status": "success",
+        "detail": "Audio extracted via YouTube audio search for \"Btmanna Ansak Sherine\""
+      },
+      {
+        "provider": "yt-dlp Title Fallback",
+        "status": "skipped",
+        "detail": "Not needed (acquired via yt-dlp Direct)"
+      }
+    ],
+    "engineSettings": {
+      "mode": "fast",
+      "format": "MP3",
+      "bitrate": "192k"
+    },
+    "separationInfo": {
+      "mode": "fast",
+      "format": "MP3",
+      "bitrate": "192k",
+      "primaryModel": "UVR-MDX-NET-Inst_1.onnx",
+      "karaokeModel": "5_HP-Karaoke-UVR.pth",
+      "isCustom": false
+    },
+    "lyricsProvider": "LRCLIB (Synced)",
+    "isSynced": true,
+    "hasLyrics": true,
+    "spotifyUrl": "https://open.spotify.com/track/0yXKYYBPxOuakAOshy1cah",
+    "spotifyTrackId": "0yXKYYBPxOuakAOshy1cah",
+    "isSpotify": true,
+    "isUploaded": false
+  },
+  {
+    "id": "upload_1787287622227",
+    "title": "Khashm Kardam",
+    "artist": "Mohsen Namjoo",
+    "albumArt": "/audio/upload_1787287622227/cover.jpg?t=1787291458484",
+    "query": "Khashm Kardam Mohsen Namjoo",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/upload_1787287622227/instrumental.mp3",
+      "lead": "/audio/upload_1787287622227/lead_vocal.mp3",
+      "back": "/audio/upload_1787287622227/back_vocal.mp3",
+      "full": "/audio/upload_1787287622227/audio.mp3"
+    },
+    "downloadMethod": "Uploaded",
+    "downloadAttempts": [
+      {
+        "provider": "Local File Upload",
+        "status": "success",
+        "detail": "Uploaded \"Mohsen Namjoo - Khashm Kardam-test.mp3\" (7.32 MB)"
+      }
+    ],
+    "engineSettings": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "isCustom": true
+    },
+    "separationInfo": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "primaryModel": "UVR-MDX-NET-Inst_HQ_3.onnx",
+      "karaokeModel": "5_HP-Karaoke-UVR.pth",
+      "isCustom": true
+    },
+    "lyricsProvider": "LRCLIB (Synced)",
+    "isSynced": true,
+    "hasLyrics": true,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": true
+  },
+  {
+    "id": "spotify_3FsqlxtjL2EJ5kxwgdj1Yl",
+    "title": "Musighi Filme Arayeshe Ghaliz Yek (Ba Man Sanama)",
+    "artist": "Homayoun Shajarian, Sohrab Pournazeri",
+    "albumArt": "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b27320f997e5f4df2119836373b3",
+    "query": "Musighi Filme Arayeshe Ghaliz Yek (Ba Man Sanama) Homayoun Shajarian, Sohrab Pournazeri",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/spotify_3FsqlxtjL2EJ5kxwgdj1Yl/instrumental.mp3",
+      "lead": "/audio/spotify_3FsqlxtjL2EJ5kxwgdj1Yl/lead_vocal.mp3",
+      "back": "/audio/spotify_3FsqlxtjL2EJ5kxwgdj1Yl/back_vocal.mp3",
+      "full": "/audio/spotify_3FsqlxtjL2EJ5kxwgdj1Yl/audio.mp3"
+    },
+    "downloadMethod": "yt-dlp Direct (Title + Artist)",
+    "downloadAttempts": [
+      {
+        "provider": "SpotDL (Spotify Link)",
+        "status": "failed",
+        "detail": "SpotDL verified match not found for Spotify link"
+      },
+      {
+        "provider": "yt-dlp Direct (Title + Artist)",
+        "status": "success",
+        "detail": "Audio extracted via YouTube audio search for \"Musighi Filme Arayeshe Ghaliz Yek (Ba Man Sanama) Homayoun Shajarian\""
+      },
+      {
+        "provider": "yt-dlp Title Fallback",
+        "status": "skipped",
+        "detail": "Not needed (acquired via yt-dlp Direct)"
+      }
+    ],
+    "engineSettings": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "isCustom": false
+    },
+    "separationInfo": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "primaryModel": "UVR-MDX-NET-Inst_HQ_3.onnx",
+      "karaokeModel": "5_HP-Karaoke-UVR.pth",
+      "isCustom": false
+    },
+    "lyricsProvider": "LRCLIB (Synced)",
+    "isSynced": true,
+    "hasLyrics": true,
+    "spotifyUrl": "https://open.spotify.com/track/3FsqlxtjL2EJ5kxwgdj1Yl",
+    "spotifyTrackId": "3FsqlxtjL2EJ5kxwgdj1Yl",
+    "isSpotify": true,
+    "isUploaded": false
   }
 ]

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <title>Dashboard | Ctrl+Alt+Lyrics</title>
   <link rel="stylesheet" href="/style.css">
-  <link rel="icon" type="image/png" href="public/ctrlaltlyrics-logo.webp">
+  <link rel="icon" type="image/png" href="/ctrlaltlyrics-logo.webp">
 </head>
 <body>
   <div id="app" class="dashboard-vertical">
@@ -62,7 +62,7 @@
 
           <div style="position: relative;">
             <div style="display:flex; gap: 0.5rem;">
-              <input type="search" id="searchInput" placeholder="Search song title..." autocomplete="off">
+              <input type="search" id="searchInput" placeholder="Search song title or paste Spotify link..." autocomplete="off">
               <button id="searchBtn" class="btn">Go</button>
             </div>
             <div id="searchResults" class="search-results-popup" style="display: none;"></div>
@@ -76,7 +76,10 @@
       <!-- Right Column: Library -->
       <div class="upper-right">
         <div class="library-header-row">
-          <h2>Library</h2>
+          <div class="library-title-area">
+            <h2>Library</h2>
+            <button id="uploadSongBtn" class="btn upload-btn" title="Upload Local Audio File (MP3, WAV, M4A, FLAC, etc.)">📁 Upload</button>
+          </div>
           <div class="library-controls-group">
             <input type="search" id="libraryFilterInput" class="library-filter-input" placeholder="🔍 Filter library..." autocomplete="off">
             <div class="sort-wrapper">
@@ -178,6 +181,103 @@
         </div>
 
       </div>
+    </div>
+  </div>
+
+  <!-- Upload Song Modal -->
+  <div id="uploadSongModal" class="modal-backdrop" style="display: none;">
+    <div class="modal-box upload-modal-box">
+      <div class="modal-header">
+        <h3>📁 Upload Song</h3>
+        <button id="closeUploadModalBtn" class="btn-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="uploadDropZone" class="upload-dropzone">
+          <input type="file" id="songFileInput" accept="audio/*,.mp3,.m4a,.wav,.flac,.opus,.ogg,.aac,.webm" style="display: none;">
+          <div class="dropzone-icon">🎵</div>
+          <div class="dropzone-prompt"><strong>Click to browse</strong> or drag & drop audio file here</div>
+          <div class="dropzone-formats">Supports MP3, WAV, M4A, FLAC, OPUS, OGG, AAC (Max 150MB)</div>
+        </div>
+
+        <div id="uploadFileInfo" class="upload-file-info" style="display: none;">
+          <div class="upload-file-preview-row">
+            <img id="uploadCoverPreview" class="upload-cover-preview" src="/ctrlaltlyrics-logo.webp" alt="cover">
+            <div class="upload-file-details">
+              <div class="file-name-badge">
+                <span id="uploadFileName">filename.mp3</span>
+                <span id="uploadFileSize" class="file-size-tag">(0 MB)</span>
+              </div>
+              <div id="uploadTagNotice" class="upload-tag-notice" style="display: none;">✨ Embedded metadata & cover detected</div>
+            </div>
+            <button id="clearSelectedFileBtn" class="btn-clear-file" title="Remove File">✕</button>
+          </div>
+        </div>
+
+        <div class="upload-form-grid">
+          <div class="form-group">
+            <label for="uploadSongTitle">Song Title:</label>
+            <input type="text" id="uploadSongTitle" placeholder="e.g. Bohemian Rhapsody" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label for="uploadSongArtist">Artist Name:</label>
+            <input type="text" id="uploadSongArtist" placeholder="e.g. Queen" autocomplete="off">
+          </div>
+        </div>
+
+        <div class="upload-engine-summary">
+          <div class="engine-summary-header">
+            <span>⚙️ Stem Separation Engine</span>
+            <span id="uploadEngineSummaryBadge" class="engine-badge-pill">Balanced (MP3 192k)</span>
+          </div>
+          <div class="engine-quick-select-row">
+            <label>Mode:</label>
+            <select id="uploadEngineModeSelect">
+              <option value="balanced" selected>⚖️ Balanced (~30s)</option>
+              <option value="fast">⚡ Fast (~10s)</option>
+              <option value="high">🎯 High Precision (~60s)</option>
+              <option value="ultra">👑 Ultra Quality (~2m)</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="uploadProgressBarContainer" class="upload-progress-container" style="display: none;">
+          <div class="upload-progress-header">
+            <span id="uploadProgressText">Uploading: 0%</span>
+            <span id="uploadProgressStatus">Sending...</span>
+          </div>
+          <div class="upload-progress-bar-bg">
+            <div id="uploadProgressBar" class="upload-progress-bar-fill" style="width: 0%;"></div>
+          </div>
+        </div>
+
+        <div id="uploadErrorMsg" class="upload-error-msg" style="display: none;"></div>
+      </div>
+      <div class="modal-footer" style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem;">
+        <button id="cancelUploadBtn" class="btn btn-secondary">Cancel</button>
+        <button id="submitUploadBtn" class="btn btn-primary" disabled>Upload &amp; Process</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Meta-Data Modal -->
+  <div id="metadataModal" class="modal-backdrop" style="display: none; z-index: 3000;">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="metadataModalTitle">✏️ Edit Meta-data</h3>
+        <button id="closeMetadataModalBtn" class="btn-close" onclick="document.getElementById('metadataModal').style.display='none'">✕</button>
+      </div>
+      <div class="modal-body" id="metadataModalBody"></div>
+    </div>
+  </div>
+
+  <!-- Sync Editor Modal -->
+  <div id="syncEditorModal" class="modal-backdrop" style="display: none; z-index: 3000;">
+    <div class="modal-box" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 id="syncEditorModalTitle">⏱️ Sync Editor</h3>
+        <button id="closeSyncEditorModalBtn" class="btn-close" onclick="document.getElementById('syncEditorModal').style.display='none'">✕</button>
+      </div>
+      <div class="modal-body" id="syncEditorModalBody"></div>
     </div>
   </div>
 

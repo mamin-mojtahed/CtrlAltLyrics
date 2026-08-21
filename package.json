@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node --watch server.js",
     "dev": "cd frontend && npm run dev",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -18,6 +18,8 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "fluent-ffmpeg": "^2.1.3",
+    "multer": "^2.2.0",
+    "music-metadata": "^7.14.0",
     "socket.io": "^4.8.3",
     "sqlite3": "^6.0.1"
   }
