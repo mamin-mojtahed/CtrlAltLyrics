@@ -1,6 +1,7 @@
 import { io } from 'socket.io-client';
 
 const socket = io('/');
+window.socket = socket;
 
 const searchInput = document.getElementById('searchInput');
 const searchBtn = document.getElementById('searchBtn');
@@ -30,6 +31,7 @@ const prevLineBtn = document.getElementById('prevLineBtn');
 const nextLineBtn = document.getElementById('nextLineBtn');
 
 const timelineSlider = document.getElementById('timelineSlider');
+if (timelineSlider) timelineSlider.step = 'any';
 const currentSongTitle = document.getElementById('currentSongTitle');
 const lyricsCounter = document.getElementById('lyricsCounter');
 
@@ -482,6 +484,7 @@ function seekToTime(time) {
     playAudio(targetTime);
   }
 }
+window.seekToTime = seekToTime;
 
 prevLineBtn.addEventListener('click', jumpToPrevLine);
 nextLineBtn.addEventListener('click', jumpToNextLine);
@@ -613,6 +616,15 @@ updateAllFaderTrackFills();
 // Keyboard Shortcuts
 window.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+  const syncModal = document.getElementById('syncEditorModal');
+  const compModal = document.getElementById('componentManagerModal');
+  const metaModal = document.getElementById('metadataModal');
+  if ((syncModal && syncModal.style.display !== 'none') ||
+      (compModal && compModal.style.display !== 'none') ||
+      (metaModal && metaModal.style.display !== 'none')) {
+    return;
+  }
   
   // Space: Toggle Play/Pause
   if (e.code === 'Space') {
@@ -2041,7 +2053,7 @@ function renderComponentManagerModal(song, components = {}) {
   bodyEl.innerHTML = `
     <div class="component-manager-top-menu" style="display:flex; gap:0.5rem; margin-bottom: 1rem;">
       <button class="btn btn-primary" style="flex:1; background:rgba(147, 51, 234, 0.2); border:1px solid #9333ea; color:#d8b4fe;" onclick="openMetadataModal('${song.id}')">✏️ Edit Meta-data</button>
-      <button class="btn btn-primary" style="flex:1; background:rgba(59, 130, 246, 0.2); border:1px solid #3b82f6; color:#93c5fd;" onclick="openSyncEditorModal('${song.id}')">⏱️ Sync Editor</button>
+      <button class="btn btn-primary" style="flex:1; background:rgba(59, 130, 246, 0.2); border:1px solid #3b82f6; color:#93c5fd;" onclick="openSyncEditorModal('${song.id}')">🎵 Lyrics & Sync Editor</button>
     </div>
 
     <!-- Component 1: Audio Download -->
@@ -2562,8 +2574,13 @@ socket.on('player_command', (cmd) => {
   }
 });
 
-// Update timeline slider continuously if playing from dashboard tab
+// Update timeline slider and lyrics editor tracker continuously
 setInterval(() => {
+  const modal = document.getElementById('syncEditorModal');
+  if (modal && modal.style.display !== 'none' && typeof window.updateSyncEditorTimeIndicator === 'function') {
+    window.updateSyncEditorTimeIndicator();
+  }
+
   if (currentState.isPlaying && (sources.leadVoc || sources.inst)) {
     const curTime = audioCtx.currentTime - audioStartTime;
     const maxDur = parseFloat(timelineSlider.max) || 0;
@@ -2582,7 +2599,7 @@ setInterval(() => {
       socket.emit('update_state', { currentTime: curTime });
     }
   }
-}, 100);
+}, 50);
 
 fetchLibrary();
 fetchQueue();
@@ -2674,111 +2691,20 @@ window.submitMetadata = async (e, songId) => {
   }
 };
 
-window.bulkShiftLyrics = (songId, direction) => {
-  const shiftVal = parseFloat(document.getElementById(`syncShiftVal_${songId}`).value) || 0.1;
-  const amount = shiftVal * direction;
-  
-  const list = document.getElementById(`syncEditorList_${songId}`);
-  if (!list) return;
-  const rows = list.querySelectorAll('.sync-editor-row');
-  rows.forEach(row => {
-    const timeInput = row.querySelector('.sync-time');
-    let t = parseFloat(timeInput.value) || 0;
-    t += amount;
-    if (t < 0) t = 0;
-    timeInput.value = t.toFixed(2);
-  });
-};
-
 window.lastFocusedSyncRow = null;
 
-window.addSyncEditorLine = (songId) => {
-  const list = document.getElementById(`syncEditorList_${songId}`);
-  if (!list) return;
-  const emptyState = list.querySelector('.sync-empty');
-  if (emptyState) emptyState.remove();
-
-  const idx = list.children.length;
-  const div = document.createElement('div');
-  div.className = 'sync-editor-row';
-  div.dataset.idx = idx;
-  div.style.cssText = 'display:flex; gap:0.3rem; align-items:center;';
-  
-  let lastTime = 0;
-  let insertBeforeNode = null;
-
-  if (window.lastFocusedSyncRow && window.lastFocusedSyncRow.parentElement === list) {
-    lastTime = parseFloat(window.lastFocusedSyncRow.querySelector('.sync-time').value) || 0;
-    insertBeforeNode = window.lastFocusedSyncRow.nextSibling;
-  } else if (list.children.length > 0) {
-    const lastRow = list.children[list.children.length - 1];
-    if (lastRow) {
-      lastTime = parseFloat(lastRow.querySelector('.sync-time').value) || 0;
-    }
+window.bulkShiftLyrics = (songId, direction) => {
+  if (window.syncEditorBulkShift) {
+    window.syncEditorBulkShift(songId, direction);
   }
-  
-  div.innerHTML = `
-    <input type="number" class="sync-time" value="${(lastTime + 2).toFixed(2)}" step="0.01" style="width:80px; padding:0.25rem; font-size:0.75rem; background:rgba(0,0,0,0.4); border:1px solid var(--border); color:#fff;">
-    <input type="text" class="sync-text" placeholder="#INSTRUMENTAL" style="flex:1; padding:0.25rem; font-size:0.75rem; background:rgba(0,0,0,0.4); border:1px solid var(--border); color:#fff;">
-    <button class="btn" style="padding:0.2rem 0.4rem; font-size:0.7rem; background:rgba(239,68,68,0.2); color:#ef4444;" onclick="this.parentElement.remove()">✕</button>
-  `;
-  
-  if (insertBeforeNode) {
-    list.insertBefore(div, insertBeforeNode);
-  } else {
-    list.appendChild(div);
-  }
-  
-  window.lastFocusedSyncRow = div;
-  div.querySelector('.sync-text').focus();
 };
 
-window.saveSyncEditorLyrics = async (songId) => {
-  const list = document.getElementById(`syncEditorList_${songId}`);
-  if (!list) return;
-  
-  const newLyrics = [];
-  const rows = list.querySelectorAll('.sync-editor-row');
-  rows.forEach(row => {
-    const timeStr = row.querySelector('.sync-time').value;
-    const textStr = row.querySelector('.sync-text').value;
-    newLyrics.push({
-      time: parseFloat(timeStr) || 0,
-      text: textStr
-    });
-  });
-  
-  // Sort by time
-  newLyrics.sort((a, b) => a.time - b.time);
-
-  try {
-    const res = await fetch('/api/edit_lyrics', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ songId, lyrics: newLyrics })
-    });
-    const data = await res.json();
-    if (data.success) {
-      alert('Synced lyrics saved successfully!');
-      
-      // Update in-memory currentManagerSong
-      if (window.currentManagerSong && window.currentManagerSong.id === songId) {
-        window.currentManagerSong.lyrics = newLyrics;
-      }
-
-      // If active current playing song, update state and player bar UI immediately
-      if (currentSong && currentSong.id === songId) {
-        currentSong.lyrics = newLyrics;
-        socket.emit('update_state', { songId: currentSong.id, songData: currentSong });
-      }
-
-      openComponentManagerModal(songId); // reload component modal
-    } else {
-      alert('Failed to save synced lyrics.');
-    }
-  } catch(e) {
-    console.error('Error saving sync editor lyrics:', e);
-    alert('Error saving synced lyrics.');
+window.addSyncEditorLine = (songId) => {
+  if (window.syncEditorAddLineAt) {
+    const idx = (window.lyricsEditorState && window.lyricsEditorState.selectedRowIndex >= 0)
+      ? window.lyricsEditorState.selectedRowIndex
+      : 0;
+    window.syncEditorAddLineAt(idx, 'below');
   }
 };
 
@@ -2847,57 +2773,708 @@ window.openMetadataModal = (songId) => {
   modal.style.display = 'flex';
 };
 
-window.openSyncEditorModal = (songId) => {
-  const song = window.currentManagerSong;
-  if (!song || song.id !== songId) return;
+// ==========================================================================
+// Lyrics & Sync Editor Engine
+// ==========================================================================
+window.lyricsEditorState = {
+  songId: null,
+  undoStack: [],
+  redoStack: [],
+  savedSnapshotJson: '',
+  showTranslation: false,
+  showTransliteration: false,
+  selectedRowIndex: -1,
+  typingTimer: null,
+  keyHandler: null
+};
+
+// Lucide icons using imported styling classes
+const LUCIDE_METRONOME_ICON = `<i class="icon-metronome"></i>`;
+const LUCIDE_UNDO_ICON = `<i class="icon-undo"></i>`;
+const LUCIDE_REDO_ICON = `<i class="icon-redo"></i>`;
+const LUCIDE_LANGUAGES_ICON = `<i class="icon-languages"></i>`;
+const LUCIDE_SAVE_ICON = `<i class="icon-save"></i>`;
+const LUCIDE_PLUS_ICON = `<i class="icon-plus"></i>`;
+const LUCIDE_MINUS_ICON = `<i class="icon-minus"></i>`;
+const LUCIDE_X_ICON = `<i class="icon-x"></i>`;
+const LUCIDE_PLAY_ICON = `<i class="icon-play"></i>`;
+const LUCIDE_BOOK_A_ICON = `<i class="icon-book-a"></i>`;
+
+const LUCIDE_METRONOME_SVG = LUCIDE_METRONOME_ICON;
+const LUCIDE_UNDO_SVG = LUCIDE_UNDO_ICON;
+const LUCIDE_REDO_SVG = LUCIDE_REDO_ICON;
+const LUCIDE_LANGUAGES_SVG = LUCIDE_LANGUAGES_ICON;
+const LUCIDE_SAVE_SVG = LUCIDE_SAVE_ICON;
+const LUCIDE_PLUS_SVG = LUCIDE_PLUS_ICON;
+const LUCIDE_MINUS_SVG = LUCIDE_MINUS_ICON;
+const LUCIDE_X_SVG = LUCIDE_X_ICON;
+const LUCIDE_PLAY_SVG = LUCIDE_PLAY_ICON;
+const LUCIDE_BOOK_A_SVG = LUCIDE_BOOK_A_ICON;
+
+window.formatCentiseconds = (totalSeconds) => {
+  if (totalSeconds === undefined || totalSeconds === null || isNaN(totalSeconds) || totalSeconds < 0) totalSeconds = 0;
+  // Compute exact integer centiseconds (100 ticks per second) without floating point modulo inaccuracies
+  const totalCs = Math.floor(totalSeconds * 100 + 1e-6);
+  const m = Math.floor(totalCs / 6000);
+  const s = Math.floor((totalCs % 6000) / 100);
+  const cs = totalCs % 100;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
+};
+
+window.parseCentiseconds = (str) => {
+  if (typeof str === 'number') return Math.max(0, Math.round(str * 100) / 100);
+  if (!str || typeof str !== 'string') return 0;
+  str = str.trim().replace(',', '.');
+  if (str.includes(':')) {
+    const parts = str.split(':');
+    const m = parseFloat(parts[0]) || 0;
+    const s = parseFloat(parts[1]) || 0;
+    return Math.max(0, Math.round((m * 60 + s) * 100) / 100);
+  }
+  const s = parseFloat(str) || 0;
+  return Math.max(0, Math.round(s * 100) / 100);
+};
+
+window.updateSyncEditorTimeIndicator = () => {
+  const curEl = document.getElementById('syncEditorCurTime');
+  const durEl = document.getElementById('syncEditorDurTime');
+  if (!curEl || !durEl) return;
+  const rawCurTime = getCurrentTime();
+  const maxDur = parseFloat(timelineSlider.max) || (currentSong && currentSong.duration ? currentSong.duration : 0);
+  const curTime = maxDur > 0 ? Math.min(Math.max(0, rawCurTime), maxDur) : Math.max(0, rawCurTime);
+  const formattedCur = window.formatCentiseconds(curTime);
+  const formattedDur = window.formatCentiseconds(maxDur);
+  if (curEl.innerText !== formattedCur) curEl.innerText = formattedCur;
+  if (durEl.innerText !== formattedDur) durEl.innerText = formattedDur;
+};
+
+let syncEditorRafId = null;
+
+function startSyncEditorTimeLoop() {
+  if (syncEditorRafId) {
+    cancelAnimationFrame(syncEditorRafId);
+    syncEditorRafId = null;
+  }
+  const tick = () => {
+    const modal = document.getElementById('syncEditorModal');
+    if (!modal || modal.style.display === 'none') {
+      syncEditorRafId = null;
+      return;
+    }
+    window.updateSyncEditorTimeIndicator();
+    syncEditorRafId = requestAnimationFrame(tick);
+  };
+  syncEditorRafId = requestAnimationFrame(tick);
+}
+
+function stopSyncEditorTimeLoop() {
+  if (syncEditorRafId) {
+    cancelAnimationFrame(syncEditorRafId);
+    syncEditorRafId = null;
+  }
+}
+
+window.jumpSongToTime = async (t, shouldPlay = false) => {
+  const songId = lyricsEditorState.songId;
+  if (!currentSong || currentSong.id !== songId) {
+    if (window.selectSong && songId) {
+      await window.selectSong(songId, shouldPlay);
+      setTimeout(() => {
+        seekToTime(t);
+        if (shouldPlay && !currentState.isPlaying) {
+          socket.emit('player_command', { command: 'play' });
+          playAudio(t);
+        }
+      }, 400);
+      return;
+    }
+  }
+  seekToTime(t);
+  if (shouldPlay && !currentState.isPlaying) {
+    socket.emit('player_command', { command: 'play' });
+    playAudio(t);
+  }
+};
+
+window.syncEditorPlayLine = (idx) => {
+  const songId = lyricsEditorState.songId;
+  if (!songId) return;
+  const list = document.getElementById(`syncEditorList_${songId}`);
+  if (!list) return;
+  const wrappers = list.querySelectorAll('.sync-row-wrapper');
+  if (!wrappers[idx]) return;
+  const timeInp = wrappers[idx].querySelector('.sync-time');
+  const t = window.parseCentiseconds(timeInp ? timeInp.value : 0);
+  selectSyncRow(idx);
+  window.jumpSongToTime(t, true);
+};
+
+window.serializeLinesFromDom = (songId) => {
+  const list = document.getElementById(`syncEditorList_${songId}`);
+  if (!list) return [];
+  const wrappers = list.querySelectorAll('.sync-row-wrapper');
+  const lines = [];
+  wrappers.forEach(w => {
+    const timeInput = w.querySelector('.sync-time');
+    const textInput = w.querySelector('.sync-text');
+    const tlInput = w.querySelector('.sync-tl');
+    const trInput = w.querySelector('.sync-tr');
+    const t = window.parseCentiseconds(timeInput ? timeInput.value : 0);
+    lines.push({
+      time: Math.round(t * 100) / 100,
+      text: textInput ? textInput.value : '',
+      transliteration: tlInput ? tlInput.value : '',
+      translation: trInput ? trInput.value : ''
+    });
+  });
+  return lines;
+};
+
+window.updateEditorDirtyState = () => {
+  const songId = lyricsEditorState.songId;
+  if (!songId) return;
+  const currentLines = serializeLinesFromDom(songId);
+  const isDirty = JSON.stringify(currentLines) !== lyricsEditorState.savedSnapshotJson;
+
+  const badge = document.getElementById('syncEditorStatusBadge');
+  if (badge) {
+    if (isDirty) {
+      badge.className = 'sync-status-badge unsaved';
+      badge.innerHTML = `<span class="sync-status-dot"></span><span class="sync-status-text">Unsaved changes</span>`;
+    } else {
+      badge.className = 'sync-status-badge saved';
+      badge.innerHTML = `<span class="sync-status-dot"></span><span class="sync-status-text">Saved</span>`;
+    }
+  }
+
+  const saveBtn = document.getElementById(`syncSaveBtn_${songId}`);
+  if (saveBtn) {
+    saveBtn.disabled = !isDirty;
+  }
+};
+
+window.updateHistoryButtonsState = () => {
+  const songId = lyricsEditorState.songId;
+  if (!songId) return;
+  const undoBtn = document.getElementById(`syncUndoBtn_${songId}`);
+  const redoBtn = document.getElementById(`syncRedoBtn_${songId}`);
+  if (undoBtn) undoBtn.disabled = lyricsEditorState.undoStack.length === 0;
+  if (redoBtn) redoBtn.disabled = lyricsEditorState.redoStack.length === 0;
+};
+
+window.pushUndoSnapshot = () => {
+  const songId = lyricsEditorState.songId;
+  if (!songId) return;
+  const currentLines = serializeLinesFromDom(songId);
+  const snapStr = JSON.stringify(currentLines);
+  if (lyricsEditorState.undoStack.length > 0) {
+    const lastSnap = JSON.stringify(lyricsEditorState.undoStack[lyricsEditorState.undoStack.length - 1]);
+    if (lastSnap === snapStr) return;
+  }
+  lyricsEditorState.undoStack.push(currentLines);
+  if (lyricsEditorState.undoStack.length > 50) lyricsEditorState.undoStack.shift();
+  lyricsEditorState.redoStack = [];
+  updateHistoryButtonsState();
+};
+
+window.syncEditorUndo = () => {
+  if (lyricsEditorState.undoStack.length === 0) return;
+  const songId = lyricsEditorState.songId;
+  const currentLines = serializeLinesFromDom(songId);
+  lyricsEditorState.redoStack.push(currentLines);
+  const prevLines = lyricsEditorState.undoStack.pop();
+  renderSyncEditorRows(songId, prevLines);
+  updateHistoryButtonsState();
+  updateEditorDirtyState();
+};
+
+window.syncEditorRedo = () => {
+  if (lyricsEditorState.redoStack.length === 0) return;
+  const songId = lyricsEditorState.songId;
+  const currentLines = serializeLinesFromDom(songId);
+  lyricsEditorState.undoStack.push(currentLines);
+  const nextLines = lyricsEditorState.redoStack.pop();
+  renderSyncEditorRows(songId, nextLines);
+  updateHistoryButtonsState();
+  updateEditorDirtyState();
+};
+
+window.selectSyncRow = (idx, options = {}) => {
+  const songId = lyricsEditorState.songId;
+  if (!songId) return;
+  const list = document.getElementById(`syncEditorList_${songId}`);
+  if (!list) return;
+  const wrappers = list.querySelectorAll('.sync-row-wrapper');
+  lyricsEditorState.selectedRowIndex = idx;
+  wrappers.forEach((w, i) => {
+    if (i === idx) {
+      w.classList.add('is-selected');
+      window.lastFocusedSyncRow = w.querySelector('.sync-editor-row');
+      if (options.scroll) {
+        w.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    } else {
+      w.classList.remove('is-selected');
+    }
+  });
+};
+
+window.syncEditorAddLineAt = (idx, position) => {
+  const songId = lyricsEditorState.songId;
+  if (!songId) return;
+  pushUndoSnapshot();
+  const lines = serializeLinesFromDom(songId);
+  let insertIndex = 0;
+
+  if (lines.length === 0) {
+    lines.push({ time: 0, text: '', transliteration: '', translation: '' });
+    insertIndex = 0;
+  } else if (position === 'above') {
+    const curTime = lines[idx] ? lines[idx].time : 0;
+    let newTime = 0;
+    if (idx <= 0) {
+      newTime = Math.max(0, curTime - 2);
+    } else {
+      newTime = (lines[idx - 1].time + curTime) / 2;
+    }
+    lines.splice(idx, 0, {
+      time: Math.round(newTime * 100) / 100,
+      text: '',
+      transliteration: '',
+      translation: ''
+    });
+    insertIndex = idx;
+  } else {
+    const curTime = lines[idx] ? lines[idx].time : 0;
+    let newTime = 0;
+    if (idx >= lines.length - 1) {
+      newTime = curTime + 2;
+    } else {
+      newTime = (curTime + lines[idx + 1].time) / 2;
+    }
+    lines.splice(idx + 1, 0, {
+      time: Math.round(newTime * 100) / 100,
+      text: '',
+      transliteration: '',
+      translation: ''
+    });
+    insertIndex = idx + 1;
+  }
+
+  renderSyncEditorRows(songId, lines);
+  selectSyncRow(insertIndex, { scroll: true });
+  updateEditorDirtyState();
+
+  const list = document.getElementById(`syncEditorList_${songId}`);
+  if (list) {
+    const wrappers = list.querySelectorAll('.sync-row-wrapper');
+    if (wrappers[insertIndex]) {
+      const textInp = wrappers[insertIndex].querySelector('.sync-text');
+      if (textInp) textInp.focus();
+    }
+  }
+};
+
+window.syncEditorDeleteLine = (idx) => {
+  const songId = lyricsEditorState.songId;
+  if (!songId) return;
+  pushUndoSnapshot();
+  const lines = serializeLinesFromDom(songId);
+  lines.splice(idx, 1);
+  renderSyncEditorRows(songId, lines);
+  if (lines.length > 0) {
+    const newIdx = Math.max(0, Math.min(idx, lines.length - 1));
+    selectSyncRow(newIdx);
+  } else {
+    lyricsEditorState.selectedRowIndex = -1;
+  }
+  updateEditorDirtyState();
+};
+
+window.syncEditorBulkShift = (songId, direction) => {
+  const shiftVal = parseFloat(document.getElementById(`syncShiftVal_${songId}`).value) || 0.1;
+  const amount = shiftVal * direction;
+  const list = document.getElementById(`syncEditorList_${songId}`);
+  if (!list) return;
+  pushUndoSnapshot();
+  const rows = list.querySelectorAll('.sync-editor-row');
+  rows.forEach(row => {
+    const timeInput = row.querySelector('.sync-time');
+    let t = window.parseCentiseconds(timeInput.value);
+    t += amount;
+    if (t < 0) t = 0;
+    t = Math.round(t * 100) / 100;
+    timeInput.value = window.formatCentiseconds(t);
+  });
+  updateEditorDirtyState();
+};
+window.bulkShiftLyrics = window.syncEditorBulkShift;
+
+window.toggleSyncColumn = (type) => {
+  const songId = lyricsEditorState.songId;
+  if (!songId) return;
+  const container = document.getElementById(`syncEditorContainer_${songId}`);
+  if (type === 'transliteration') {
+    lyricsEditorState.showTransliteration = !lyricsEditorState.showTransliteration;
+    localStorage.setItem('lyricsEditor_showTransliteration', lyricsEditorState.showTransliteration);
+    if (container) container.classList.toggle('hide-transliteration', !lyricsEditorState.showTransliteration);
+    const btn = document.getElementById(`syncToggleTlBtn_${songId}`);
+    if (btn) btn.classList.toggle('active', lyricsEditorState.showTransliteration);
+  } else if (type === 'translation') {
+    lyricsEditorState.showTranslation = !lyricsEditorState.showTranslation;
+    localStorage.setItem('lyricsEditor_showTranslation', lyricsEditorState.showTranslation);
+    if (container) container.classList.toggle('hide-translation', !lyricsEditorState.showTranslation);
+    const btn = document.getElementById(`syncToggleTrBtn_${songId}`);
+    if (btn) btn.classList.toggle('active', lyricsEditorState.showTranslation);
+  }
+};
+
+window.saveSyncEditorLyrics = async (songId) => {
+  const list = document.getElementById(`syncEditorList_${songId}`);
+  if (!list) return;
+
+  const newLyrics = serializeLinesFromDom(songId);
+  newLyrics.sort((a, b) => a.time - b.time);
+  newLyrics.forEach(l => l.time = Math.round(l.time * 100) / 100);
+
+  const saveBtn = document.getElementById(`syncSaveBtn_${songId}`);
+  if (saveBtn) saveBtn.disabled = true;
+
+  try {
+    const res = await fetch('/api/edit_lyrics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ songId, lyrics: newLyrics })
+    });
+    const data = await res.json();
+    if (data.success) {
+      lyricsEditorState.savedSnapshotJson = JSON.stringify(newLyrics);
+      updateEditorDirtyState();
+
+      if (window.currentManagerSong && window.currentManagerSong.id === songId) {
+        window.currentManagerSong.lyrics = newLyrics;
+      }
+
+      if (currentSong && currentSong.id === songId) {
+        currentSong.lyrics = newLyrics;
+        socket.emit('update_state', { songId: currentSong.id, songData: currentSong });
+      }
+
+      alert('Lyrics & sync saved successfully!');
+    } else {
+      alert('Failed to save lyrics.');
+      updateEditorDirtyState();
+    }
+  } catch (e) {
+    console.error('Error saving sync editor lyrics:', e);
+    alert('Error saving synced lyrics.');
+    updateEditorDirtyState();
+  }
+};
+
+window.renderSyncEditorRows = (songId, lines) => {
+  const list = document.getElementById(`syncEditorList_${songId}`);
+  if (!list) return;
+
+  const countEl = document.getElementById(`syncLineCount_${songId}`);
+  if (countEl) countEl.innerText = `${lines.length} lines`;
+
+  if (lines.length === 0) {
+    list.innerHTML = `
+      <div class="sync-empty-state">
+        <p>No lyrics found for this song.</p>
+        <button type="button" class="btn btn-primary" onclick="syncEditorAddLineAt(0, 'below')" style="font-size:0.75rem; padding:0.35rem 0.8rem; display:inline-flex; align-items:center; gap:0.35rem;">
+          ${LUCIDE_PLUS_ICON} Add First Line
+        </button>
+      </div>
+    `;
+    return;
+  }
+
+  const selectedIdx = lyricsEditorState.selectedRowIndex >= 0 ? Math.min(lyricsEditorState.selectedRowIndex, lines.length - 1) : 0;
+  lyricsEditorState.selectedRowIndex = selectedIdx;
+
+  let html = '';
+  lines.forEach((line, idx) => {
+    const isSel = idx === selectedIdx;
+    const t = parseFloat(line.time) || 0;
+    html += `
+      <div class="sync-row-wrapper ${isSel ? 'is-selected' : ''}" data-idx="${idx}">
+        <button type="button" class="btn-add-line-strip btn-add-line-top" onclick="syncEditorAddLineAt(${idx}, 'above')" title="Add line above">
+          ${LUCIDE_PLUS_ICON} <span>Add line above</span>
+        </button>
+        <div class="sync-editor-row" data-idx="${idx}">
+          <button type="button" class="sync-line-play-btn sync-col-play" onclick="syncEditorPlayLine(${idx})" title="Jump song to this line (▶)">
+            ${LUCIDE_PLAY_ICON}
+          </button>
+          <input type="text" inputmode="decimal" class="sync-time sync-col-time" value="${formatCentiseconds(t)}" title="Time (mm:ss.cs)">
+          <input type="text" class="sync-text sync-col-text" value="${escapeHtml(line.text || '')}" placeholder="#INSTRUMENTAL">
+          <input type="text" class="sync-tl sync-col-tl" value="${escapeHtml(line.transliteration || '')}" placeholder="Transliteration...">
+          <input type="text" class="sync-tr sync-col-tr" value="${escapeHtml(line.translation || '')}" placeholder="Translation...">
+          <button type="button" class="sync-del-btn sync-col-actions" onclick="syncEditorDeleteLine(${idx})" title="Delete line">
+            ${LUCIDE_X_ICON}
+          </button>
+        </div>
+        <button type="button" class="btn-add-line-strip btn-add-line-bottom" onclick="syncEditorAddLineAt(${idx}, 'below')" title="Add line below">
+          ${LUCIDE_PLUS_ICON} <span>Add line below</span>
+        </button>
+      </div>
+    `;
+  });
+
+  list.innerHTML = html;
+
+  const wrappers = list.querySelectorAll('.sync-row-wrapper');
+  wrappers.forEach((w, idx) => {
+    w.addEventListener('click', (e) => {
+      if (!e.target.closest('.btn-add-line-strip') && !e.target.closest('.sync-del-btn') && !e.target.closest('.sync-line-play-btn')) {
+        selectSyncRow(idx);
+      }
+    });
+
+    const timeInp = w.querySelector('.sync-time');
+    const textInp = w.querySelector('.sync-text');
+    const tlInp = w.querySelector('.sync-tl');
+    const trInp = w.querySelector('.sync-tr');
+
+    [timeInp, textInp, tlInp, trInp].forEach(inp => {
+      if (!inp) return;
+      inp.addEventListener('focus', () => selectSyncRow(idx));
+      inp.addEventListener('input', () => {
+        updateEditorDirtyState();
+        clearTimeout(lyricsEditorState.typingTimer);
+        lyricsEditorState.typingTimer = setTimeout(() => {
+          pushUndoSnapshot();
+        }, 500);
+      });
+    });
+
+    if (timeInp) {
+      const commitTimeInput = () => {
+        const val = window.parseCentiseconds(timeInp.value);
+        timeInp.value = window.formatCentiseconds(val);
+        window.jumpSongToTime(val);
+        updateEditorDirtyState();
+      };
+
+      timeInp.addEventListener('change', commitTimeInput);
+      timeInp.addEventListener('blur', commitTimeInput);
+      timeInp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commitTimeInput();
+          timeInp.blur();
+        }
+      });
+    }
+  });
+
+  if (tapSyncState.active) {
+    tapSyncState.rows = Array.from(list.querySelectorAll('.sync-row-wrapper'));
+  }
+};
+
+window.openSyncEditorModal = async (songId) => {
+  let song = window.currentManagerSong;
+  if (!song || song.id !== songId || !song.lyrics) {
+    try {
+      const res = await fetch(`/api/song_details/${songId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.song) {
+          song = data.song;
+          window.currentManagerSong = song;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch song details for sync editor:', e);
+    }
+  }
+
+  if (!song && window.currentSong && window.currentSong.id === songId) {
+    song = window.currentSong;
+  }
+
+  if (!song) return;
 
   const modal = document.getElementById('syncEditorModal');
   const bodyEl = document.getElementById('syncEditorModalBody');
   if (!modal || !bodyEl) return;
 
-  let syncEditorHtml = `
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem; padding-bottom:0.5rem; border-bottom:1px solid var(--border);">
-      <div style="display:flex; align-items:center; gap:0.3rem;">
-        <button class="btn btn-secondary" onclick="bulkShiftLyrics('${song.id}', -1)" style="padding:0.2rem 0.5rem;" title="Shift earlier">-</button>
-        <input type="number" id="syncShiftVal_${song.id}" value="0.1" step="0.1" style="width:60px; padding:0.2rem; background:rgba(0,0,0,0.4); border:1px solid var(--border); color:#fff; text-align:center;">
-        <button class="btn btn-secondary" onclick="bulkShiftLyrics('${song.id}', 1)" style="padding:0.2rem 0.5rem;" title="Shift later">+</button>
-        <span style="font-size:0.75rem; color:var(--text-secondary); margin-left:0.3rem;">Bulk Shift (s)</span>
-      </div>
-      <div>
-        <button id="tapSyncBtn_${song.id}" class="btn btn-secondary" onclick="toggleTapToSyncMode('${song.id}')" style="font-size:0.75rem; padding:0.3rem 0.6rem; margin-right:0.3rem;">👇 Tap to Sync</button>
-        <button class="btn btn-secondary" onclick="addSyncEditorLine('${song.id}')" style="font-size:0.75rem; padding:0.3rem 0.6rem;">➕ Add Line</button>
-        <button class="btn btn-primary" onclick="saveSyncEditorLyrics('${song.id}')" style="font-size:0.75rem; padding:0.3rem 0.6rem; margin-left:0.3rem;">💾 Save Sync</button>
-      </div>
-    </div>
-    <div id="syncEditorList_${song.id}" style="max-height: 400px; overflow-y: auto; display:flex; flex-direction:column; gap:0.25rem;">
-  `;
-  const existingLyrics = song.lyrics || [];
-  if (existingLyrics.length > 0) {
-    existingLyrics.forEach((line, idx) => {
-      syncEditorHtml += `
-        <div class="sync-editor-row" data-idx="${idx}" style="display:flex; gap:0.3rem; align-items:center;">
-          <input type="number" class="sync-time" value="${line.time}" step="0.01" style="width:80px; padding:0.25rem; font-size:0.75rem; background:rgba(0,0,0,0.4); border:1px solid var(--border); color:#fff;">
-          <input type="text" class="sync-text" value="${escapeHtml(line.text)}" placeholder="#INSTRUMENTAL" style="flex:1; padding:0.25rem; font-size:0.75rem; background:rgba(0,0,0,0.4); border:1px solid var(--border); color:#fff;">
-          <button class="btn" style="padding:0.2rem 0.4rem; font-size:0.7rem; background:rgba(239,68,68,0.2); color:#ef4444;" onclick="this.parentElement.remove()">✕</button>
+  const existingLyrics = (song.lyrics || []).map(l => ({
+    time: Math.round((parseFloat(l.time) || 0) * 100) / 100,
+    text: l.text || '',
+    transliteration: l.transliteration || '',
+    translation: l.translation || ''
+  }));
+
+  const hasTranslit = existingLyrics.some(l => l.transliteration && l.transliteration.trim() !== '');
+  const hasTrans = existingLyrics.some(l => l.translation && l.translation.trim() !== '');
+
+  const savedTlPref = localStorage.getItem('lyricsEditor_showTransliteration');
+  const savedTrPref = localStorage.getItem('lyricsEditor_showTranslation');
+
+  lyricsEditorState.songId = songId;
+  lyricsEditorState.undoStack = [];
+  lyricsEditorState.redoStack = [];
+  lyricsEditorState.showTransliteration = savedTlPref !== null ? (savedTlPref === 'true') : hasTranslit;
+  lyricsEditorState.showTranslation = savedTrPref !== null ? (savedTrPref === 'true') : hasTrans;
+  lyricsEditorState.selectedRowIndex = existingLyrics.length > 0 ? 0 : -1;
+  lyricsEditorState.savedSnapshotJson = JSON.stringify(existingLyrics);
+
+  bodyEl.innerHTML = `
+    <div id="syncEditorContainer_${song.id}" class="${!lyricsEditorState.showTransliteration ? 'hide-transliteration' : ''} ${!lyricsEditorState.showTranslation ? 'hide-translation' : ''}">
+      <div class="sync-toolbar">
+        <div class="sync-toolbar-left">
+          <div class="sync-shift-group">
+            <span class="sync-shift-label">Shift:</span>
+            <button type="button" class="sync-shift-btn" onclick="syncEditorBulkShift('${song.id}', -1)" title="Shift earlier (-)">
+              ${LUCIDE_MINUS_ICON}
+            </button>
+            <input type="text" id="syncShiftVal_${song.id}" value="0.10" class="sync-shift-input" title="Bulk shift amount in seconds">
+            <span class="sync-unit-label">(s)</span>
+            <button type="button" class="sync-shift-btn" onclick="syncEditorBulkShift('${song.id}', 1)" title="Shift later (+)">
+              ${LUCIDE_PLUS_ICON}
+            </button>
+          </div>
+          <div class="sync-playback-tracker" title="Current Playback Time / Total Duration">
+            <span class="sync-tracker-icon">⏱️</span>
+            <span id="syncEditorCurTime">00:00.00</span>
+            <span class="sync-tracker-slash">/</span>
+            <span id="syncEditorDurTime">00:00.00</span>
+          </div>
+          <span id="syncLineCount_${song.id}" class="sync-line-count-badge">${existingLyrics.length} lines</span>
         </div>
-      `;
-    });
-  } else {
-    syncEditorHtml += `<div class="empty-state sync-empty" style="font-size:0.75rem;">No lyrics to edit. Click "Add Line" to start.</div>`;
-  }
-  syncEditorHtml += `</div>`;
 
-  bodyEl.innerHTML = syncEditorHtml;
+        <div class="sync-toolbar-right">
+          <!-- Undo / Redo -->
+          <div class="sync-btn-group">
+            <button type="button" id="syncUndoBtn_${song.id}" class="sync-btn-icon" onclick="syncEditorUndo()" title="Undo (Ctrl+Z)" disabled>
+              ${LUCIDE_UNDO_ICON}
+            </button>
+            <button type="button" id="syncRedoBtn_${song.id}" class="sync-btn-icon" onclick="syncEditorRedo()" title="Redo (Ctrl+Y / Ctrl+Shift+Z)" disabled>
+              ${LUCIDE_REDO_ICON}
+            </button>
+          </div>
+
+          <div class="sync-toolbar-divider"></div>
+
+          <!-- Column Toggles -->
+          <div class="sync-btn-group">
+            <button type="button" id="syncToggleTlBtn_${song.id}" class="sync-btn-icon ${lyricsEditorState.showTransliteration ? 'active' : ''}" onclick="toggleSyncColumn('transliteration')" title="Toggle Transliteration Column">
+              ${LUCIDE_BOOK_A_ICON}
+            </button>
+            <button type="button" id="syncToggleTrBtn_${song.id}" class="sync-btn-icon ${lyricsEditorState.showTranslation ? 'active' : ''}" onclick="toggleSyncColumn('translation')" title="Toggle Translation Column">
+              ${LUCIDE_LANGUAGES_ICON}
+            </button>
+          </div>
+
+          <div class="sync-toolbar-divider"></div>
+
+          <!-- Tap to Sync -->
+          <div class="sync-btn-group">
+            <button type="button" id="tapSyncBtn_${song.id}" class="sync-btn-icon sync-metronome-btn" onclick="toggleTapToSyncMode('${song.id}')" title="Tap to Sync Mode">
+              ${LUCIDE_METRONOME_ICON}
+            </button>
+          </div>
+
+          <div class="sync-toolbar-divider"></div>
+
+          <!-- Save Button -->
+          <div class="sync-btn-group">
+            <button type="button" id="syncSaveBtn_${song.id}" class="sync-btn-icon sync-save-btn" onclick="saveSyncEditorLyrics('${song.id}')" title="Save Lyrics & Sync (Ctrl+S)" disabled>
+              ${LUCIDE_SAVE_ICON}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Column Headers -->
+      <div class="sync-col-headers">
+        <div class="sync-col-hdr sync-col-play"></div>
+        <div class="sync-col-hdr sync-col-time" title="Minutes:Seconds.Centiseconds (mm:ss.cs)">Time</div>
+        <div class="sync-col-hdr sync-col-text">Lyrics</div>
+        <div class="sync-col-hdr sync-col-tl">Transliteration</div>
+        <div class="sync-col-hdr sync-col-tr">Translation</div>
+        <div class="sync-col-hdr sync-col-actions"></div>
+      </div>
+
+      <!-- Rows List -->
+      <div id="syncEditorList_${song.id}" class="sync-editor-list"></div>
+    </div>
+  `;
+
   modal.style.display = 'flex';
+  renderSyncEditorRows(song.id, existingLyrics);
+  updateEditorDirtyState();
+  updateHistoryButtonsState();
+  updateSyncEditorTimeIndicator();
+  startSyncEditorTimeLoop();
 
-  window.lastFocusedSyncRow = null;
-  const createdList = document.getElementById(`syncEditorList_${song.id}`);
-  if (createdList) {
-    createdList.addEventListener('focusin', (e) => {
-      const row = e.target.closest('.sync-editor-row');
-      if (row) window.lastFocusedSyncRow = row;
-    });
+  if (lyricsEditorState.keyHandler) {
+    document.removeEventListener('keydown', lyricsEditorState.keyHandler);
   }
+
+  lyricsEditorState.keyHandler = (e) => {
+    const m = document.getElementById('syncEditorModal');
+    if (!m || m.style.display === 'none') return;
+
+    if (e.key === 'Escape' && !tapSyncState.active) {
+      e.preventDefault();
+      closeLyricsSyncModal();
+      return;
+    }
+
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      syncEditorUndo();
+      return;
+    }
+
+    if ((e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) {
+      e.preventDefault();
+      syncEditorRedo();
+      return;
+    }
+
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      const saveBtn = document.getElementById(`syncSaveBtn_${lyricsEditorState.songId}`);
+      if (saveBtn && !saveBtn.disabled) {
+        saveSyncEditorLyrics(lyricsEditorState.songId);
+      }
+      return;
+    }
+  };
+
+  document.addEventListener('keydown', lyricsEditorState.keyHandler);
+};
+
+window.closeLyricsSyncModal = () => {
+  const modal = document.getElementById('syncEditorModal');
+  if (!modal || modal.style.display === 'none') return;
+
+  if (lyricsEditorState.songId) {
+    const currentLines = serializeLinesFromDom(lyricsEditorState.songId);
+    if (JSON.stringify(currentLines) !== lyricsEditorState.savedSnapshotJson) {
+      if (!confirm('You have unsaved changes in Lyrics & Sync Editor. Discard and close?')) {
+        return;
+      }
+    }
+  }
+
+  stopSyncEditorTimeLoop();
+
+  if (tapSyncState.active) {
+    window.toggleTapToSyncMode(tapSyncState.songId);
+  }
+
+  if (lyricsEditorState.keyHandler) {
+    document.removeEventListener('keydown', lyricsEditorState.keyHandler);
+    lyricsEditorState.keyHandler = null;
+  }
+
+  modal.style.display = 'none';
 };
 
 const metadataModal = document.getElementById('metadataModal');
@@ -2907,13 +3484,11 @@ if (metadataModal) {
   });
 }
 
-
 const syncEditorModal = document.getElementById('syncEditorModal');
 if (syncEditorModal) {
   syncEditorModal.addEventListener('click', (e) => {
     if (e.target === syncEditorModal) {
-      if (tapSyncState.active) window.toggleTapToSyncMode(tapSyncState.songId);
-      syncEditorModal.style.display = 'none';
+      closeLyricsSyncModal();
     }
   });
 }
@@ -2921,7 +3496,7 @@ if (syncEditorModal) {
 const closeSyncEditorModalBtn = document.getElementById('closeSyncEditorModalBtn');
 if (closeSyncEditorModalBtn) {
   closeSyncEditorModalBtn.addEventListener('click', () => {
-    if (tapSyncState.active) window.toggleTapToSyncMode(tapSyncState.songId);
+    closeLyricsSyncModal();
   });
 }
 
@@ -2942,25 +3517,20 @@ window.toggleTapToSyncMode = (songId) => {
     }
     const btn = document.getElementById(`tapSyncBtn_${songId}`);
     if (btn) {
-      btn.innerText = '👇 Tap to Sync';
-      btn.classList.remove('btn-primary');
-      btn.classList.add('btn-secondary');
-      btn.style.background = '';
-      btn.style.borderColor = '';
-      btn.style.color = '';
+      btn.classList.remove('active');
+      btn.title = 'Tap to Sync Mode';
     }
-    tapSyncState.rows.forEach(r => r.style.outline = 'none');
     return;
   }
 
   tapSyncState.active = true;
   tapSyncState.songId = songId;
-  tapSyncState.currentIndex = 0;
-  
+  tapSyncState.currentIndex = lyricsEditorState.selectedRowIndex >= 0 ? lyricsEditorState.selectedRowIndex : 0;
+
   const list = document.getElementById(`syncEditorList_${songId}`);
   if (!list) return;
-  
-  tapSyncState.rows = Array.from(list.querySelectorAll('.sync-editor-row'));
+
+  tapSyncState.rows = Array.from(list.querySelectorAll('.sync-row-wrapper'));
   if (tapSyncState.rows.length === 0) {
     tapSyncState.active = false;
     alert('No lyrics to sync. Add some lines first.');
@@ -2969,12 +3539,8 @@ window.toggleTapToSyncMode = (songId) => {
 
   const btn = document.getElementById(`tapSyncBtn_${songId}`);
   if (btn) {
-    btn.innerText = '🛑 Stop Syncing';
-    btn.classList.remove('btn-secondary');
-    btn.classList.add('btn-primary');
-    btn.style.background = 'rgba(239,68,68,0.2)';
-    btn.style.borderColor = '#ef4444';
-    btn.style.color = '#fca5a5';
+    btn.classList.add('active');
+    btn.title = 'Stop Syncing (Escape)';
   }
 
   if (!currentSong || currentSong.id !== songId) {
@@ -2986,8 +3552,7 @@ window.toggleTapToSyncMode = (songId) => {
   highlightTapSyncRow();
 
   tapSyncState.keyHandler = (e) => {
-    // Check if target is not a text input to avoid typing space in text fields triggering sync
-    if (e.target.tagName.toLowerCase() === 'input' && e.target.type === 'text') return;
+    if (e.target && e.target.tagName && e.target.tagName.toUpperCase() === 'INPUT' && e.target.type === 'text') return;
 
     const modal = document.getElementById('syncEditorModal');
     if (!modal || modal.style.display === 'none') {
@@ -2995,26 +3560,29 @@ window.toggleTapToSyncMode = (songId) => {
       return;
     }
 
-    // Stop global listeners from interfering when we handle these specific keys
-    if (['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Escape'].includes(e.key) || 
-        ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Escape'].includes(e.code)) {
+    const handledKeys = ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Escape', '<', '>', ',', '.'];
+    const handledCodes = ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Escape', 'Comma', 'Period'];
+    if (handledKeys.includes(e.key) || handledCodes.includes(e.code)) {
       e.stopPropagation();
+      e.stopImmediatePropagation();
     }
 
     if (e.code === 'ArrowDown') {
       e.preventDefault();
-      const row = tapSyncState.rows[tapSyncState.currentIndex];
-      if (row) {
-        const timeInput = row.querySelector('.sync-time');
-        timeInput.value = Math.max(0, getCurrentTime()).toFixed(2);
-        // Optionally update the input's visual state to show it was edited
+      const rowWrapper = tapSyncState.rows[tapSyncState.currentIndex];
+      if (rowWrapper) {
+        pushUndoSnapshot();
+        const timeInput = rowWrapper.querySelector('.sync-time');
+        const stamp = window.formatCentiseconds(Math.max(0, getCurrentTime()));
+        timeInput.value = stamp;
         timeInput.style.background = 'rgba(59, 130, 246, 0.4)';
-        setTimeout(() => timeInput.style.background = 'rgba(0,0,0,0.4)', 500);
+        setTimeout(() => timeInput.style.background = 'rgba(0,0,0,0.45)', 400);
+        updateEditorDirtyState();
       }
 
       tapSyncState.currentIndex++;
       if (tapSyncState.currentIndex >= tapSyncState.rows.length) {
-        window.toggleTapToSyncMode(songId); // done
+        window.toggleTapToSyncMode(songId);
       } else {
         highlightTapSyncRow();
       }
@@ -3023,30 +3591,44 @@ window.toggleTapToSyncMode = (songId) => {
       if (tapSyncState.currentIndex > 0) {
         tapSyncState.currentIndex--;
         highlightTapSyncRow();
+        const rowWrapper = tapSyncState.rows[tapSyncState.currentIndex];
+        if (rowWrapper) {
+          const timeInput = rowWrapper.querySelector('.sync-time');
+          const t = window.parseCentiseconds(timeInput.value);
+          seekToTime(t);
+        }
       }
     } else if (e.key === '.' || e.key === '>') {
       e.preventDefault();
       if (tapSyncState.currentIndex < tapSyncState.rows.length - 1) {
         tapSyncState.currentIndex++;
         highlightTapSyncRow();
+        const rowWrapper = tapSyncState.rows[tapSyncState.currentIndex];
+        if (rowWrapper) {
+          const timeInput = rowWrapper.querySelector('.sync-time');
+          const t = window.parseCentiseconds(timeInput.value);
+          seekToTime(t);
+        }
       }
     } else if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
       e.preventDefault();
-      const row = tapSyncState.rows[tapSyncState.currentIndex];
-      if (row) {
-        const timeInput = row.querySelector('.sync-time');
-        let val = parseFloat(timeInput.value) || 0;
+      const rowWrapper = tapSyncState.rows[tapSyncState.currentIndex];
+      if (rowWrapper) {
+        pushUndoSnapshot();
+        const timeInput = rowWrapper.querySelector('.sync-time');
+        let val = window.parseCentiseconds(timeInput.value);
         const shiftAmount = e.shiftKey ? 0.05 : 0.5;
         if (e.code === 'ArrowLeft') {
           val -= shiftAmount;
         } else {
           val += shiftAmount;
         }
-        val = Math.max(0, val);
-        timeInput.value = val.toFixed(2);
-        timeInput.style.background = 'rgba(16, 185, 129, 0.4)'; // green flash
-        setTimeout(() => timeInput.style.background = 'rgba(0,0,0,0.4)', 500);
+        val = Math.max(0, Math.round(val * 100) / 100);
+        timeInput.value = window.formatCentiseconds(val);
+        timeInput.style.background = 'rgba(16, 185, 129, 0.4)';
+        setTimeout(() => timeInput.style.background = 'rgba(0,0,0,0.45)', 400);
         seekToTime(val);
+        updateEditorDirtyState();
       }
     } else if (e.code === 'Escape') {
       window.toggleTapToSyncMode(songId);
@@ -3057,14 +3639,5 @@ window.toggleTapToSyncMode = (songId) => {
 };
 
 function highlightTapSyncRow() {
-  tapSyncState.rows.forEach((r, idx) => {
-    if (idx === tapSyncState.currentIndex) {
-      r.style.outline = '2px solid #3b82f6';
-      r.style.outlineOffset = '-1px';
-      r.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      window.lastFocusedSyncRow = r;
-    } else {
-      r.style.outline = 'none';
-    }
-  });
+  selectSyncRow(tapSyncState.currentIndex, { scroll: true });
 }

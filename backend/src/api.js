@@ -1465,15 +1465,14 @@ router.get('/song_details/:id', (req, res) => {
   const history = readHistory();
   if (!song) {
     song = history.find(s => s.id === songId);
-    if (song) {
-      const lyricsData = readSongLyrics(songId);
-      song = { ...song, ...lyricsData };
-    }
   }
 
   if (!song) {
     return res.status(404).json({ error: 'Song not found' });
   }
+
+  const lyricsData = readSongLyrics(songId);
+  song = { ...song, ...lyricsData };
 
   const songDir = path.join(DOWNLOADS_DIR, song.id);
   const dirFiles = fs.existsSync(songDir) ? fs.readdirSync(songDir) : [];
