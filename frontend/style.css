@@ -710,14 +710,59 @@ input[type="text"]:focus, input[type="search"]:focus {
 }
 
 .queue-card.dragging {
-  opacity: 0.3;
-  border: 1px dashed var(--accent);
+  opacity: 0.38;
+  border: 1.5px dashed var(--accent, #6366f1) !important;
+  background: rgba(99, 102, 241, 0.08) !important;
+  box-shadow: 0 0 16px rgba(99, 102, 241, 0.2), inset 0 0 12px rgba(99, 102, 241, 0.1);
+  transform: scale(0.985);
+  cursor: grabbing !important;
+}
+
+.queue-card.dragging * {
+  pointer-events: none;
 }
 
 .queue-controls-group {
   display: flex;
   align-items: center;
   gap: 0.3rem;
+}
+
+.queue-reorder-col {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  flex-shrink: 0;
+  user-select: none;
+  padding: 0 0.15rem;
+}
+
+.queue-arrow-btn {
+  background: none;
+  border: none;
+  padding: 1px 3px;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  line-height: 1;
+  transition: all 0.15s ease;
+}
+
+.queue-arrow-btn:hover:not(:disabled) {
+  color: var(--accent, #6366f1);
+  background: rgba(255, 255, 255, 0.1);
+  transform: scale(1.15);
+}
+
+.queue-arrow-btn:disabled {
+  opacity: 0.15;
+  cursor: default;
+  pointer-events: none;
 }
 
 .queue-icon-btn {
@@ -741,15 +786,20 @@ input[type="text"]:focus, input[type="search"]:focus {
 
 .queue-drag-handle {
   cursor: grab;
-  padding: 0.25rem 0.4rem;
-  font-size: 1rem;
+  padding: 0.05rem 0.2rem;
+  font-size: 0.85rem;
+  line-height: 1;
   opacity: 0.6;
   user-select: none;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.2s ease, color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .queue-drag-handle:hover {
   opacity: 1;
+  color: var(--accent, #6366f1);
 }
 
 .queue-drag-handle:active {

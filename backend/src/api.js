@@ -1820,7 +1820,8 @@ router.post('/queue/reorder', (req, res) => {
   if (Array.isArray(queueIds)) {
     const queueMap = new Map();
     for (const s of queue) {
-      queueMap.set(s.queueId || s.id, s);
+      if (!s.queueId) s.queueId = generateQueueId();
+      queueMap.set(s.queueId, s);
     }
     const newQueue = [];
     for (const id of queueIds) {

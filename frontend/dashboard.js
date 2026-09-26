@@ -16,7 +16,12 @@ let rawLibraryData = [];
 let libraryFilterQuery = '';
 let librarySortKey = 'date';
 let librarySortOrder = 'desc';
-let draggedQueueIndex = null;
+let draggedCard = null;
+let dragDropped = false;
+let isDraggingQueue = false;
+let initialQueueIds = [];
+let currentQueueData = [];
+let queueContainerDragDropInitialized = false;
 
 const playPauseBtn = document.getElementById('playPauseBtn');
 const prevBtn = document.getElementById('prevBtn');
@@ -859,6 +864,7 @@ async function fetchQueue() {
 }
 
 function renderQueue(data) {
+  currentQueueData = data || [];
   if (!data || data.length === 0) {
     queueList.innerHTML = '<div class="empty-state">No songs in queue. Use the search bar above to add a track!</div>';
     if (currentSong) {
@@ -896,7 +902,15 @@ function renderQueue(data) {
         <!-- Row 1: Song Info & Queue Management Icons -->
         <div style="display:flex; align-items:center; justify-content:space-between; gap: 0.5rem; width: 100%;">
           <div style="display:flex; align-items:center; gap: 0.6rem; flex: 1; min-width: 0;">
-            <span class="queue-drag-handle" title="Drag to reorder">☰</span>
+            <div class="queue-reorder-col" onclick="event.stopPropagation();">
+              <button class="queue-arrow-btn" onclick="reorderQueueItem('${qId}', 'up', event)" title="Move Up" ${idx === 0 ? 'disabled' : ''} aria-label="Move Up">
+                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+              </button>
+              <span class="queue-drag-handle" title="Drag to reorder">☰</span>
+              <button class="queue-arrow-btn" onclick="reorderQueueItem('${qId}', 'down', event)" title="Move Down" ${idx === data.length - 1 ? 'disabled' : ''} aria-label="Move Down">
+                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+            </div>
             <img src="${escapeHtml(song.albumArt)}" alt="art" onerror="this.onerror=null; this.src='https://via.placeholder.com/44/1e2235/ffffff?text=🎵';">
             <div class="song-info">
               <div class="song-title">${escapeHtml(song.title)} ${isActive ? '<span style="font-size:0.7rem; color:var(--accent); margin-left:0.3rem;">▶ Playing</span>' : ''} ${isProcessing ? '<span style="font-size:0.7rem; color:#fbbf24; margin-left:0.3rem;">⏳ Processing</span>' : ''}</div>
@@ -906,8 +920,6 @@ function renderQueue(data) {
 
           <!-- Queue Management Controls (Icons Only) -->
           <div class="queue-controls-group" onclick="event.stopPropagation();">
-            <button class="queue-icon-btn" onclick="reorderQueueItem('${qId}', 'up', event)" title="Move Up" ${idx === 0 ? 'disabled style="opacity:0.3;"' : ''}>⬆️</button>
-            <button class="queue-icon-btn" onclick="reorderQueueItem('${qId}', 'down', event)" title="Move Down" ${idx === data.length - 1 ? 'disabled style="opacity:0.3;"' : ''}>⬇️</button>
             <button class="queue-icon-btn" onclick="removeFromQueue('${qId}', event)" title="Remove from Queue">❌</button>
           </div>
         </div>
@@ -919,7 +931,10 @@ function renderQueue(data) {
 }
 
 window.handleQueueCardClick = (songId, queueId, event) => {
-  if (event.target.closest('.queue-controls-group') || event.target.closest('.queue-drag-handle')) {
+  if (isDraggingQueue) {
+    return;
+  }
+  if (event.target.closest('.queue-controls-group') || event.target.closest('.queue-reorder-col') || event.target.closest('.queue-drag-handle')) {
     return;
   }
   selectSong(songId, true, queueId);
@@ -935,35 +950,149 @@ window.reorderQueueItem = async (queueId, direction, event) => {
   fetchQueue();
 };
 
+function updateQueueArrowButtons() {
+  const allCards = queueList.querySelectorAll('.queue-card');
+  allCards.forEach((c, i) => {
+    const upBtn = c.querySelector('.queue-arrow-btn[title="Move Up"]');
+    const downBtn = c.querySelector('.queue-arrow-btn[title="Move Down"]');
+    if (upBtn) upBtn.disabled = (i === 0);
+    if (downBtn) downBtn.disabled = (i === allCards.length - 1);
+  });
+}
+
+function getDragAfterElement(container, y) {
+  const draggableElements = [...container.querySelectorAll('.queue-card:not(.dragging)')];
+  if (draggableElements.length === 0) return null;
+
+  // Clamping checks:
+  const firstBox = draggableElements[0].getBoundingClientRect();
+  if (y < firstBox.top + firstBox.height / 2) {
+    return draggableElements[0];
+  }
+  const lastBox = draggableElements[draggableElements.length - 1].getBoundingClientRect();
+  if (y > lastBox.top + lastBox.height / 2) {
+    return null; // Append at end of list
+  }
+
+  // Rounding check between elements based on midpoints:
+  return draggableElements.reduce((closest, child) => {
+    const box = child.getBoundingClientRect();
+    const offset = y - (box.top + box.height / 2);
+    if (offset < 0 && offset > closest.offset) {
+      return { offset: offset, element: child };
+    } else {
+      return closest;
+    }
+  }, { offset: Number.NEGATIVE_INFINITY }).element || null;
+}
+
+function initQueueContainerDragDrop() {
+  if (queueContainerDragDropInitialized || !queueList) return;
+  queueContainerDragDropInitialized = true;
+
+  queueList.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    if (!draggedCard) return;
+    e.dataTransfer.dropEffect = 'move';
+
+    // Auto-scroll when dragging near container boundaries
+    const containerRect = queueList.getBoundingClientRect();
+    const scrollThreshold = 45;
+    if (e.clientY < containerRect.top + scrollThreshold) {
+      queueList.scrollTop -= 8;
+    } else if (e.clientY > containerRect.bottom - scrollThreshold) {
+      queueList.scrollTop += 8;
+    }
+
+    const afterElement = getDragAfterElement(queueList, e.clientY);
+    if (afterElement) {
+      if (draggedCard.nextElementSibling !== afterElement) {
+        queueList.insertBefore(draggedCard, afterElement);
+        updateQueueArrowButtons();
+      }
+    } else {
+      if (draggedCard.nextElementSibling !== null) {
+        queueList.appendChild(draggedCard);
+        updateQueueArrowButtons();
+      }
+    }
+  });
+
+  queueList.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    if (!draggedCard) return;
+    dragDropped = true;
+
+    const currentCards = [...queueList.querySelectorAll('.queue-card')];
+    const newQueueIds = currentCards.map(c => c.dataset.queueId || c.dataset.id);
+
+    draggedCard.classList.remove('dragging');
+
+    const hasChanged = newQueueIds.length === initialQueueIds.length && 
+      newQueueIds.some((id, idx) => id !== initialQueueIds[idx]);
+
+    if (hasChanged) {
+      try {
+        await fetch('/api/queue/reorder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ queueIds: newQueueIds })
+        });
+      } catch (err) {
+        console.error('Failed to reorder queue:', err);
+      }
+      fetchQueue();
+    }
+  });
+}
+
 function setupQueueDragAndDrop() {
+  initQueueContainerDragDrop();
+
   const cards = queueList.querySelectorAll('.queue-card');
   cards.forEach(card => {
     card.addEventListener('dragstart', (e) => {
-      draggedQueueIndex = parseInt(card.dataset.index);
-      card.classList.add('dragging');
+      // Don't initiate drag if clicking buttons or controls
+      if (e.target.closest('button') || e.target.closest('.queue-controls-group')) {
+        e.preventDefault();
+        return;
+      }
+
+      isDraggingQueue = true;
+      draggedCard = card;
+      dragDropped = false;
+      initialQueueIds = [...queueList.querySelectorAll('.queue-card')].map(c => c.dataset.queueId || c.dataset.id);
+
       e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', card.dataset.queueId || card.dataset.id);
+
+      // Defer adding dragging class so drag snapshot captures full card
+      setTimeout(() => {
+        if (draggedCard) {
+          draggedCard.classList.add('dragging');
+        }
+      }, 0);
     });
 
     card.addEventListener('dragend', () => {
-      card.classList.remove('dragging');
+      if (draggedCard) {
+        draggedCard.classList.remove('dragging');
+      }
+      setTimeout(() => {
+        isDraggingQueue = false;
+      }, 100);
+
+      if (!dragDropped) {
+        // Drag was cancelled or dropped outside the queue
+        renderQueue(currentQueueData);
+      }
+      draggedCard = null;
+      dragDropped = false;
     });
 
     card.addEventListener('dragover', (e) => {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
-    });
-
-    card.addEventListener('drop', async (e) => {
-      e.preventDefault();
-      const targetIndex = parseInt(card.dataset.index);
-      if (draggedQueueIndex !== null && draggedQueueIndex !== targetIndex) {
-        await fetch('/api/queue/reorder', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fromIndex: draggedQueueIndex, toIndex: targetIndex })
-        });
-        fetchQueue();
-      }
     });
   });
 }
