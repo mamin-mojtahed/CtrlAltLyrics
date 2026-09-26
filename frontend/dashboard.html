@@ -9,7 +9,7 @@
 <body>
   <div id="app" class="dashboard-vertical">
     <div id="audioBlockedBanner" class="audio-blocked-banner" style="display: none;">
-      <span>⚠️ Browser sound paused. Click anywhere on this page to enable audio playback!</span>
+      <span><i class="icon-alert-triangle"></i> Browser sound paused. Click anywhere on this page to enable audio playback!</span>
     </div>
     
     <!-- Upper Panel: Songs List Management (Search & Queue on Left, History on Right) -->
@@ -20,13 +20,13 @@
         <div class="search-header-block">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.25rem;">
             <h2>Search</h2>
-            <button id="engineSettingsToggleBtn" class="btn" style="padding: 0.2rem 0.5rem; font-size: 0.7rem; background: rgba(255,255,255,0.12);" title="Separation Settings">⚙️ <span id="engineBadgeText">Balanced (MP3 192k)</span></button>
+            <button id="engineSettingsToggleBtn" class="btn" style="padding: 0.2rem 0.5rem; font-size: 0.7rem; background: rgba(255,255,255,0.12);" title="Separation Settings"><i class="icon-settings"></i> <span id="engineBadgeText">Balanced (MP3 192k)</span></button>
           </div>
 
           <!-- Separation Engine Settings Panel -->
           <div id="engineSettingsPanel" style="display: none; background: rgba(15, 23, 42, 0.95); border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem; margin-bottom: 0.5rem; font-size: 0.8rem; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.4rem;">
-              <strong style="color: var(--accent); font-size: 0.75rem;">⚙️ Stem Separation Options</strong>
+              <strong style="color: var(--accent); font-size: 0.75rem;"><i class="icon-settings"></i> Stem Separation Options</strong>
               <label style="font-size: 0.75rem; display: flex; align-items: center; gap: 0.3rem; cursor: pointer;">
                 <input type="checkbox" id="customEngineToggle"> Custom Settings
               </label>
@@ -35,10 +35,10 @@
               <div>
                 <label style="display:block; font-size: 0.65rem; color: var(--text-secondary);">Mode:</label>
                 <select id="engineModeSelect" style="background: rgba(0,0,0,0.6); color: #fff; border: 1px solid var(--border); border-radius: 4px; padding: 0.2rem; font-size: 0.75rem;">
-                  <option value="balanced" selected>⚖️ Balanced (~30s)</option>
-                  <option value="fast">⚡ Fast (~10s)</option>
-                  <option value="high">🎯 High Precision (~60s)</option>
-                  <option value="ultra">👑 Ultra Quality (~2m)</option>
+                  <option value="balanced" selected>Balanced (~30s)</option>
+                  <option value="fast">Fast (~10s)</option>
+                  <option value="high">High Precision (~60s)</option>
+                  <option value="ultra">Ultra Quality (~2m)</option>
                 </select>
               </div>
               <div>
@@ -78,22 +78,22 @@
         <div class="library-header-row">
           <div class="library-title-area">
             <h2>Library</h2>
-            <button id="uploadSongBtn" class="btn upload-btn" title="Upload Local Audio File (MP3, WAV, M4A, FLAC, etc.)">📁 Upload</button>
+            <button id="uploadSongBtn" class="btn upload-btn" title="Upload Local Audio File (MP3, WAV, M4A, FLAC, etc.)"><i class="icon-upload"></i> Upload</button>
           </div>
           <div class="library-controls-group">
-            <input type="search" id="libraryFilterInput" class="library-filter-input" placeholder="🔍 Filter library..." autocomplete="off">
+            <input type="search" id="libraryFilterInput" class="library-filter-input" placeholder="Filter library..." autocomplete="off">
             <div class="sort-wrapper">
-              <button id="librarySortBtn" class="btn sort-btn" title="Sort Options">↕️ Sort</button>
+              <button id="librarySortBtn" class="btn sort-btn" title="Sort Options"><i class="icon-arrow-up-down"></i> Sort</button>
               <div id="librarySortMenu" class="sort-menu" style="display: none;">
                 <div class="sort-menu-header">Sort By</div>
-                <button class="sort-option active" data-key="date">📅 Date Added</button>
-                <button class="sort-option" data-key="title">🔤 Song Title</button>
-                <button class="sort-option" data-key="artist">👤 Artist Name</button>
-                <button class="sort-option" data-key="missing">⚠️ Missing / Errors</button>
+                <button class="sort-option active" data-key="date"><i class="icon-calendar"></i> Date Added</button>
+                <button class="sort-option" data-key="title"><i class="icon-type"></i> Song Title</button>
+                <button class="sort-option" data-key="artist"><i class="icon-user"></i> Artist Name</button>
+                <button class="sort-option" data-key="missing"><i class="icon-alert-triangle"></i> Missing / Errors</button>
                 <div class="sort-menu-divider"></div>
                 <div class="sort-order-row">
-                  <button class="sort-order-btn active" data-order="desc">⬇️ Descending</button>
-                  <button class="sort-order-btn" data-order="asc">⬆️ Ascending</button>
+                  <button class="sort-order-btn active" data-order="desc"><i class="icon-arrow-down"></i> Descending</button>
+                  <button class="sort-order-btn" data-order="asc"><i class="icon-arrow-up"></i> Ascending</button>
                 </div>
               </div>
             </div>
@@ -114,16 +114,16 @@
           
           <!-- Merged Play/Pause & Song Navigation -->
           <div style="display:flex; gap: 0.5rem; align-items:center; justify-content: center; flex-wrap: wrap;">
-            <button id="prevBtn" class="btn" style="padding: 0.4rem 0.85rem; font-size: 1.1rem;" title="Prev Song (Shift + <)">⏮</button>
-            <button id="playPauseBtn" class="btn" style="padding: 0.5rem 1.25rem; font-size: 1.2rem; font-weight: 700; background: var(--accent);" title="Play/Pause (Space)">▶</button>
-            <button id="nextBtn" class="btn" style="padding: 0.4rem 0.85rem; font-size: 1.1rem;" title="Next Song (Shift + >)">⏭</button>
+            <button id="prevBtn" class="btn" style="padding: 0.4rem 0.85rem; font-size: 1.1rem;" title="Prev Song (Shift + <)"><i class="icon-skip-back"></i></button>
+            <button id="playPauseBtn" class="btn" style="padding: 0.5rem 1.25rem; font-size: 1.2rem; font-weight: 700; background: var(--accent);" title="Play/Pause (Space)"><i class="icon-play"></i></button>
+            <button id="nextBtn" class="btn" style="padding: 0.4rem 0.85rem; font-size: 1.1rem;" title="Next Song (Shift + >)"><i class="icon-skip-forward"></i></button>
           </div>
 
           <!-- Lyric Line Navigation -->
           <div style="display:flex; gap: 0.75rem; align-items:center; justify-content: center;">
-            <button id="prevLineBtn" class="btn" style="padding: 0.35rem 0.7rem; font-size: 0.9rem; background: rgba(255,255,255,0.1);" title="Prev Line (<)">◀</button>
+            <button id="prevLineBtn" class="btn" style="padding: 0.35rem 0.7rem; font-size: 0.9rem; background: rgba(255,255,255,0.1);" title="Prev Line (<)"><i class="icon-chevron-left"></i></button>
             <span id="lyricsCounter" style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary); min-width: 90px; text-align: center; background: rgba(0,0,0,0.2); padding: 0.2rem 0.65rem; border-radius: 12px; border: 1px solid var(--border);">Lyrics 0/0</span>
-            <button id="nextLineBtn" class="btn" style="padding: 0.35rem 0.7rem; font-size: 0.9rem; background: rgba(255,255,255,0.1);" title="Next Line (>)">▶</button>
+            <button id="nextLineBtn" class="btn" style="padding: 0.35rem 0.7rem; font-size: 0.9rem; background: rgba(255,255,255,0.1);" title="Next Line (>)"><i class="icon-chevron-right"></i></button>
           </div>
 
           <!-- Timeline Slider & Time Display -->
@@ -137,15 +137,15 @@
         <div class="mixer-card">
           <!-- Toggles for Pronunciation & Translation on top of mixer -->
           <div class="mixer-toggles-row" style="justify-content: center; width: 100%;">
-            <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">Subtitles:</span>
+            <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">Show:</span>
             <div style="display:flex; align-items:center; gap: 0.5rem; font-size: 0.85rem;">
               <label class="subtitle-toggle-btn" title="Pronunciation">
                 <input type="checkbox" id="toggleTranslit">
-                <span class="toggle-content">🗣️</span>
+                <span class="toggle-content"><i class="icon-book-a"></i></span>
               </label>
               <label class="subtitle-toggle-btn" title="Translation">
                 <input type="checkbox" id="toggleTranslat">
-                <span class="toggle-content">🌐</span>
+                <span class="toggle-content"><i class="icon-languages"></i></span>
               </label>
             </div>
           </div>
@@ -163,7 +163,7 @@
             </div>
             
             <!-- Link Inst & Back -->
-            <button id="linkInstBackBtn" class="btn" style="padding: 0.3rem 0.4rem; font-size: 1rem; background: rgba(255,255,255,0.08); border: 1px solid var(--border); border-radius: 6px; opacity: 0.4;" title="Unlinked Inst & Back (Click to Link)">🔓</button>
+            <button id="linkInstBackBtn" class="btn" style="padding: 0.3rem 0.4rem; font-size: 1rem; background: rgba(255,255,255,0.08); border: 1px solid var(--border); border-radius: 6px; opacity: 0.4;" title="Unlinked Inst & Back (Click to Link)"><i class="icon-unlink"></i></button>
 
             <div class="fader-container">
               <input type="range" id="volBackVoc" min="0" max="1" step="0.01" value="1">
@@ -171,7 +171,7 @@
             </div>
 
             <!-- Link Back & Lead -->
-            <button id="linkBackLeadBtn" class="btn" style="padding: 0.3rem 0.4rem; font-size: 1rem; background: rgba(255,255,255,0.08); border: 1px solid var(--border); border-radius: 6px; opacity: 0.4;" title="Unlinked Back & Lead (Click to Link)">🔓</button>
+            <button id="linkBackLeadBtn" class="btn" style="padding: 0.3rem 0.4rem; font-size: 1rem; background: rgba(255,255,255,0.08); border: 1px solid var(--border); border-radius: 6px; opacity: 0.4;" title="Unlinked Back & Lead (Click to Link)"><i class="icon-unlink"></i></button>
 
             <div class="fader-container">
               <input type="range" id="volLeadVoc" min="0" max="1" step="0.01" value="1">
@@ -188,13 +188,13 @@
   <div id="uploadSongModal" class="modal-backdrop" style="display: none;">
     <div class="modal-box upload-modal-box">
       <div class="modal-header">
-        <h3>📁 Upload Song</h3>
-        <button id="closeUploadModalBtn" class="btn-close">✕</button>
+        <h3><i class="icon-upload"></i> Upload Song</h3>
+        <button id="closeUploadModalBtn" class="btn-close"><i class="icon-x"></i></button>
       </div>
       <div class="modal-body">
         <div id="uploadDropZone" class="upload-dropzone">
           <input type="file" id="songFileInput" accept="audio/*,.mp3,.m4a,.wav,.flac,.opus,.ogg,.aac,.webm" style="display: none;">
-          <div class="dropzone-icon">🎵</div>
+          <div class="dropzone-icon"><i class="icon-music"></i></div>
           <div class="dropzone-prompt"><strong>Click to browse</strong> or drag & drop audio file here</div>
           <div class="dropzone-formats">Supports MP3, WAV, M4A, FLAC, OPUS, OGG, AAC (Max 150MB)</div>
         </div>
@@ -207,9 +207,9 @@
                 <span id="uploadFileName">filename.mp3</span>
                 <span id="uploadFileSize" class="file-size-tag">(0 MB)</span>
               </div>
-              <div id="uploadTagNotice" class="upload-tag-notice" style="display: none;">✨ Embedded metadata & cover detected</div>
+              <div id="uploadTagNotice" class="upload-tag-notice" style="display: none;"><i class="icon-sparkles"></i> Embedded metadata & cover detected</div>
             </div>
-            <button id="clearSelectedFileBtn" class="btn-clear-file" title="Remove File">✕</button>
+            <button id="clearSelectedFileBtn" class="btn-clear-file" title="Remove File"><i class="icon-x"></i></button>
           </div>
         </div>
 
@@ -226,16 +226,16 @@
 
         <div class="upload-engine-summary">
           <div class="engine-summary-header">
-            <span>⚙️ Stem Separation Engine</span>
+            <span><i class="icon-settings"></i> Stem Separation Engine</span>
             <span id="uploadEngineSummaryBadge" class="engine-badge-pill">Balanced (MP3 192k)</span>
           </div>
           <div class="engine-quick-select-row">
             <label>Mode:</label>
             <select id="uploadEngineModeSelect">
-              <option value="balanced" selected>⚖️ Balanced (~30s)</option>
-              <option value="fast">⚡ Fast (~10s)</option>
-              <option value="high">🎯 High Precision (~60s)</option>
-              <option value="ultra">👑 Ultra Quality (~2m)</option>
+              <option value="balanced" selected>Balanced (~30s)</option>
+              <option value="fast">Fast (~10s)</option>
+              <option value="high">High Precision (~60s)</option>
+              <option value="ultra">Ultra Quality (~2m)</option>
             </select>
           </div>
         </div>
@@ -263,8 +263,8 @@
   <div id="metadataModal" class="modal-backdrop" style="display: none; z-index: 3000;">
     <div class="modal-box">
       <div class="modal-header">
-        <h3 id="metadataModalTitle">✏️ Edit Meta-data</h3>
-        <button id="closeMetadataModalBtn" class="btn-close" onclick="document.getElementById('metadataModal').style.display='none'">✕</button>
+        <h3 id="metadataModalTitle"><i class="icon-pencil"></i> Edit Meta-data</h3>
+        <button id="closeMetadataModalBtn" class="btn-close" onclick="document.getElementById('metadataModal').style.display='none'"><i class="icon-x"></i></button>
       </div>
       <div class="modal-body" id="metadataModalBody"></div>
     </div>
@@ -281,7 +281,7 @@
             <span class="sync-status-text">Saved</span>
           </span>
         </div>
-        <button id="closeSyncEditorModalBtn" class="btn-close" onclick="closeLyricsSyncModal()">✕</button>
+        <button id="closeSyncEditorModalBtn" class="btn-close" onclick="closeLyricsSyncModal()"><i class="icon-x"></i></button>
       </div>
       <div class="modal-body" id="syncEditorModalBody"></div>
     </div>
@@ -291,8 +291,8 @@
   <div id="componentManagerModal" class="modal-backdrop" style="display: none;">
     <div class="modal-box">
       <div class="modal-header">
-        <h3 id="componentManagerTitle">📝 Component Status & Manager</h3>
-        <button id="closeComponentManagerBtn" class="btn-close">✕</button>
+        <h3 id="componentManagerTitle"><i class="icon-file-text"></i> Component Status & Manager</h3>
+        <button id="closeComponentManagerBtn" class="btn-close"><i class="icon-x"></i></button>
       </div>
       <div id="componentManagerBody" class="modal-body"></div>
       <button id="dismissComponentManagerBtn" class="btn" style="width: 100%;">Close</button>

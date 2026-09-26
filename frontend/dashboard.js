@@ -340,7 +340,7 @@ async function playAudio(offset = 0) {
   audioStartTime = audioCtx.currentTime - offset;
   pauseTime = offset;
   currentState.isPlaying = true;
-  playPauseBtn.innerText = '⏸';
+  playPauseBtn.innerHTML = '<i class="icon-pause"></i>';
   socket.emit('update_state', { isPlaying: true, currentTime: offset });
 }
 
@@ -353,7 +353,7 @@ function pauseAudio() {
   sources.inst = null;
   pauseTime = (currentState.isPlaying && audioCtx.state === 'running') ? (audioCtx.currentTime - audioStartTime) : pauseTime;
   currentState.isPlaying = false;
-  playPauseBtn.innerText = '▶';
+  playPauseBtn.innerHTML = '<i class="icon-play"></i>';
   socket.emit('player_command', { command: 'pause' });
 }
 
@@ -510,7 +510,7 @@ timelineSlider.addEventListener('change', (e) => {
 if (linkInstBackBtn) {
   linkInstBackBtn.addEventListener('click', () => {
     isInstBackLinked = !isInstBackLinked;
-    linkInstBackBtn.innerText = isInstBackLinked ? '🔗' : '🔓';
+    linkInstBackBtn.innerHTML = isInstBackLinked ? '<i class="icon-link"></i>' : '<i class="icon-unlink"></i>';
     linkInstBackBtn.style.opacity = isInstBackLinked ? '1' : '0.4';
     linkInstBackBtn.title = isInstBackLinked ? 'Linked Inst & Back (Click to Unlink)' : 'Unlinked Inst & Back (Click to Link)';
   });
@@ -519,7 +519,7 @@ if (linkInstBackBtn) {
 if (linkBackLeadBtn) {
   linkBackLeadBtn.addEventListener('click', () => {
     isBackLeadLinked = !isBackLeadLinked;
-    linkBackLeadBtn.innerText = isBackLeadLinked ? '🔗' : '🔓';
+    linkBackLeadBtn.innerHTML = isBackLeadLinked ? '<i class="icon-link"></i>' : '<i class="icon-unlink"></i>';
     linkBackLeadBtn.style.opacity = isBackLeadLinked ? '1' : '0.4';
     linkBackLeadBtn.title = isBackLeadLinked ? 'Linked Back & Lead (Click to Unlink)' : 'Unlinked Back & Lead (Click to Link)';
   });
@@ -723,38 +723,38 @@ function renderEmojiStatusesHtml(song) {
   const hasSplitStems = (song.stems && song.stems.inst && song.stems.lead && song.stems.inst !== song.stems.lead) || song.status === 'fetching_lyrics' || song.status === 'ready';
   const hasLyricsLoaded = (song.lyrics && song.lyrics.length > 0) || song.hasLyrics === true;
 
-  // 1. Download Status (Aspect: ⬇️, Phase: ⏳ | ⚙️ | ✅ | ❌)
+  // 1. Download Status (Aspect: icon-download, Phase: icon-loader-2 | icon-check | icon-x | icon-clock)
   if (song.status === 'downloading') {
-    downloadBadge = `<span class="emoji-badge" title="Downloading audio...">⚙️⬇️</span>`;
+    downloadBadge = `<span class="emoji-badge" title="Downloading audio..."><i class="icon-loader-2 icon-spin"></i><i class="icon-download"></i></span>`;
   } else if (hasAudio || song.status === 'ready') {
-    downloadBadge = `<span class="emoji-badge" title="Audio Downloaded">✅⬇️</span>`;
+    downloadBadge = `<span class="emoji-badge" title="Audio Downloaded"><i class="icon-check" style="color:#10b981;"></i><i class="icon-download"></i></span>`;
   } else if (song.downloadError || song.status === 'error') {
-    downloadBadge = `<span class="emoji-badge" title="Download Error: ${escapeHtml(song.downloadError || 'Failed')}">❌⬇️</span>`;
+    downloadBadge = `<span class="emoji-badge" title="Download Error: ${escapeHtml(song.downloadError || 'Failed')}"><i class="icon-x" style="color:#ef4444;"></i><i class="icon-download"></i></span>`;
   } else {
-    downloadBadge = `<span class="emoji-badge" title="Waiting to download audio...">⏳⬇️</span>`;
+    downloadBadge = `<span class="emoji-badge" title="Waiting to download audio..."><i class="icon-clock" style="color:#f59e0b;"></i><i class="icon-download"></i></span>`;
   }
 
-  // 2. Split Status (Aspect: ✂️, Phase: ⏳ | ⚙️ | ✅ | ❌)
+  // 2. Split Status (Aspect: icon-scissors, Phase: icon-loader-2 | icon-check | icon-x | icon-clock)
   if (song.status === 'splitting') {
-    splitBadge = `<span class="emoji-badge" title="Splitting vocal and instrumental stems...">⚙️✂️</span>`;
+    splitBadge = `<span class="emoji-badge" title="Splitting vocal and instrumental stems..."><i class="icon-loader-2 icon-spin"></i><i class="icon-scissors"></i></span>`;
   } else if (hasSplitStems || song.status === 'ready') {
-    splitBadge = `<span class="emoji-badge" title="Stems Separated">✅✂️</span>`;
+    splitBadge = `<span class="emoji-badge" title="Stems Separated"><i class="icon-check" style="color:#10b981;"></i><i class="icon-scissors"></i></span>`;
   } else if (song.splitError || song.status === 'error') {
-    splitBadge = `<span class="emoji-badge" title="Stem Split Error: ${escapeHtml(song.splitError || 'Failed')}">❌✂️</span>`;
+    splitBadge = `<span class="emoji-badge" title="Stem Split Error: ${escapeHtml(song.splitError || 'Failed')}"><i class="icon-x" style="color:#ef4444;"></i><i class="icon-scissors"></i></span>`;
   } else {
-    splitBadge = `<span class="emoji-badge" title="Waiting to split stems...">⏳✂️</span>`;
+    splitBadge = `<span class="emoji-badge" title="Waiting to split stems..."><i class="icon-clock" style="color:#f59e0b;"></i><i class="icon-scissors"></i></span>`;
   }
 
-  // 3. Lyrics Status (Aspect: 🎼, Phase: ⏳ | ⚙️ | ✅ | ❌)
+  // 3. Lyrics Status (Aspect: icon-file-text, Phase: icon-loader-2 | icon-check | icon-x | icon-clock)
   if (song.status === 'fetching_lyrics' || song.lyricsStatus) {
-    lyricsBadge = `<span class="emoji-badge" title="Fetching Lyrics: ${escapeHtml(song.lyricsStatus || 'Searching...')}">⚙️🎼</span>`;
+    lyricsBadge = `<span class="emoji-badge" title="Fetching Lyrics: ${escapeHtml(song.lyricsStatus || 'Searching...')}"><i class="icon-loader-2 icon-spin"></i><i class="icon-file-text"></i></span>`;
   } else if (hasLyricsLoaded) {
     const prov = song.lyricsProvider ? ` (${song.lyricsProvider})` : '';
-    lyricsBadge = `<span class="emoji-badge" title="Lyrics Loaded${escapeHtml(prov)}">✅🎼</span>`;
+    lyricsBadge = `<span class="emoji-badge" title="Lyrics Loaded${escapeHtml(prov)}"><i class="icon-check" style="color:#10b981;"></i><i class="icon-file-text"></i></span>`;
   } else if (song.lyricsError || (song.status === 'ready' && !hasLyricsLoaded)) {
-    lyricsBadge = `<span class="emoji-badge" title="Lyrics Error: ${escapeHtml(song.lyricsError || 'No lyrics found')}">❌🎼</span>`;
+    lyricsBadge = `<span class="emoji-badge" title="Lyrics Error: ${escapeHtml(song.lyricsError || 'No lyrics found')}"><i class="icon-x" style="color:#ef4444;"></i><i class="icon-file-text"></i></span>`;
   } else {
-    lyricsBadge = `<span class="emoji-badge" title="Waiting to fetch lyrics...">⏳🎼</span>`;
+    lyricsBadge = `<span class="emoji-badge" title="Waiting to fetch lyrics..."><i class="icon-clock" style="color:#f59e0b;"></i><i class="icon-file-text"></i></span>`;
   }
 
   return `
@@ -774,7 +774,7 @@ async function fetchLibrary() {
   } catch (err) {
     const container = libraryList || historyList;
     if (container) {
-      container.innerHTML = '<div class="error-state">⚠️ Connection error. <button class="btn" onclick="fetchLibrary()" style="padding:0.2rem 0.5rem; font-size:0.7rem;">Retry</button></div>';
+      container.innerHTML = '<div class="error-state"><i class="icon-alert-triangle"></i> Connection error. <button class="btn" onclick="fetchLibrary()" style="padding:0.2rem 0.5rem; font-size:0.7rem;">Retry</button></div>';
     }
   }
 }
@@ -825,21 +825,22 @@ function renderLibrary() {
       <div class="song-card ${isActive ? 'active-playing' : ''}">
         <!-- Row 1: Song Info -->
         <div style="display:flex; align-items:center; gap: 0.75rem;">
-          <img src="${escapeHtml(song.albumArt)}" alt="art" onerror="this.onerror=null; this.src='https://via.placeholder.com/44/1e2235/ffffff?text=🎵';">
+          <img src="${escapeHtml(song.albumArt)}" alt="art" onerror="this.onerror=null; this.src='/ctrlaltlyrics-logo.webp';">
           <div class="song-info">
-            <div class="song-title">${escapeHtml(song.title)} ${isActive ? '<span style="font-size:0.7rem; color:var(--accent); margin-left:0.3rem;">▶ Playing</span>' : ''}</div>
+            <div class="song-title">${escapeHtml(song.title)} ${isActive ? '<span style="font-size:0.7rem; color:var(--accent); margin-left:0.3rem;"><i class="icon-play"></i> Playing</span>' : ''}</div>
             <div class="song-artist">${escapeHtml(song.artist)}</div>
           </div>
         </div>
-        <!-- Row 2: Status Emojis Only -->
-        ${renderEmojiStatusesHtml(song)}
-        <!-- Row 3: Action Buttons (Emojis Only) -->
-        <div class="emoji-btn-group">
-          <button class="emoji-btn emoji-btn-accent" onclick="enqueueSong('${song.id}')" title="Add to Queue">➕</button>
-          <button class="emoji-btn" onclick="openFolder('${song.id}')" title="Open Folder">📁</button>
-          <button class="emoji-btn" onclick="openComponentManagerModal('${song.id}')" title="Component Status & Retry">📝</button>
-          <button class="emoji-btn" onclick="openSongSourceLink('${song.id}')" title="Open Song Source (Spotify / YouTube)">🔗</button>
-          <button class="emoji-btn emoji-btn-danger" onclick="confirmRemoveFromLibrary('${song.id}')" title="Delete from Library">🗑️</button>
+        <!-- Row 2: Status Badges (Left) & Action Buttons (Right) -->
+        <div class="song-card-actions-row">
+          ${renderEmojiStatusesHtml(song)}
+          <div class="emoji-btn-group">
+            <button class="emoji-btn emoji-btn-accent" onclick="enqueueSong('${song.id}')" title="Add to Queue"><i class="icon-plus"></i></button>
+            <button class="emoji-btn" onclick="openFolder('${song.id}')" title="Open Folder"><i class="icon-folder"></i></button>
+            <button class="emoji-btn" onclick="openComponentManagerModal('${song.id}')" title="Component Status & Retry"><i class="icon-bolt"></i></button>
+            <button class="emoji-btn" onclick="openSongSourceLink('${song.id}')" title="Open Song Source (Spotify / YouTube)"><i class="icon-external-link"></i></button>
+            <button class="emoji-btn emoji-btn-danger" onclick="confirmRemoveFromLibrary('${song.id}')" title="Delete from Library"><i class="icon-trash-2"></i></button>
+          </div>
         </div>
       </div>
     `;
@@ -871,7 +872,7 @@ async function fetchQueue() {
     const data = await res.json();
     renderQueue(data);
   } catch (err) {
-    queueList.innerHTML = '<div class="error-state">⚠️ Connection error. <button class="btn" onclick="fetchQueue()" style="padding:0.2rem 0.5rem; font-size:0.7rem;">Retry</button></div>';
+    queueList.innerHTML = '<div class="error-state"><i class="icon-alert-triangle"></i> Connection error. <button class="btn" onclick="fetchQueue()" style="padding:0.2rem 0.5rem; font-size:0.7rem;">Retry</button></div>';
   }
 }
 
@@ -918,21 +919,21 @@ function renderQueue(data) {
               <button class="queue-arrow-btn" onclick="reorderQueueItem('${qId}', 'up', event)" title="Move Up" ${idx === 0 ? 'disabled' : ''} aria-label="Move Up">
                 <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
               </button>
-              <span class="queue-drag-handle" title="Drag to reorder">☰</span>
+              <span class="queue-drag-handle" title="Drag to reorder"><i class="icon-grip-vertical"></i></span>
               <button class="queue-arrow-btn" onclick="reorderQueueItem('${qId}', 'down', event)" title="Move Down" ${idx === data.length - 1 ? 'disabled' : ''} aria-label="Move Down">
                 <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
               </button>
             </div>
-            <img src="${escapeHtml(song.albumArt)}" alt="art" onerror="this.onerror=null; this.src='https://via.placeholder.com/44/1e2235/ffffff?text=🎵';">
+            <img src="${escapeHtml(song.albumArt)}" alt="art" onerror="this.onerror=null; this.src='/ctrlaltlyrics-logo.webp';">
             <div class="song-info">
-              <div class="song-title">${escapeHtml(song.title)} ${isActive ? '<span style="font-size:0.7rem; color:var(--accent); margin-left:0.3rem;">▶ Playing</span>' : ''} ${isProcessing ? '<span style="font-size:0.7rem; color:#fbbf24; margin-left:0.3rem;">⏳ Processing</span>' : ''}</div>
+              <div class="song-title">${escapeHtml(song.title)} ${isActive ? '<span style="font-size:0.7rem; color:var(--accent); margin-left:0.3rem;"><i class="icon-play"></i> Playing</span>' : ''} ${isProcessing ? '<span style="font-size:0.7rem; color:#fbbf24; margin-left:0.3rem;"><i class="icon-clock"></i> Processing</span>' : ''}</div>
               <div class="song-artist">${escapeHtml(song.artist)}</div>
             </div>
           </div>
 
           <!-- Queue Management Controls (Icons Only) -->
           <div class="queue-controls-group" onclick="event.stopPropagation();">
-            <button class="queue-icon-btn" onclick="removeFromQueue('${qId}', event)" title="Remove from Queue">❌</button>
+            <button class="queue-icon-btn" onclick="removeFromQueue('${qId}', event)" title="Remove from Queue"><i class="icon-x"></i></button>
           </div>
         </div>
       </div>
@@ -1169,7 +1170,7 @@ async function executeSearch() {
   searchResults.style.display = 'flex';
   searchResults.innerHTML = `
     <div style="padding: 0.75rem; text-align: center; color: var(--text-secondary); font-size: 0.85rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
-      <span>${isSpotifyLink ? '🟢 Fetching Spotify Track...' : '🔍 Searching songs...'}</span>
+      <span>${isSpotifyLink ? '<i class="icon-disc"></i> Fetching Spotify Track...' : '<i class="icon-search"></i> Searching songs...'}</span>
     </div>
   `;
 
@@ -1192,7 +1193,7 @@ async function executeSearch() {
         const artImg = document.createElement('img');
         artImg.src = song.albumArt || '';
         artImg.alt = 'art';
-        artImg.onerror = () => { artImg.onerror = null; artImg.src = 'https://via.placeholder.com/44/1e2235/ffffff?text=🎵'; };
+        artImg.onerror = () => { artImg.onerror = null; artImg.src = '/ctrlaltlyrics-logo.webp'; };
 
         const infoDiv = document.createElement('div');
         infoDiv.className = 'song-info';
@@ -1204,7 +1205,7 @@ async function executeSearch() {
           const badge = document.createElement('span');
           badge.className = 'spotify-badge';
           badge.title = 'Spotify Direct Track';
-          badge.textContent = '🟢 Spotify';
+          badge.innerHTML = '<i class="icon-disc"></i> Spotify';
           titleDiv.appendChild(badge);
         }
 
@@ -1239,7 +1240,7 @@ async function executeSearch() {
       searchResults.innerHTML = '<div style="padding:0.75rem; text-align:center; color:var(--text-secondary); font-size:0.85rem;">No tracks found</div>';
     }
   } catch (err) {
-    searchResults.innerHTML = `<div style="padding:0.75rem; text-align:center; color:#f87171; font-size:0.85rem;">⚠️ Search failed: ${escapeHtml(err.message)}</div>`;
+    searchResults.innerHTML = `<div style="padding:0.75rem; text-align:center; color:#f87171; font-size:0.85rem;"><i class="icon-alert-triangle"></i> Search failed: ${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -1486,10 +1487,10 @@ function updateUploadEngineBadge() {
   if (!uploadEngineModeSelect || !uploadEngineSummaryBadge) return;
   const mode = uploadEngineModeSelect.value;
   const modeLabels = {
-    balanced: '⚖️ Balanced (~30s)',
-    fast: '⚡ Fast (~10s)',
-    high: '🎯 High Precision (~60s)',
-    ultra: '👑 Ultra Quality (~2m)'
+    balanced: 'Balanced (~30s)',
+    fast: 'Fast (~10s)',
+    high: 'High Precision (~60s)',
+    ultra: 'Ultra Quality (~2m)'
   };
   uploadEngineSummaryBadge.innerText = modeLabels[mode] || mode;
 }
@@ -1523,13 +1524,13 @@ async function handleSelectedFile(file) {
       currentPreviewBlobUrl = id3.coverUrl;
       if (uploadCoverPreview) uploadCoverPreview.src = id3.coverUrl;
       if (uploadTagNotice) {
-        uploadTagNotice.innerText = '✨ Embedded cover & ID3 tags detected';
+        uploadTagNotice.innerHTML = '<i class="icon-sparkles"></i> Embedded cover & ID3 tags detected';
         uploadTagNotice.style.display = 'block';
       }
     } else {
       if (uploadCoverPreview) uploadCoverPreview.src = '/ctrlaltlyrics-logo.webp';
       if (uploadTagNotice) {
-        uploadTagNotice.innerText = '🎵 Audio file loaded';
+        uploadTagNotice.innerHTML = '<i class="icon-music"></i> Audio file loaded';
         uploadTagNotice.style.display = 'block';
       }
     }
@@ -1695,7 +1696,7 @@ if (submitUploadBtn) {
             if (errData.error) errText = errData.error;
           } catch(e){}
           if (uploadErrorMsg) {
-            uploadErrorMsg.innerText = `⚠️ ${errText}`;
+            uploadErrorMsg.innerHTML = `<i class="icon-alert-triangle"></i> ${escapeHtml(errText)}`;
             uploadErrorMsg.style.display = 'block';
           }
           submitUploadBtn.disabled = false;
@@ -1705,7 +1706,7 @@ if (submitUploadBtn) {
 
       xhr.onerror = () => {
         if (uploadErrorMsg) {
-          uploadErrorMsg.innerText = '⚠️ Network error during upload.';
+          uploadErrorMsg.innerHTML = '<i class="icon-alert-triangle"></i> Network error during upload.';
           uploadErrorMsg.style.display = 'block';
         }
         submitUploadBtn.disabled = false;
@@ -1716,7 +1717,7 @@ if (submitUploadBtn) {
 
     } catch (err) {
       if (uploadErrorMsg) {
-        uploadErrorMsg.innerText = `⚠️ ${err.message || 'Upload error'}`;
+        uploadErrorMsg.innerHTML = `<i class="icon-alert-triangle"></i> ${escapeHtml(err.message || 'Upload error')}`;
         uploadErrorMsg.style.display = 'block';
       }
       submitUploadBtn.disabled = false;
@@ -1805,7 +1806,7 @@ function clearCurrentSong() {
   currentState.songId = null;
   currentState.queueId = null;
   currentState.songData = null;
-  playPauseBtn.innerText = '▶';
+  playPauseBtn.innerHTML = '<i class="icon-play"></i>';
   if (currentSongTitle) currentSongTitle.innerText = 'None';
   timelineSlider.value = 0;
   timelineSlider.max = 0;
@@ -1895,8 +1896,8 @@ window.openComponentManagerModal = async (id) => {
   const bodyEl = document.getElementById('componentManagerBody');
   if (!modal || !bodyEl) return;
 
-  if (titleEl) titleEl.innerText = `📝 Component Status & Manager`;
-  bodyEl.innerHTML = `<div class="empty-state">⏳ Loading component status...</div>`;
+  if (titleEl) titleEl.innerHTML = `<i class="icon-file-text"></i> Component Status & Manager`;
+  bodyEl.innerHTML = `<div class="empty-state"><i class="icon-loader-2 icon-spin"></i> Loading component status...</div>`;
   modal.style.display = 'flex';
 
   try {
@@ -1905,7 +1906,7 @@ window.openComponentManagerModal = async (id) => {
     const data = await res.json();
     renderComponentManagerModal(data.song, data.components);
   } catch (err) {
-    bodyEl.innerHTML = `<div class="error-state">⚠️ Error loading song details: ${escapeHtml(err.message)}</div>`;
+    bodyEl.innerHTML = `<div class="error-state"><i class="icon-alert-triangle"></i> Error loading song details: ${escapeHtml(err.message)}</div>`;
   }
 };
 
@@ -1914,14 +1915,14 @@ function renderComponentManagerModal(song, components = {}) {
   const bodyEl = document.getElementById('componentManagerBody');
   if (!bodyEl) return;
 
-  if (titleEl) titleEl.innerText = `📝 Component Manager: "${escapeHtml(song.title || 'Song')}"`;
+  if (titleEl) titleEl.innerHTML = `<i class="icon-file-text"></i> Component Manager: "${escapeHtml(song.title || 'Song')}"`;
 
   const dl = components.download || {};
   const sp = components.splitting || {};
   const ly = components.lyrics || {};
 
   // 1. Audio Download Card
-  let dlBadge = '<span class="status-badge success">✅ Ready</span>';
+  let dlBadge = '<span class="status-badge success"><i class="icon-check"></i> Ready</span>';
   let dlDetails = `
     <div class="component-meta-list">
       <div>Source: <strong>${escapeHtml(dl.method || song.downloadMethod || 'SpotDL')}</strong></div>
@@ -1929,20 +1930,20 @@ function renderComponentManagerModal(song, components = {}) {
     </div>
   `;
   if (dl.status === 'error' || song.downloadError) {
-    dlBadge = '<span class="status-badge error">❌ Failed</span>';
+    dlBadge = '<span class="status-badge error"><i class="icon-x"></i> Failed</span>';
     dlDetails = `<div style="color:#f87171; font-size:0.8rem;">Error: ${escapeHtml(dl.error || song.downloadError || 'Audio file missing')}</div>`;
   } else if (dl.status === 'pending' || song.status === 'downloading') {
-    dlBadge = '<span class="status-badge pending">⏳ Downloading</span>';
+    dlBadge = '<span class="status-badge pending"><i class="icon-loader-2 icon-spin"></i> Downloading</span>';
   }
 
   let dlAttemptsHtml = '';
   if (dl.attempts && dl.attempts.length > 0) {
     dlAttemptsHtml = dl.attempts.map(a => {
-      let icon = '❌';
+      let icon = '<i class="icon-x" style="color:#ef4444;"></i>';
       let rowClass = 'failed';
-      if (a.status === 'success') { icon = '✅'; rowClass = 'success'; }
-      else if (a.status === 'partial') { icon = '⚠️'; rowClass = 'partial'; }
-      else if (a.status === 'skipped') { icon = '⏭️'; rowClass = 'skipped'; }
+      if (a.status === 'success') { icon = '<i class="icon-check" style="color:#10b981;"></i>'; rowClass = 'success'; }
+      else if (a.status === 'partial') { icon = '<i class="icon-alert-triangle" style="color:#f59e0b;"></i>'; rowClass = 'partial'; }
+      else if (a.status === 'skipped') { icon = '<i class="icon-skip-forward" style="color:#94a3b8;"></i>'; rowClass = 'skipped'; }
       return `
         <div class="attempt-row ${rowClass}">
           <div class="attempt-header">
@@ -1964,52 +1965,52 @@ function renderComponentManagerModal(song, components = {}) {
   const karaokeModel = sepInfo.karaokeModel || '5_HP-Karaoke-UVR.pth';
 
   const modeLabels = {
-    balanced: '⚖️ Balanced (~30s)',
-    fast: '⚡ Fast (~10s)',
-    high: '🎯 High Precision (~60s)',
-    ultra: '👑 Ultra Quality (~2m)'
+    balanced: 'Balanced (~30s)',
+    fast: 'Fast (~10s)',
+    high: 'High Precision (~60s)',
+    ultra: 'Ultra Quality (~2m)'
   };
 
-  let spBadge = '<span class="status-badge success">✅ 3 Stems</span>';
+  let spBadge = '<span class="status-badge success"><i class="icon-check"></i> 3 Stems</span>';
   let spDetails = `
     <div class="component-meta-list">
-      <div>Status: <strong>${sp.isFallback || sp.status === 'fallback' ? '⚠️ Full Track Fallback' : '✅ 3 Distinct AI Stems'}</strong></div>
+      <div>Status: <strong>${sp.isFallback || sp.status === 'fallback' ? '<i class="icon-alert-triangle"></i> Full Track Fallback' : '<i class="icon-check"></i> 3 Distinct AI Stems'}</strong></div>
     </div>
     <details class="component-report-details"><summary>View Stem Details</summary>
       <div class="stem-details-grid">
         <div class="stem-detail-item">
-          <span class="stem-detail-label">⚙️ Separation Mode:</span>
+          <span class="stem-detail-label"><i class="icon-settings"></i> Separation Mode:</span>
           <span class="stem-detail-val">${escapeHtml(modeLabels[sepMode] || sepMode)}</span>
         </div>
         <div class="stem-detail-item">
-          <span class="stem-detail-label">🎵 Output Format:</span>
+          <span class="stem-detail-label"><i class="icon-music"></i> Output Format:</span>
           <span class="stem-detail-val">${escapeHtml(sepFormat)} (${escapeHtml(sepBitrate)})</span>
         </div>
         <div class="stem-detail-item">
-          <span class="stem-detail-label">🤖 Stage 1 (Vocals/Inst):</span>
+          <span class="stem-detail-label"><i class="icon-bot"></i> Stage 1 (Vocals/Inst):</span>
           <code class="stem-detail-code">${escapeHtml(primaryModel)}</code>
         </div>
         <div class="stem-detail-item">
-          <span class="stem-detail-label">🎙️ Stage 2 (Lead/Back):</span>
+          <span class="stem-detail-label"><i class="icon-mic"></i> Stage 2 (Lead/Back):</span>
           <code class="stem-detail-code">${escapeHtml(karaokeModel)}</code>
         </div>
       </div>
     </details>
   `;
   if (sp.isFallback || sp.status === 'fallback') {
-    spBadge = '<span class="status-badge warning">⚠️ Fallback</span>';
+    spBadge = '<span class="status-badge warning"><i class="icon-alert-triangle"></i> Fallback</span>';
   } else if (sp.status === 'error' || song.splitError) {
-    spBadge = '<span class="status-badge error">❌ Error</span>';
+    spBadge = '<span class="status-badge error"><i class="icon-x"></i> Error</span>';
   } else if (sp.status === 'pending' || song.status === 'splitting') {
-    spBadge = '<span class="status-badge pending">⏳ Splitting</span>';
+    spBadge = '<span class="status-badge pending"><i class="icon-loader-2 icon-spin"></i> Splitting</span>';
   }
 
   // 3. Lyrics Card
   const lineCount = ly.count || (song.lyrics ? song.lyrics.length : 0);
   const isManual = (ly.provider === 'Manual Import' || song.lyricsProvider === 'Manual Import');
-  let lyBadge = '<span class="status-badge success">✅ Synced</span>';
+  let lyBadge = '<span class="status-badge success"><i class="icon-check"></i> Synced</span>';
   if (isManual || song.isSynced === false || ly.isSynced === false) {
-    lyBadge = '<span class="status-badge success" style="background: rgba(147, 51, 234, 0.15); color: #c084fc; border: 1px solid rgba(147, 51, 234, 0.3);">✍️ Unsynced</span>';
+    lyBadge = '<span class="status-badge success" style="background: rgba(147, 51, 234, 0.15); color: #c084fc; border: 1px solid rgba(147, 51, 234, 0.3);"><i class="icon-pencil"></i> Unsynced</span>';
   }
   let lyDetails = `
     <div class="component-meta-list">
@@ -2020,10 +2021,10 @@ function renderComponentManagerModal(song, components = {}) {
   
   if (!ly.hasLyrics && lineCount === 0) {
     if (ly.status === 'failed' || song.lyricsError) {
-      lyBadge = '<span class="status-badge error">❌ No Lyrics</span>';
+      lyBadge = '<span class="status-badge error"><i class="icon-x"></i> No Lyrics</span>';
       lyDetails = `<div style="color:#f87171; font-size:0.8rem;">Error: ${escapeHtml(ly.error || song.lyricsError || 'Lyrics fetch failed across all providers')}</div>`;
     } else {
-      lyBadge = '<span class="status-badge warning">⚠️ None</span>';
+      lyBadge = '<span class="status-badge warning"><i class="icon-alert-triangle"></i> None</span>';
       lyDetails = `<div class="component-meta-list"><div>No lyrics currently loaded</div></div>`;
     }
   }
@@ -2031,11 +2032,11 @@ function renderComponentManagerModal(song, components = {}) {
   let lyAttemptsHtml = '';
   if (ly.attempts && ly.attempts.length > 0) {
     lyAttemptsHtml = ly.attempts.map(a => {
-      let icon = '❌';
+      let icon = '<i class="icon-x" style="color:#ef4444;"></i>';
       let rowClass = 'failed';
-      if (a.status === 'success') { icon = '✅'; rowClass = 'success'; }
-      else if (a.status === 'partial') { icon = '⚠️'; rowClass = 'partial'; }
-      else if (a.status === 'skipped') { icon = '⏭️'; rowClass = 'skipped'; }
+      if (a.status === 'success') { icon = '<i class="icon-check" style="color:#10b981;"></i>'; rowClass = 'success'; }
+      else if (a.status === 'partial') { icon = '<i class="icon-alert-triangle" style="color:#f59e0b;"></i>'; rowClass = 'partial'; }
+      else if (a.status === 'skipped') { icon = '<i class="icon-skip-forward" style="color:#94a3b8;"></i>'; rowClass = 'skipped'; }
       return `
         <div class="attempt-row ${rowClass}">
           <div class="attempt-header">
@@ -2052,14 +2053,14 @@ function renderComponentManagerModal(song, components = {}) {
 
   bodyEl.innerHTML = `
     <div class="component-manager-top-menu" style="display:flex; gap:0.5rem; margin-bottom: 1rem;">
-      <button class="btn btn-primary" style="flex:1; background:rgba(147, 51, 234, 0.2); border:1px solid #9333ea; color:#d8b4fe;" onclick="openMetadataModal('${song.id}')">✏️ Edit Meta-data</button>
-      <button class="btn btn-primary" style="flex:1; background:rgba(59, 130, 246, 0.2); border:1px solid #3b82f6; color:#93c5fd;" onclick="openSyncEditorModal('${song.id}')">🎵 Lyrics & Sync Editor</button>
+      <button class="btn btn-primary" style="flex:1; background:rgba(147, 51, 234, 0.2); border:1px solid #9333ea; color:#d8b4fe;" onclick="openMetadataModal('${song.id}')"><i class="icon-pencil"></i> Edit Meta-data</button>
+      <button class="btn btn-primary" style="flex:1; background:rgba(59, 130, 246, 0.2); border:1px solid #3b82f6; color:#93c5fd;" onclick="openSyncEditorModal('${song.id}')"><i class="icon-music"></i> Lyrics & Sync Editor</button>
     </div>
 
     <!-- Component 1: Audio Download -->
     <div class="component-card component-card-download">
       <div class="component-card-header">
-        <div class="component-title">📥 1. Audio Download</div>
+        <div class="component-title"><i class="icon-download"></i> 1. Audio Download</div>
         ${dlBadge}
       </div>
       <div class="component-details">${dlDetails}</div>
@@ -2069,7 +2070,7 @@ function renderComponentManagerModal(song, components = {}) {
           <option value="spotdl">SpotDL Only (Spotify Studio)</option>
           <option value="ytdlp">yt-dlp (YouTube Backup)</option>
         </select>
-        <button id="retryDlBtn_${song.id}" class="btn btn-secondary" style="font-size:0.8rem; padding:0.4rem 0.8rem;" onclick="retryComponentDownload('${song.id}', this)">🔄 Retry Audio Download</button>
+        <button id="retryDlBtn_${song.id}" class="btn btn-secondary" style="font-size:0.8rem; padding:0.4rem 0.8rem;" onclick="retryComponentDownload('${song.id}', this)"><i class="icon-rotate-cw"></i> Retry Audio Download</button>
       </div>
       <div id="dlReportContainer_${song.id}">
         ${dlAttemptsHtml ? `<details class="component-report-details"><summary>View Report</summary><div class="component-report-box">${dlAttemptsHtml}</div></details>` : ''}
@@ -2079,12 +2080,12 @@ function renderComponentManagerModal(song, components = {}) {
     <!-- Component 2: Stem Separation -->
     <div class="component-card component-card-splitting">
       <div class="component-card-header">
-        <div class="component-title">✂️ 2. Stem Separation</div>
+        <div class="component-title"><i class="icon-scissors"></i> 2. Stem Separation</div>
         ${spBadge}
       </div>
       <div class="component-details">${spDetails}</div>
       <div class="component-action-row" style="justify-content: space-between; align-items: center; margin-top: 0.5rem;">
-        <button id="retrySpBtn_${song.id}" class="btn btn-secondary" style="font-size:0.8rem; padding:0.4rem 0.8rem;" onclick="retryComponentSplitting('${song.id}', this)">✂️ Retry Stem Separation</button>
+        <button id="retrySpBtn_${song.id}" class="btn btn-secondary" style="font-size:0.8rem; padding:0.4rem 0.8rem;" onclick="retryComponentSplitting('${song.id}', this)"><i class="icon-scissors"></i> Retry Stem Separation</button>
         <label style="font-size: 0.75rem; display: flex; align-items: center; gap: 0.3rem; cursor: pointer; color: var(--text-secondary); white-space: nowrap;">
           <input type="checkbox" id="customSepToggle_${song.id}" onchange="toggleCustomSepSettings('${song.id}')"> Custom Settings
         </label>
@@ -2096,10 +2097,10 @@ function renderComponentManagerModal(song, components = {}) {
           <div style="flex: 1 1 120px;">
             <label style="display:block; font-size: 0.65rem; color: var(--text-secondary);">Mode & Model:</label>
             <select id="sepModeSelect_${song.id}" style="width: 100%; background: rgba(0,0,0,0.6); color: #fff; border: 1px solid var(--border); border-radius: 4px; padding: 0.2rem; font-size: 0.75rem;">
-              <option value="balanced" ${sepMode === 'balanced' ? 'selected' : ''}>⚖️ Balanced (UVR-MDX-HQ-3)</option>
-              <option value="fast" ${sepMode === 'fast' ? 'selected' : ''}>⚡ Fast (UVR-MDX-Inst-1)</option>
-              <option value="high" ${sepMode === 'high' ? 'selected' : ''}>🎯 High Precision (MDX23C)</option>
-              <option value="ultra" ${sepMode === 'ultra' ? 'selected' : ''}>👑 Ultra Quality (BS-Roformer)</option>
+              <option value="balanced" ${sepMode === 'balanced' ? 'selected' : ''}>Balanced (UVR-MDX-HQ-3)</option>
+              <option value="fast" ${sepMode === 'fast' ? 'selected' : ''}>Fast (UVR-MDX-Inst-1)</option>
+              <option value="high" ${sepMode === 'high' ? 'selected' : ''}>High Precision (MDX23C)</option>
+              <option value="ultra" ${sepMode === 'ultra' ? 'selected' : ''}>Ultra Quality (BS-Roformer)</option>
             </select>
           </div>
           <div style="flex: 1 1 80px;">
@@ -2129,7 +2130,7 @@ function renderComponentManagerModal(song, components = {}) {
     <!-- Component 3: Lyrics Fetching -->
     <div class="component-card component-card-lyrics">
       <div class="component-card-header">
-        <div class="component-title">📜 3. Lyrics</div>
+        <div class="component-title"><i class="icon-file-text"></i> 3. Lyrics</div>
         ${lyBadge}
       </div>
       <div class="component-details">${lyDetails}</div>
@@ -2141,16 +2142,16 @@ function renderComponentManagerModal(song, components = {}) {
           <option value="NetEase">NetEase</option>
           <option value="Genius">Genius</option>
           <option value="Megalobiz">Megalobiz</option>
-          <option value="manual">✍️ Manual Import</option>
+          <option value="manual">Manual Import</option>
         </select>
-        <button id="retryLyBtn_${song.id}" class="btn btn-secondary" style="font-size:0.8rem; padding:0.4rem 0.8rem;" onclick="retryComponentLyrics('${song.id}', this)">📜 Retry Lyrics</button>
+        <button id="retryLyBtn_${song.id}" class="btn btn-secondary" style="font-size:0.8rem; padding:0.4rem 0.8rem;" onclick="retryComponentLyrics('${song.id}', this)"><i class="icon-rotate-cw"></i> Retry Lyrics</button>
       </div>
       
       <!-- Manual Lyrics Paste Area (Shown when Manual Import is chosen) -->
       <div id="manualLyricsContainer_${song.id}" style="display: none; margin-top: 0.75rem;">
         <textarea id="manualLyricsText_${song.id}" class="manual-lyrics-textarea" placeholder="Paste song lyrics here... Each line will be split into unsynced lyrics." rows="5"></textarea>
         <div style="display: flex; justify-content: flex-end; margin-top: 0.5rem;">
-          <button id="importManualBtn_${song.id}" class="btn btn-primary" style="font-size:0.8rem; padding:0.4rem 0.9rem;" onclick="importManualLyrics('${song.id}', this)">✍️ Import Lyrics</button>
+          <button id="importManualBtn_${song.id}" class="btn btn-primary" style="font-size:0.8rem; padding:0.4rem 0.9rem;" onclick="importManualLyrics('${song.id}', this)"><i class="icon-pencil"></i> Import Lyrics</button>
         </div>
       </div>
 
@@ -2192,11 +2193,11 @@ window.retryComponentDownload = async (id, btn) => {
 
   const sourceDesc = source === 'spotdl' ? 'SpotDL Studio' : (source === 'ytdlp' ? 'yt-dlp backup' : 'SpotDL priority');
   if (container) {
-    container.innerHTML = `<div class="component-report-box loading">⏳ Downloading audio track (${sourceDesc})... please wait...</div>`;
+    container.innerHTML = `<div class="component-report-box loading"><i class="icon-loader-2 icon-spin"></i> Downloading audio track (${sourceDesc})... please wait...</div>`;
   }
   if (btn) {
     btn.disabled = true;
-    btn.innerText = '⏳ Downloading...';
+    btn.innerHTML = '<i class="icon-loader-2 icon-spin"></i> Downloading...';
   }
 
   try {
@@ -2215,11 +2216,11 @@ window.retryComponentDownload = async (id, btn) => {
     }
   } catch (err) {
     if (container) {
-      container.innerHTML = `<div class="component-report-box" style="color:#f87171;">⚠️ Download failed: ${escapeHtml(err.message)}</div>`;
+      container.innerHTML = `<div class="component-report-box" style="color:#f87171;"><i class="icon-alert-triangle"></i> Download failed: ${escapeHtml(err.message)}</div>`;
     }
     if (btn) {
       btn.disabled = false;
-      btn.innerText = '🔄 Retry Audio Download';
+      btn.innerHTML = '<i class="icon-rotate-cw"></i> Retry Audio Download';
     }
   } finally {
     fetchLibrary();
@@ -2240,11 +2241,11 @@ window.retryComponentSplitting = async (id, btn) => {
   const bitrate = isCustom && bitrateSel ? bitrateSel.value : '192k';
 
   if (container) {
-    container.innerHTML = `<div class="component-report-box loading">⏳ Running AI 3-stem separation [${mode.toUpperCase()}, ${format} ${bitrate}]... please wait...</div>`;
+    container.innerHTML = `<div class="component-report-box loading"><i class="icon-loader-2 icon-spin"></i> Running AI 3-stem separation [${mode.toUpperCase()}, ${format} ${bitrate}]... please wait...</div>`;
   }
   if (btn) {
     btn.disabled = true;
-    btn.innerText = '⏳ Splitting...';
+    btn.innerHTML = '<i class="icon-loader-2 icon-spin"></i> Splitting...';
   }
 
   try {
@@ -2263,11 +2264,11 @@ window.retryComponentSplitting = async (id, btn) => {
     }
   } catch (err) {
     if (container) {
-      container.innerHTML = `<div class="component-report-box" style="color:#f87171;">⚠️ Splitting failed: ${escapeHtml(err.message)}</div>`;
+      container.innerHTML = `<div class="component-report-box" style="color:#f87171;"><i class="icon-alert-triangle"></i> Splitting failed: ${escapeHtml(err.message)}</div>`;
     }
     if (btn) {
       btn.disabled = false;
-      btn.innerText = '✂️ Retry Stem Separation';
+      btn.innerHTML = '<i class="icon-scissors"></i> Retry Stem Separation';
     }
   } finally {
     fetchLibrary();
@@ -2278,11 +2279,11 @@ window.retryComponentSplitting = async (id, btn) => {
 window.retryComponentLyrics = async (id, btn) => {
   const container = document.getElementById(`lyReportContainer_${id}`);
   if (container) {
-    container.innerHTML = `<div class="component-report-box loading">⏳ Fetching synced lyrics from providers... please wait...</div>`;
+    container.innerHTML = `<div class="component-report-box loading"><i class="icon-loader-2 icon-spin"></i> Fetching synced lyrics from providers... please wait...</div>`;
   }
   if (btn) {
     btn.disabled = true;
-    btn.innerText = '⏳ Fetching...';
+    btn.innerHTML = '<i class="icon-loader-2 icon-spin"></i> Fetching...';
   }
 
   const sel = document.getElementById(`lyricsProviderSelect_${id}`);
@@ -2305,11 +2306,11 @@ window.retryComponentLyrics = async (id, btn) => {
     }
   } catch (err) {
     if (container) {
-      container.innerHTML = `<div class="component-report-box" style="color:#f87171;">⚠️ Lyrics retry failed: ${escapeHtml(err.message)}</div>`;
+      container.innerHTML = `<div class="component-report-box" style="color:#f87171;"><i class="icon-alert-triangle"></i> Lyrics retry failed: ${escapeHtml(err.message)}</div>`;
     }
     if (btn) {
       btn.disabled = false;
-      btn.innerText = '📜 Retry Lyrics';
+      btn.innerHTML = '<i class="icon-rotate-cw"></i> Retry Lyrics';
     }
   } finally {
     fetchLibrary();
@@ -2327,11 +2328,11 @@ window.importManualLyrics = async (id, btn) => {
 
   const container = document.getElementById(`lyReportContainer_${id}`);
   if (container) {
-    container.innerHTML = `<div class="component-report-box loading">⏳ Importing lyrics lines, transliterating & translating... please wait...</div>`;
+    container.innerHTML = `<div class="component-report-box loading"><i class="icon-loader-2 icon-spin"></i> Importing lyrics lines, transliterating & translating... please wait...</div>`;
   }
   if (btn) {
     btn.disabled = true;
-    btn.innerText = '⏳ Importing...';
+    btn.innerHTML = '<i class="icon-loader-2 icon-spin"></i> Importing...';
   }
 
   try {
@@ -2354,11 +2355,11 @@ window.importManualLyrics = async (id, btn) => {
     }
   } catch (err) {
     if (container) {
-      container.innerHTML = `<div class="component-report-box" style="color:#f87171;">⚠️ Manual import failed: ${escapeHtml(err.message)}</div>`;
+      container.innerHTML = `<div class="component-report-box" style="color:#f87171;"><i class="icon-alert-triangle"></i> Manual import failed: ${escapeHtml(err.message)}</div>`;
     }
     if (btn) {
       btn.disabled = false;
-      btn.innerText = '✍️ Import Lyrics';
+      btn.innerHTML = '<i class="icon-pencil"></i> Import Lyrics';
     }
   } finally {
     fetchLibrary();
@@ -2369,7 +2370,7 @@ window.importManualLyrics = async (id, btn) => {
 window.retryLyrics = async (id, provider = 'auto', e) => {
   if (e && e.target) {
     e.target.disabled = true;
-    e.target.innerText = '⏳';
+    e.target.innerHTML = '<i class="icon-loader-2 icon-spin"></i>';
   }
   try {
     const res = await fetch(`/api/retry_lyrics/${id}`, {
@@ -2459,7 +2460,7 @@ if (saveLyricsBtn) {
 if (toggleLyricsExpandBtn && lyricsSection) {
   toggleLyricsExpandBtn.addEventListener('click', () => {
     const isExpanded = lyricsSection.classList.toggle('expanded');
-    toggleLyricsExpandBtn.innerText = isExpanded ? '↙ Collapse' : '↔ Expand';
+    toggleLyricsExpandBtn.innerHTML = isExpanded ? '<i class="icon-minimize-2"></i> Collapse' : '<i class="icon-maximize-2"></i> Expand';
   });
 }
 
@@ -2539,9 +2540,9 @@ socket.on('sync_state', (state) => {
   }
 
   if (state.isPlaying) {
-    playPauseBtn.innerText = '⏸';
+    playPauseBtn.innerHTML = '<i class="icon-pause"></i>';
   } else {
-    playPauseBtn.innerText = '▶';
+    playPauseBtn.innerHTML = '<i class="icon-play"></i>';
   }
 
   if (state.audioBlocked !== undefined) {
@@ -2617,7 +2618,7 @@ fetchQueue();
     }
     // Ensure state and UI are strictly paused on tab reload
     currentState.isPlaying = false;
-    if (playPauseBtn) playPauseBtn.innerText = '▶';
+    if (playPauseBtn) playPauseBtn.innerHTML = '<i class="icon-play"></i>';
     socket.emit('update_state', { isPlaying: false });
   } catch(e){}
 })();
@@ -2765,7 +2766,7 @@ window.openMetadataModal = (songId) => {
 
       <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.25rem;">
         <button type="button" class="btn btn-secondary" onclick="document.getElementById('metadataModal').style.display='none'">Cancel</button>
-        <button type="submit" id="metaSaveBtn_${song.id}" class="btn btn-primary" style="padding:0.4rem 1.2rem; font-size:0.85rem;">💾 Save Changes</button>
+        <button type="submit" id="metaSaveBtn_${song.id}" class="btn btn-primary" style="padding:0.4rem 1.2rem; font-size:0.85rem;"><i class="icon-save"></i> Save Changes</button>
       </div>
     </form>
   `;
@@ -3204,7 +3205,7 @@ window.renderSyncEditorRows = (songId, lines) => {
           ${LUCIDE_PLUS_ICON} <span>Add line above</span>
         </button>
         <div class="sync-editor-row" data-idx="${idx}">
-          <button type="button" class="sync-line-play-btn sync-col-play" onclick="syncEditorPlayLine(${idx})" title="Jump song to this line (▶)">
+          <button type="button" class="sync-line-play-btn sync-col-play" onclick="syncEditorPlayLine(${idx})" title="Jump song to this line">
             ${LUCIDE_PLAY_ICON}
           </button>
           <input type="text" inputmode="decimal" class="sync-time sync-col-time" value="${formatCentiseconds(t)}" title="Time (mm:ss.cs)">
@@ -3338,7 +3339,7 @@ window.openSyncEditorModal = async (songId) => {
             </button>
           </div>
           <div class="sync-playback-tracker" title="Current Playback Time / Total Duration">
-            <span class="sync-tracker-icon">⏱️</span>
+            <span class="sync-tracker-icon"><i class="icon-timer"></i></span>
             <span id="syncEditorCurTime">00:00.00</span>
             <span class="sync-tracker-slash">/</span>
             <span id="syncEditorDurTime">00:00.00</span>

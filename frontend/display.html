@@ -9,7 +9,7 @@
 <body>
   <div class="display-container" id="displayContainer">
     <div id="audioBlockedBanner" class="audio-blocked-banner" style="display: none;">
-      <span>⚠️ Browser sound paused. Click anywhere on Dashboard to enable audio playback!</span>
+      <span><i class="icon-alert-triangle" style="margin-right: 0.35rem;"></i>Browser sound paused. Click anywhere on Dashboard to enable audio playback!</span>
     </div>
     <canvas id="visualizer"></canvas>
     
@@ -17,7 +17,7 @@
     <aside class="song-info-sidebar glass" id="songSidebar">
       <div class="sidebar-content">
         <div class="cover-wrapper">
-          <img id="displaySongCover" src="https://via.placeholder.com/600/1e2235/ffffff?text=🎵" alt="Album Cover">
+          <img id="displaySongCover" src="https://via.placeholder.com/600/1e2235/ffffff?text=CtrlAltLyrics" alt="Album Cover">
         </div>
         <div class="song-meta">
           <h2 id="displaySongTitle" class="meta-title"></h2>
@@ -33,8 +33,8 @@
 
     <!-- Bottom-Left Floating Control Buttons -->
     <div class="display-floating-controls">
-      <button id="displayPlayPauseBtn" class="btn glass-btn floating-control-btn" title="Play / Pause (Space)">▶</button>
-      <button id="toggleSidebarBtn" class="btn glass-btn floating-control-btn disk-btn" title="Toggle Song Info">💿</button>
+      <button id="displayPlayPauseBtn" class="btn glass-btn floating-control-btn" title="Play / Pause (Space)"><i class="icon-play"></i></button>
+      <button id="toggleSidebarBtn" class="btn glass-btn floating-control-btn disk-btn" title="Toggle Song Info"><i class="icon-disc"></i></button>
     </div>
   </div>
   <script type="module" src="/display.js"></script>

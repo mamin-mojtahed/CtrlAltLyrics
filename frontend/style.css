@@ -172,7 +172,7 @@ body {
 }
 
 .btn-menu .btn-icon {
-  font-size: clamp(1.1rem, 2.5vw, 1.3rem);
+  font-size: clamp(1.55rem, 3.5vw, 1.85rem);
 }
 
 .btn-menu.btn-primary {
@@ -219,7 +219,11 @@ h1, h2, h3 {
 }
 
 .btn {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  line-height: 1;
   padding: 0.5rem 1rem;
   background-color: var(--accent);
   color: white;
@@ -345,6 +349,14 @@ input[type="text"]:focus, input[type="search"]:focus {
   overflow: hidden;
   text-overflow: ellipsis;
   width: 100%;
+}
+
+.audio-controls-card .btn,
+.mixer .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 
 .mixer-card {
@@ -620,12 +632,22 @@ input[type="text"]:focus, input[type="search"]:focus {
 }
 
 /* Emoji Badges & Action Buttons for Library */
+.song-card-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  margin-top: 0.25rem;
+  flex-wrap: wrap;
+}
+
 .emoji-badges-row {
   display: flex;
   align-items: center;
   gap: 0.4rem;
   flex-wrap: wrap;
-  margin: 0.15rem 0;
+  margin: 0;
 }
 
 .emoji-badge {
@@ -650,7 +672,8 @@ input[type="text"]:focus, input[type="search"]:focus {
   align-items: center;
   gap: 0.4rem;
   flex-wrap: wrap;
-  margin-top: 0.2rem;
+  margin: 0;
+  margin-left: auto;
 }
 
 .emoji-btn {
@@ -1201,8 +1224,8 @@ input[type="text"]:focus, input[type="search"]:focus {
 }
 
 .floating-control-btn {
-  width: 48px;
-  height: 48px;
+  width: 50px;
+  height: 50px;
   border-radius: 50% !important;
   display: flex;
   align-items: center;
@@ -2279,8 +2302,8 @@ input.sync-shift-input,
 }
 
 .sync-shift-btn {
-  width: 24px;
-  height: 24px;
+  width: 25px;
+  height: 25px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2333,8 +2356,8 @@ input.sync-shift-input,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: 7px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -2374,32 +2397,138 @@ input.sync-shift-input,
   align-items: center;
   justify-content: center;
   line-height: 1;
-  font-size: 14px;
+  font-size: 20px;
 }
 
 .sync-btn-icon [class^="icon-"],
 .sync-btn-icon [class*=" icon-"] {
-  font-size: 15px;
+  font-size: 21px;
 }
 
 .sync-shift-btn [class^="icon-"],
 .sync-shift-btn [class*=" icon-"] {
-  font-size: 11px;
+  font-size: 15px;
 }
 
 .sync-line-play-btn [class^="icon-"],
 .sync-line-play-btn [class*=" icon-"] {
-  font-size: 11px;
+  font-size: 15px;
 }
 
 .sync-del-btn [class^="icon-"],
 .sync-del-btn [class*=" icon-"] {
-  font-size: 12px;
+  font-size: 17px;
 }
 
 .btn-add-line-strip [class^="icon-"],
 .btn-add-line-strip [class*=" icon-"] {
-  font-size: 11px;
+  font-size: 15px;
+}
+
+.icon-spin {
+  display: inline-block;
+  animation: iconSpin 1s linear infinite;
+}
+
+@keyframes iconSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+#playPauseBtn [class^="icon-"],
+#displayPlayPauseBtn [class^="icon-"] {
+  font-size: 1.6rem;
+}
+
+#prevBtn [class^="icon-"],
+#nextBtn [class^="icon-"] {
+  font-size: 1.45rem;
+}
+
+#prevLineBtn [class^="icon-"],
+#nextLineBtn [class^="icon-"] {
+  font-size: 1.2rem;
+}
+
+.floating-control-btn [class^="icon-"] {
+  font-size: 1.75rem;
+}
+
+.btn-close [class^="icon-"] {
+  font-size: 20px;
+}
+
+.btn-clear-file [class^="icon-"] {
+  font-size: 17px;
+}
+
+.dropzone-icon [class^="icon-"] {
+  font-size: 59px;
+  color: var(--accent);
+}
+
+.emoji-btn [class^="icon-"] {
+  font-size: 20px;
+}
+
+.queue-icon-btn [class^="icon-"] {
+  font-size: 17px;
+}
+
+.queue-drag-handle [class^="icon-"] {
+  font-size: 20px;
+}
+
+.emoji-badge [class^="icon-"],
+.emoji-badge [class*=" icon-"] {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.status-badge [class^="icon-"],
+.status-badge [class*=" icon-"] {
+  font-size: 15px;
+}
+
+#linkInstBackBtn [class^="icon-"],
+#linkBackLeadBtn [class^="icon-"] {
+  font-size: 1.4rem;
+}
+
+.sync-tracker-icon [class^="icon-"] {
+  font-size: 1.2rem;
+}
+
+#uploadSongBtn [class^="icon-"],
+#librarySortBtn [class^="icon-"] {
+  font-size: 1.2rem;
+  margin-right: 0.3rem;
+}
+
+.sort-option [class^="icon-"],
+.sort-order-btn [class^="icon-"] {
+  font-size: 1.2rem;
+  margin-right: 0.35rem;
+}
+
+.component-title [class^="icon-"] {
+  font-size: 1.4rem;
+  margin-right: 0.3rem;
+}
+
+.stem-detail-label [class^="icon-"] {
+  font-size: 1.12rem;
+  margin-right: 0.25rem;
+}
+
+.toggle-content [class^="icon-"] {
+  font-size: 1.4rem;
+}
+
+.empty-state [class^="icon-"],
+.error-state [class^="icon-"] {
+  font-size: 20px;
+  margin-right: 0.3rem;
 }
 
 .sync-save-btn:not(:disabled) {
@@ -2585,11 +2714,11 @@ input.sync-shift-input,
 
 .sync-editor-row .sync-line-play-btn,
 .sync-line-play-btn {
-  width: 24px !important;
-  min-width: 24px !important;
-  max-width: 24px !important;
-  height: 24px !important;
-  flex: 0 0 24px !important;
+  width: 25px !important;
+  min-width: 25px !important;
+  max-width: 25px !important;
+  height: 25px !important;
+  flex: 0 0 25px !important;
   display: inline-flex;
   align-items: center;
   justify-content: center;

@@ -368,7 +368,7 @@ socket.on('player_command', (cmd) => {
 });
 
 function getHighResAlbumArt(url) {
-  if (!url) return 'https://via.placeholder.com/600/1e2235/ffffff?text=🎵';
+  if (!url) return 'https://via.placeholder.com/600/1e2235/ffffff?text=CtrlAltLyrics';
   return url.replace(/\/\d+x\d+bb\./i, '/600x600bb.').replace(/\/\d+x\d+\./i, '/600x600.');
 }
 
@@ -393,11 +393,11 @@ function updateSidebarMeta(data) {
 function updatePlaybackStatusUI() {
   if (!displayPlayPauseBtn) return;
   if (currentState.isPlaying) {
-    displayPlayPauseBtn.innerText = '⏸';
+    displayPlayPauseBtn.innerHTML = '<i class="icon-pause"></i>';
     displayPlayPauseBtn.className = 'btn glass-btn floating-control-btn playing';
     displayPlayPauseBtn.title = 'Pause (Space)';
   } else {
-    displayPlayPauseBtn.innerText = '▶';
+    displayPlayPauseBtn.innerHTML = '<i class="icon-play"></i>';
     displayPlayPauseBtn.className = 'btn glass-btn floating-control-btn paused';
     displayPlayPauseBtn.title = 'Play (Space)';
   }
