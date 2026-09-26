@@ -311,6 +311,7 @@ function toggleAudioBlockedBanner(isBlocked) {
 // Sync state socket listener (Single Source of Truth)
 socket.on('sync_state', (state) => {
   const previousSongId = currentState.songId;
+  const previousQueueId = currentState.queueId;
   currentState = { ...currentState, ...state };
 
   if (state.isPlaying === false) {
@@ -324,7 +325,8 @@ socket.on('sync_state', (state) => {
   }
 
   if (state.songData) {
-    if (state.songData.id !== previousSongId) {
+    const isNewInstance = (state.queueId && state.queueId !== previousQueueId) || (state.songData.id !== previousSongId);
+    if (isNewInstance) {
       songData = state.songData;
       updateSidebarMeta(songData);
       renderLyrics(songData.lyrics);

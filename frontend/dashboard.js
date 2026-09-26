@@ -49,6 +49,7 @@ const toggleLyricsExpandBtn = document.getElementById('toggleLyricsExpandBtn');
 
 let currentState = {};
 let currentSong = null;
+let currentQueueId = null;
 
 function formatTime(seconds) {
   if (seconds === undefined || seconds === null || isNaN(seconds) || seconds < 0) return '0:00';
@@ -367,7 +368,7 @@ async function togglePlayPause() {
     }
 
     if (readySong) {
-      await selectSong(readySong.id, true);
+      await selectSong(readySong.id, true, readySong.queueId);
     }
     return;
   }
@@ -395,10 +396,17 @@ async function playNext() {
   const q = await res.json();
   const readySongs = q.filter(s => s.status === 'ready');
   if (readySongs.length === 0) return;
-  if (!currentSong) return selectSong(readySongs[0].id, true);
-  const idx = readySongs.findIndex(s => s.id === currentSong.id);
+  if (!currentSong) return selectSong(readySongs[0].id, true, readySongs[0].queueId);
+  let idx = -1;
+  if (currentQueueId) {
+    idx = readySongs.findIndex(s => s.queueId === currentQueueId);
+  }
+  if (idx === -1) {
+    idx = readySongs.findIndex(s => s.id === currentSong.id);
+  }
   if (idx !== -1 && idx < readySongs.length - 1) {
-    await selectSong(readySongs[idx + 1].id, currentState.isPlaying);
+    const next = readySongs[idx + 1];
+    await selectSong(next.id, currentState.isPlaying, next.queueId);
   }
 }
 
@@ -407,10 +415,17 @@ async function playPrev() {
   const q = await res.json();
   const readySongs = q.filter(s => s.status === 'ready');
   if (readySongs.length === 0) return;
-  if (!currentSong) return selectSong(readySongs[0].id, true);
-  const idx = readySongs.findIndex(s => s.id === currentSong.id);
+  if (!currentSong) return selectSong(readySongs[0].id, true, readySongs[0].queueId);
+  let idx = -1;
+  if (currentQueueId) {
+    idx = readySongs.findIndex(s => s.queueId === currentQueueId);
+  }
+  if (idx === -1) {
+    idx = readySongs.findIndex(s => s.id === currentSong.id);
+  }
   if (idx > 0) {
-    await selectSong(readySongs[idx - 1].id, currentState.isPlaying);
+    const prev = readySongs[idx - 1];
+    await selectSong(prev.id, currentState.isPlaying, prev.queueId);
   }
 }
 
@@ -853,23 +868,31 @@ function renderQueue(data) {
   }
 
   const readySongs = (data || []).filter(s => s.status === 'ready');
-  if (currentSong && !readySongs.some(s => s.id === currentSong.id)) {
+  if (currentQueueId && !data.some(s => s.queueId === currentQueueId)) {
     if (readySongs.length > 0) {
-      selectSong(readySongs[0].id, false);
+      selectSong(readySongs[0].id, false, readySongs[0].queueId);
+    } else {
+      clearCurrentSong();
+    }
+  } else if (!currentQueueId && currentSong && !readySongs.some(s => s.id === currentSong.id)) {
+    if (readySongs.length > 0) {
+      selectSong(readySongs[0].id, false, readySongs[0].queueId);
     } else {
       clearCurrentSong();
     }
   }
 
   queueList.innerHTML = data.map((song, idx) => {
-    const isActive = currentSong && currentSong.id === song.id;
+    const isActive = currentQueueId ? (song.queueId === currentQueueId) : (currentSong && currentSong.id === song.id);
     const isProcessing = song.status !== 'ready';
+    const qId = song.queueId || song.id;
     return `
       <div class="song-card queue-card ${isActive ? 'active-playing' : ''} ${isProcessing ? 'queue-card-processing' : ''}" 
            draggable="true" 
            data-index="${idx}"
            data-id="${song.id}"
-           onclick="handleQueueCardClick('${song.id}', event)">
+           data-queue-id="${qId}"
+           onclick="handleQueueCardClick('${song.id}', '${qId}', event)">
         <!-- Row 1: Song Info & Queue Management Icons -->
         <div style="display:flex; align-items:center; justify-content:space-between; gap: 0.5rem; width: 100%;">
           <div style="display:flex; align-items:center; gap: 0.6rem; flex: 1; min-width: 0;">
@@ -883,9 +906,9 @@ function renderQueue(data) {
 
           <!-- Queue Management Controls (Icons Only) -->
           <div class="queue-controls-group" onclick="event.stopPropagation();">
-            <button class="queue-icon-btn" onclick="reorderQueueItem('${song.id}', 'up', event)" title="Move Up" ${idx === 0 ? 'disabled style="opacity:0.3;"' : ''}>⬆️</button>
-            <button class="queue-icon-btn" onclick="reorderQueueItem('${song.id}', 'down', event)" title="Move Down" ${idx === data.length - 1 ? 'disabled style="opacity:0.3;"' : ''}>⬇️</button>
-            <button class="queue-icon-btn" onclick="removeFromQueue('${song.id}', event)" title="Remove from Queue">❌</button>
+            <button class="queue-icon-btn" onclick="reorderQueueItem('${qId}', 'up', event)" title="Move Up" ${idx === 0 ? 'disabled style="opacity:0.3;"' : ''}>⬆️</button>
+            <button class="queue-icon-btn" onclick="reorderQueueItem('${qId}', 'down', event)" title="Move Down" ${idx === data.length - 1 ? 'disabled style="opacity:0.3;"' : ''}>⬇️</button>
+            <button class="queue-icon-btn" onclick="removeFromQueue('${qId}', event)" title="Remove from Queue">❌</button>
           </div>
         </div>
       </div>
@@ -895,19 +918,19 @@ function renderQueue(data) {
   setupQueueDragAndDrop();
 }
 
-window.handleQueueCardClick = (songId, event) => {
+window.handleQueueCardClick = (songId, queueId, event) => {
   if (event.target.closest('.queue-controls-group') || event.target.closest('.queue-drag-handle')) {
     return;
   }
-  selectSong(songId, true);
+  selectSong(songId, true, queueId);
 };
 
-window.reorderQueueItem = async (songId, direction, event) => {
+window.reorderQueueItem = async (queueId, direction, event) => {
   if (event) event.stopPropagation();
   await fetch('/api/queue/reorder', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ songId, direction })
+    body: JSON.stringify({ queueId, direction })
   });
   fetchQueue();
 };
@@ -1587,7 +1610,7 @@ window.enqueueSong = async (id) => {
   }
 };
 
-window.selectSong = async (id, forcePlay = null) => {
+window.selectSong = async (id, forcePlay = null, queueId = null) => {
   try {
     const res = await fetch(`/api/song/${id}`);
     if (!res.ok) return;
@@ -1597,6 +1620,7 @@ window.selectSong = async (id, forcePlay = null) => {
       pauseAudio(); // Stop any active playing audio nodes from the previous song
       
       currentSong = song;
+      currentQueueId = queueId || (song.queueId || null);
       isHandlingSongEnd = false;
       currentSongTitle.innerText = song.title;
       const colorSrc = song.id ? `/api/cover/${song.id}` : getHighResAlbumArt(song.albumArt);
@@ -1607,7 +1631,7 @@ window.selectSong = async (id, forcePlay = null) => {
       timelineSlider.value = 0;
       timelineSlider.max = 0;
       if (timeDisplay) timeDisplay.innerText = '--:-- / --:--';
-      socket.emit('update_state', { songId: song.id, currentTime: 0, isPlaying: false, songData: song });
+      socket.emit('update_state', { songId: song.id, queueId: currentQueueId, currentTime: 0, isPlaying: false, songData: song });
       
       await setupAudio(song);
       updateLyricsCounter(0);
@@ -1632,11 +1656,13 @@ function clearCurrentSong() {
   sources.backVoc = null;
   sources.inst = null;
   currentSong = null;
+  currentQueueId = null;
   extractColorsFromSongCover(null);
   pauseTime = 0;
   currentState.isPlaying = false;
   currentState.currentTime = 0;
   currentState.songId = null;
+  currentState.queueId = null;
   currentState.songData = null;
   playPauseBtn.innerText = '▶';
   if (currentSongTitle) currentSongTitle.innerText = 'None';
@@ -1646,7 +1672,7 @@ function clearCurrentSong() {
   if (timeDisplay) timeDisplay.innerText = '--:-- / --:--';
   updateLyricsCounter(0);
   renderLyricsEditor([]);
-  socket.emit('update_state', { songId: null, currentTime: 0, isPlaying: false, songData: null });
+  socket.emit('update_state', { songId: null, queueId: null, currentTime: 0, isPlaying: false, songData: null });
 }
 
 async function handleSongFinished() {
@@ -1673,14 +1699,21 @@ async function handleSongFinished() {
     }
 
     if (!currentSong) {
-      await selectSong(readySongs[0].id, true);
+      await selectSong(readySongs[0].id, true, readySongs[0].queueId);
       return;
     }
 
-    const idx = readySongs.findIndex(s => s.id === currentSong.id);
+    let idx = -1;
+    if (currentQueueId) {
+      idx = readySongs.findIndex(s => s.queueId === currentQueueId);
+    }
+    if (idx === -1) {
+      idx = readySongs.findIndex(s => s.id === currentSong.id);
+    }
     if (idx !== -1 && idx < readySongs.length - 1) {
       // Autoplay next song in queue
-      await selectSong(readySongs[idx + 1].id, true);
+      const next = readySongs[idx + 1];
+      await selectSong(next.id, true, next.queueId);
     } else {
       // Reached end of queue - reset to beginning of current track paused
       pauseTime = 0;
@@ -2233,14 +2266,15 @@ window.confirmRemoveFromLibrary = async (id) => {
 
 window.confirmRemoveFromHistory = window.confirmRemoveFromLibrary;
 
-window.removeFromQueue = async (id) => {
-  await fetch(`/api/queue/${id}`, { method: 'DELETE' });
-  if (currentSong && currentSong.id === id) {
+window.removeFromQueue = async (queueId, event) => {
+  if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+  await fetch(`/api/queue/${queueId}`, { method: 'DELETE' });
+  if (currentQueueId === queueId || (!currentQueueId && currentSong && currentSong.id === queueId)) {
     const res = await fetch('/api/queue');
     const queueData = await res.json();
-    const nextSong = (queueData || []).find(s => s.status === 'ready');
-    if (nextSong) {
-      await selectSong(nextSong.id, currentState.isPlaying);
+    const readySongs = (queueData || []).filter(s => s.status === 'ready');
+    if (readySongs.length > 0) {
+      await selectSong(readySongs[0].id, currentState.isPlaying, readySongs[0].queueId);
     } else {
       clearCurrentSong();
     }
@@ -2332,8 +2366,10 @@ socket.on('sync_state', (state) => {
     sources.inst = null;
   }
 
-  if (state.songData && (!currentSong || currentSong.id !== state.songData.id)) {
+  const isNewTrack = !currentSong || (currentSong.id !== state.songData.id) || (state.queueId && currentQueueId && state.queueId !== currentQueueId);
+  if (state.songData && isNewTrack) {
     currentSong = state.songData;
+    if (state.queueId) currentQueueId = state.queueId;
     if (currentSongTitle) currentSongTitle.innerText = currentSong.title || 'None';
     const colorSrc = currentSong.id ? `/api/cover/${currentSong.id}` : getHighResAlbumArt(currentSong.albumArt);
     extractColorsFromSongCover(colorSrc);
@@ -2342,6 +2378,7 @@ socket.on('sync_state', (state) => {
     updateLyricsCounter(state.currentTime || 0);
   } else if (!state.songId || !state.songData) {
     currentSong = null;
+    currentQueueId = null;
     extractColorsFromSongCover(null);
     if (currentSongTitle) currentSongTitle.innerText = 'None';
     timelineSlider.value = 0;
@@ -2428,7 +2465,7 @@ fetchQueue();
     const queue = await qRes.json();
     let readySong = (queue || []).find(s => s.status === 'ready');
     if (readySong) {
-      await selectSong(readySong.id, false);
+      await selectSong(readySong.id, false, readySong.queueId);
     } else {
       clearCurrentSong();
     }

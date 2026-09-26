@@ -6,6 +6,7 @@ const axios = require('axios');
 const util = require('util');
 const multer = require('multer');
 const mm = require('music-metadata');
+const crypto = require('crypto');
 const execPromise = util.promisify(exec);
 
 const router = express.Router();
@@ -54,6 +55,19 @@ const writeHistory = (data) => fs.writeFileSync(HISTORY_FILE, JSON.stringify(dat
 
 // In-memory queue & engine settings
 let queue = [];
+function generateQueueId() {
+  return typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `q_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
+function syncSongAcrossQueue(updatedSong) {
+  if (!updatedSong || !updatedSong.id) return;
+  for (let i = 0; i < queue.length; i++) {
+    if (queue[i].id === updatedSong.id) {
+      queue[i] = { ...updatedSong, queueId: queue[i].queueId };
+    }
+  }
+}
+
 let currentEngineSettings = {
   mode: 'balanced',
   format: 'MP3',
@@ -311,6 +325,9 @@ router.get('/history', (req, res) => {
 });
 
 router.get('/queue', (req, res) => {
+  for (const item of queue) {
+    if (!item.queueId) item.queueId = generateQueueId();
+  }
   res.json(queue);
 });
 
@@ -498,7 +515,8 @@ router.post('/enqueue', async (req, res) => {
       const lyricsData = readSongLyrics(existing.id);
       const fullSong = {
         ...existing,
-        ...lyricsData
+        ...lyricsData,
+        queueId: generateQueueId()
       };
       queue.push(fullSong);
       res.json(fullSong);
@@ -510,6 +528,7 @@ router.post('/enqueue', async (req, res) => {
   // Not in history or incomplete, add to queue as pending, save to library, and start processing
   const newSong = {
     ...song,
+    queueId: generateQueueId(),
     engineSettings: engineSettings || currentEngineSettings,
     status: 'pending',
     stems: {},
@@ -643,6 +662,7 @@ router.post('/upload', upload.single('audioFile'), async (req, res) => {
     const fileSizeMB = (req.file.size / (1024 * 1024)).toFixed(2);
     const newSong = {
       id: songId,
+      queueId: generateQueueId(),
       title: resolvedTitle,
       artist: resolvedArtist,
       albumArt: albumArt,
@@ -1065,9 +1085,7 @@ async function processSong(song, io) {
   const updateStatus = (status) => {
     song.status = status;
     saveLightweightHistoryItem(song);
-    
-    const qIdx = queue.findIndex(s => s.id === song.id);
-    if (qIdx !== -1) queue[qIdx] = song;
+    syncSongAcrossQueue(song);
     if (io) {
       io.emit('queue_updated', queue);
       io.emit('library_updated', readHistory());
@@ -1225,9 +1243,10 @@ async function fetchAndProcessLyrics(song, requestedProvider = 'auto', io = null
     song.lyricsStatus = statusText;
     saveLightweightHistoryItem(song);
 
-    const qIdx = queue.findIndex(s => s.id === song.id);
-    if (qIdx !== -1) {
-      queue[qIdx].lyricsStatus = statusText;
+    for (const item of queue) {
+      if (item.id === song.id) {
+        item.lyricsStatus = statusText;
+      }
     }
     if (io) {
       io.emit('queue_updated', queue);
@@ -1343,6 +1362,7 @@ router.post('/retry_lyrics/:id', async (req, res) => {
   }
 
   if (io) {
+    syncSongAcrossQueue(song);
     io.emit('queue_updated', queue);
     io.emit('lyrics_report', {
       songId: song.id,
@@ -1423,6 +1443,7 @@ router.post('/import_lyrics/:id', async (req, res) => {
   delete song.lyricsError;
 
   saveLightweightHistoryItem(song);
+  syncSongAcrossQueue(song);
 
   const io = req.app.get('io');
   if (io) {
@@ -1547,6 +1568,7 @@ router.post('/retry_download/:id', async (req, res) => {
   const io = req.app.get('io');
   song.status = 'downloading';
   saveLightweightHistoryItem(song);
+  syncSongAcrossQueue(song);
   if (io) {
     io.emit('queue_updated', queue);
     io.emit('library_updated', readHistory());
@@ -1561,6 +1583,7 @@ router.post('/retry_download/:id', async (req, res) => {
     song.status = 'error';
   }
   saveLightweightHistoryItem(song);
+  syncSongAcrossQueue(song);
 
   if (io) {
     io.emit('queue_updated', queue);
@@ -1604,6 +1627,7 @@ router.post('/retry_splitting/:id', async (req, res) => {
   const io = req.app.get('io');
   song.status = 'splitting';
   saveLightweightHistoryItem(song);
+  syncSongAcrossQueue(song);
   if (io) {
     io.emit('queue_updated', queue);
     io.emit('library_updated', readHistory());
@@ -1612,6 +1636,7 @@ router.post('/retry_splitting/:id', async (req, res) => {
   const result = await splitSongAudio(song);
   song.status = 'ready';
   saveLightweightHistoryItem(song);
+  syncSongAcrossQueue(song);
 
   if (io) {
     io.emit('queue_updated', queue);
@@ -1679,11 +1704,12 @@ router.post('/edit_lyrics', (req, res) => {
     writeHistory(history);
   }
 
-  const qIdx = queue.findIndex(s => s.id === songId);
-  if (qIdx !== -1) {
-    queue[qIdx].lyrics = lyrics;
-    req.app.get('io').emit('queue_updated', queue);
+  for (const item of queue) {
+    if (item.id === songId) {
+      item.lyrics = lyrics;
+    }
   }
+  req.app.get('io').emit('queue_updated', queue);
   
   res.json({ success: true });
 });
@@ -1741,12 +1767,13 @@ router.post('/edit_metadata', upload.single('coverImage'), (req, res) => {
     writeHistory(history);
   }
 
-  const qIdx = queue.findIndex(s => s.id === songId);
-  if (qIdx !== -1) {
-    if (title !== undefined) queue[qIdx].title = title;
-    if (artist !== undefined) queue[qIdx].artist = artist;
-    if (newAlbumArt !== undefined && newAlbumArt.trim() !== '') queue[qIdx].albumArt = newAlbumArt;
-    if (!updatedSong) updatedSong = queue[qIdx];
+  for (const item of queue) {
+    if (item.id === songId) {
+      if (title !== undefined) item.title = title;
+      if (artist !== undefined) item.artist = artist;
+      if (newAlbumArt !== undefined && newAlbumArt.trim() !== '') item.albumArt = newAlbumArt;
+      if (!updatedSong) updatedSong = item;
+    }
   }
 
   // Notify all clients to refresh queue and library
@@ -1778,16 +1805,23 @@ router.delete('/history/:id', (req, res) => {
 });
 
 router.delete('/queue/:id', (req, res) => {
-  queue = queue.filter(s => s.id !== req.params.id);
+  const targetId = req.params.id;
+  const qIdx = queue.findIndex(s => s.queueId === targetId || s.id === targetId);
+  if (qIdx !== -1) {
+    queue.splice(qIdx, 1);
+  }
   req.app.get('io').emit('queue_updated', queue);
-  res.json({ success: true });
+  res.json({ success: true, queue });
 });
 
 router.post('/queue/reorder', (req, res) => {
-  const { queueIds, songId, direction, fromIndex, toIndex } = req.body || {};
+  const { queueIds, queueId, songId, direction, fromIndex, toIndex } = req.body || {};
 
   if (Array.isArray(queueIds)) {
-    const queueMap = new Map(queue.map(s => [s.id, s]));
+    const queueMap = new Map();
+    for (const s of queue) {
+      queueMap.set(s.queueId || s.id, s);
+    }
     const newQueue = [];
     for (const id of queueIds) {
       if (queueMap.has(id)) {
@@ -1800,8 +1834,9 @@ router.post('/queue/reorder', (req, res) => {
       newQueue.push(song);
     }
     queue = newQueue;
-  } else if (songId && direction) {
-    const idx = queue.findIndex(s => s.id === songId);
+  } else if ((queueId || songId) && direction) {
+    const target = queueId || songId;
+    const idx = queue.findIndex(s => s.queueId === target || s.id === target);
     if (idx !== -1) {
       const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
       if (targetIdx >= 0 && targetIdx < queue.length) {

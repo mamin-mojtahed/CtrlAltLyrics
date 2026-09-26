@@ -25,6 +25,7 @@ const io = new Server(server, {
 let currentState = {
   songId: null,
   songData: null,
+  queueId: null,
   currentTime: 0,
   isPlaying: false,
   volumes: {

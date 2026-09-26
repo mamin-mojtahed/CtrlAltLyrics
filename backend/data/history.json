@@ -679,5 +679,207 @@
     "spotifyTrackId": "3FsqlxtjL2EJ5kxwgdj1Yl",
     "isSpotify": true,
     "isUploaded": false
+  },
+  {
+    "id": "1528780636",
+    "title": "Ashegh",
+    "artist": "Siavash Ghomayshi",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/4b/5e/8b/4b5e8b70-79c5-fd1c-88f9-9ee45bc6d1b5/Siavash_Ghomayshi_-_Ashegh_-_Album_Cover_-_1400x1400.png/100x100bb.jpg",
+    "query": "Ashegh Siavash Ghomayshi",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/1528780636/instrumental.mp3",
+      "lead": "/audio/1528780636/lead_vocal.mp3",
+      "back": "/audio/1528780636/back_vocal.mp3",
+      "full": "/audio/1528780636/audio.mp3"
+    },
+    "downloadMethod": "yt-dlp Direct (Title + Artist)",
+    "downloadAttempts": [
+      {
+        "provider": "SpotDL",
+        "status": "failed",
+        "detail": "SpotDL verified search failed on Spotify catalog for \"Ashegh Siavash Ghomayshi\""
+      },
+      {
+        "provider": "yt-dlp Direct (Title + Artist)",
+        "status": "success",
+        "detail": "Audio extracted via YouTube audio search for \"Ashegh Siavash Ghomayshi\""
+      },
+      {
+        "provider": "yt-dlp Title Fallback",
+        "status": "skipped",
+        "detail": "Not needed (acquired via yt-dlp Direct)"
+      }
+    ],
+    "engineSettings": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "isCustom": false
+    },
+    "separationInfo": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "primaryModel": "UVR-MDX-NET-Inst_HQ_3.onnx",
+      "karaokeModel": "5_HP-Karaoke-UVR.pth",
+      "isCustom": false
+    },
+    "lyricsProvider": "LRCLIB (Synced)",
+    "isSynced": true,
+    "hasLyrics": true,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false
+  },
+  {
+    "id": "92286036",
+    "title": "Cheshme Man",
+    "artist": "Dariush",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/63/fb/86/63fb86d5-cd27-b292-318b-641657fbac8f/dj.wjuvanei.jpg/100x100bb.jpg",
+    "query": "Cheshme Man Dariush",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/92286036/instrumental.mp3",
+      "lead": "/audio/92286036/lead_vocal.mp3",
+      "back": "/audio/92286036/back_vocal.mp3",
+      "full": "/audio/92286036/audio.mp3"
+    },
+    "downloadMethod": "yt-dlp Direct (Title + Artist)",
+    "downloadAttempts": [
+      {
+        "provider": "SpotDL",
+        "status": "failed",
+        "detail": "SpotDL verified search failed on Spotify catalog for \"Cheshme Man Dariush\""
+      },
+      {
+        "provider": "yt-dlp Direct (Title + Artist)",
+        "status": "success",
+        "detail": "Audio extracted via YouTube audio search for \"Cheshme Man Dariush\""
+      },
+      {
+        "provider": "yt-dlp Title Fallback",
+        "status": "skipped",
+        "detail": "Not needed (acquired via yt-dlp Direct)"
+      }
+    ],
+    "engineSettings": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "isCustom": false
+    },
+    "separationInfo": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "primaryModel": "UVR-MDX-NET-Inst_HQ_3.onnx",
+      "karaokeModel": "5_HP-Karaoke-UVR.pth",
+      "isCustom": false
+    },
+    "lyricsProvider": "LRCLIB (Synced)",
+    "isSynced": true,
+    "hasLyrics": true,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false
+  },
+  {
+    "id": "6792690860",
+    "title": "Hamkhooneh (feat. Viguen)",
+    "artist": "هایده",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/eb/71/af/eb71afc4-546a-6388-e61c-8a6a4c95ebaf/859742684654_cover.jpg/100x100bb.jpg",
+    "query": "Hamkhooneh (feat. Viguen) هایده",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/6792690860/instrumental.mp3",
+      "lead": "/audio/6792690860/lead_vocal.mp3",
+      "back": "/audio/6792690860/back_vocal.mp3",
+      "full": "/audio/6792690860/audio.mp3"
+    },
+    "downloadMethod": "yt-dlp Direct (Title + Artist)",
+    "downloadAttempts": [
+      {
+        "provider": "SpotDL",
+        "status": "failed",
+        "detail": "SpotDL verified search failed on Spotify catalog for \"Hamkhooneh (feat. Viguen) هایده\""
+      },
+      {
+        "provider": "yt-dlp Direct (Title + Artist)",
+        "status": "success",
+        "detail": "Audio extracted via YouTube audio search for \"Hamkhooneh (feat. Viguen) هایده\""
+      },
+      {
+        "provider": "yt-dlp Title Fallback",
+        "status": "skipped",
+        "detail": "Not needed (acquired via yt-dlp Direct)"
+      }
+    ],
+    "engineSettings": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "isCustom": false
+    },
+    "separationInfo": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "primaryModel": "UVR-MDX-NET-Inst_HQ_3.onnx",
+      "karaokeModel": "5_HP-Karaoke-UVR.pth",
+      "isCustom": false
+    },
+    "lyricsProvider": "Musixmatch (Synced)",
+    "isSynced": true,
+    "hasLyrics": true,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false
+  },
+  {
+    "id": "upload_1787439244332",
+    "title": "Mitra (Hamkhooneh)",
+    "artist": "Mohsen Namjoo",
+    "albumArt": "/audio/upload_1787439244332/cover.jpg",
+    "query": "Mitra Mohsen Namjoo",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/upload_1787439244332/instrumental.mp3",
+      "lead": "/audio/upload_1787439244332/lead_vocal.mp3",
+      "back": "/audio/upload_1787439244332/back_vocal.mp3",
+      "full": "/audio/upload_1787439244332/audio.mp3"
+    },
+    "downloadMethod": "Uploaded",
+    "downloadAttempts": [
+      {
+        "provider": "Local File Upload",
+        "status": "success",
+        "detail": "Uploaded \"Mitra.mp3\" (9.63 MB)"
+      }
+    ],
+    "engineSettings": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "isCustom": true
+    },
+    "separationInfo": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "primaryModel": "UVR-MDX-NET-Inst_HQ_3.onnx",
+      "karaokeModel": "5_HP-Karaoke-UVR.pth",
+      "isCustom": true
+    },
+    "lyricsProvider": "Musixmatch (Synced)",
+    "isSynced": true,
+    "hasLyrics": true,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": true
   }
 ]
