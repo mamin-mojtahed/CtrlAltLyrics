@@ -33,7 +33,8 @@ let currentState = {
     instrumentals: 1,
     lead: 1,
     back: 1
-  }
+  },
+  showKaraokeSlide: true
 };
 
 io.on('connection', (socket) => {

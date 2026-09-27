@@ -264,6 +264,7 @@ function setupAudio(song) {
     timelineSlider.max = dur;
     if (timeDisplay) timeDisplay.innerText = formatTimeDisplay(pauseTime || 0, dur);
     updateLyricsCounter(pauseTime || 0);
+    socket.emit('update_state', { duration: dur });
   }).catch(e => console.error("Error loading audio:", e));
 
   return audioLoadingPromise;
@@ -823,13 +824,21 @@ function renderLibrary() {
     const isActive = currentSong && currentSong.id === song.id;
     return `
       <div class="song-card ${isActive ? 'active-playing' : ''}">
-        <!-- Row 1: Song Info -->
-        <div style="display:flex; align-items:center; gap: 0.75rem;">
-          <img src="${escapeHtml(song.albumArt)}" alt="art" onerror="this.onerror=null; this.src='/ctrlaltlyrics-logo.webp';">
-          <div class="song-info">
-            <div class="song-title">${escapeHtml(song.title)} ${isActive ? '<span style="font-size:0.7rem; color:var(--accent); margin-left:0.3rem;"><i class="icon-play"></i> Playing</span>' : ''}</div>
-            <div class="song-artist">${escapeHtml(song.artist)}</div>
+        <!-- Row 1: Song Info & Top-Right Playing Badge -->
+        <div class="song-card-header">
+          <div class="song-card-meta">
+            <img src="${escapeHtml(song.albumArt || '/ctrlaltlyrics-logo.webp')}" alt="art" onerror="this.onerror=null; this.src='/ctrlaltlyrics-logo.webp';">
+            <div class="song-info">
+              <div class="song-title">${escapeHtml(song.title)}</div>
+              <div class="song-artist">${escapeHtml(song.artist)}</div>
+            </div>
           </div>
+          ${isActive ? `
+            <div class="currently-playing-badge" title="Currently Playing">
+              <i class="icon-play"></i>
+              <span class="currently-playing-label">Playing</span>
+            </div>
+          ` : ''}
         </div>
         <!-- Row 2: Status Badges (Left) & Action Buttons (Right) -->
         <div class="song-card-actions-row">
@@ -924,16 +933,30 @@ function renderQueue(data) {
                 <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
               </button>
             </div>
-            <img src="${escapeHtml(song.albumArt)}" alt="art" onerror="this.onerror=null; this.src='/ctrlaltlyrics-logo.webp';">
+            <img src="${escapeHtml(song.albumArt || '/ctrlaltlyrics-logo.webp')}" alt="art" onerror="this.onerror=null; this.src='/ctrlaltlyrics-logo.webp';">
             <div class="song-info">
-              <div class="song-title">${escapeHtml(song.title)} ${isActive ? '<span style="font-size:0.7rem; color:var(--accent); margin-left:0.3rem;"><i class="icon-play"></i> Playing</span>' : ''} ${isProcessing ? '<span style="font-size:0.7rem; color:#fbbf24; margin-left:0.3rem;"><i class="icon-clock"></i> Processing</span>' : ''}</div>
+              <div class="song-title">${escapeHtml(song.title)}</div>
               <div class="song-artist">${escapeHtml(song.artist)}</div>
             </div>
           </div>
 
-          <!-- Queue Management Controls (Icons Only) -->
-          <div class="queue-controls-group" onclick="event.stopPropagation();">
-            <button class="queue-icon-btn" onclick="removeFromQueue('${qId}', event)" title="Remove from Queue"><i class="icon-x"></i></button>
+          <div style="display:flex; align-items:center; gap: 0.5rem; flex-shrink: 0;">
+            ${isActive ? `
+              <div class="currently-playing-badge" title="Currently Playing">
+                <i class="icon-play"></i>
+                <span class="currently-playing-label">Playing</span>
+              </div>
+            ` : ''}
+            ${isProcessing ? `
+              <span class="queue-processing-badge" title="Processing">
+                <i class="icon-clock"></i>
+                <span class="queue-processing-label">Processing</span>
+              </span>
+            ` : ''}
+            <!-- Queue Management Controls (Icons Only) -->
+            <div class="queue-controls-group" onclick="event.stopPropagation();">
+              <button class="queue-icon-btn" onclick="removeFromQueue('${qId}', event)" title="Remove from Queue"><i class="icon-x"></i></button>
+            </div>
           </div>
         </div>
       </div>
@@ -1191,7 +1214,7 @@ async function executeSearch() {
         card.style.outline = 'none';
 
         const artImg = document.createElement('img');
-        artImg.src = song.albumArt || '';
+        artImg.src = song.albumArt || '/ctrlaltlyrics-logo.webp';
         artImg.alt = 'art';
         artImg.onerror = () => { artImg.onerror = null; artImg.src = '/ctrlaltlyrics-logo.webp'; };
 
@@ -2467,6 +2490,7 @@ if (toggleLyricsExpandBtn && lyricsSection) {
 // Toggles
 const toggleTranslit = document.getElementById('toggleTranslit');
 const toggleTranslat = document.getElementById('toggleTranslat');
+const toggleKaraokeSlide = document.getElementById('toggleKaraokeSlide');
 
 if (toggleTranslit) {
   toggleTranslit.addEventListener('change', (e) => {
@@ -2476,6 +2500,11 @@ if (toggleTranslit) {
 if (toggleTranslat) {
   toggleTranslat.addEventListener('change', (e) => {
     socket.emit('update_state', { showTranslat: e.target.checked });
+  });
+}
+if (toggleKaraokeSlide) {
+  toggleKaraokeSlide.addEventListener('change', (e) => {
+    socket.emit('update_state', { showKaraokeSlide: e.target.checked });
   });
 }
 
@@ -2497,6 +2526,9 @@ socket.on('sync_state', (state) => {
   }
   if (state.showTranslat !== undefined && toggleTranslat) {
     toggleTranslat.checked = !!state.showTranslat;
+  }
+  if (toggleKaraokeSlide) {
+    toggleKaraokeSlide.checked = state.showKaraokeSlide !== undefined ? !!state.showKaraokeSlide : true;
   }
 
   if (state.isPlaying === false) {
@@ -2567,6 +2599,8 @@ socket.on('player_command', (cmd) => {
     playPrev();
   } else if (cmd.command === 'play_next') {
     playNext();
+  } else if (cmd.command === 'select_song' && cmd.id) {
+    selectSong(cmd.id, true, cmd.queueId);
   } else if (cmd.command === 'set_volumes' && cmd.volumes) {
     if (cmd.volumes.instrumentals !== undefined) volInst.value = cmd.volumes.instrumentals;
     if (cmd.volumes.back !== undefined) volBackVoc.value = cmd.volumes.back;
