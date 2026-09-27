@@ -346,16 +346,21 @@ async function playAudio(offset = 0) {
 }
 
 function pauseAudio() {
+  const currentActualTime = (currentState.isPlaying && audioCtx && audioCtx.state === 'running') 
+    ? (audioCtx.currentTime - audioStartTime) 
+    : (pauseTime || currentState.currentTime || 0);
   stopSource(sources.leadVoc);
   stopSource(sources.backVoc);
   stopSource(sources.inst);
   sources.leadVoc = null;
   sources.backVoc = null;
   sources.inst = null;
-  pauseTime = (currentState.isPlaying && audioCtx.state === 'running') ? (audioCtx.currentTime - audioStartTime) : pauseTime;
+  pauseTime = currentActualTime;
+  currentState.currentTime = currentActualTime;
   currentState.isPlaying = false;
   playPauseBtn.innerHTML = '<i class="icon-play"></i>';
-  socket.emit('player_command', { command: 'pause' });
+  socket.emit('player_command', { command: 'pause', time: currentActualTime });
+  socket.emit('update_state', { isPlaying: false, currentTime: currentActualTime });
 }
 
 async function togglePlayPause() {
@@ -2592,6 +2597,20 @@ socket.on('player_command', (cmd) => {
     updateLyricsCounter(cmd.time);
     if (currentState.isPlaying && (sources.leadVoc || sources.inst || sources.backVoc)) {
       playAudio(cmd.time);
+    }
+  } else if (cmd.command === 'pause') {
+    if (typeof cmd.time === 'number' && !isNaN(cmd.time)) {
+      pauseTime = cmd.time;
+      currentState.currentTime = cmd.time;
+      if (!isDraggingSlider) {
+        timelineSlider.value = cmd.time;
+        const maxDur = parseFloat(timelineSlider.max) || 0;
+        if (timeDisplay) timeDisplay.innerText = formatTimeDisplay(cmd.time, maxDur);
+        updateLyricsCounter(cmd.time);
+      }
+    }
+    if (currentState.isPlaying) {
+      pauseAudio();
     }
   } else if (cmd.command === 'toggle_play') {
     togglePlayPause();

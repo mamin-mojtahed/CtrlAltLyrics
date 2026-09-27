@@ -10,6 +10,7 @@ const displaySongArtist = document.getElementById('displaySongArtist');
 
 const displayPlayPauseBtn = document.getElementById('displayPlayPauseBtn');
 const toggleSidebarBtn = document.getElementById('toggleSidebarBtn');
+const songSidebar = document.getElementById('songSidebar');
 
 const displayTimelineSlider = document.getElementById('displayTimelineSlider');
 const displayTimeDisplay = document.getElementById('displayTimeDisplay');
@@ -161,6 +162,18 @@ let displayGainNodes = {};
 let displayAudioStartTime = 0;
 let displayPauseTime = 0;
 let displayAudioLoadingPromise = null;
+let lastRenderedDisplayTime = 0;
+
+function getDisplayCurrentTime() {
+  if (currentState.isPlaying && audioCtx.state === 'running' && (displaySources.leadVoc || displaySources.inst)) {
+    return Math.max(0, audioCtx.currentTime - displayAudioStartTime);
+  } else if (currentState.isPlaying) {
+    const now = performance.now();
+    const elapsed = lastSyncTimestamp > 0 ? (now - lastSyncTimestamp) / 1000 : 0;
+    return Math.max(0, (currentState.currentTime || 0) + elapsed);
+  }
+  return currentState.currentTime || 0;
+}
 
 function stopDisplayAudio() {
   if (displaySources.leadVoc) { try { displaySources.leadVoc.onended = null; displaySources.leadVoc.stop(); } catch(e){} }
@@ -275,11 +288,24 @@ async function playDisplayAudio(offset = 0) {
 }
 
 function pauseDisplayAudio() {
+  const currentActualTime = getDisplayCurrentTime();
   stopDisplayAudio();
-  displayPauseTime = (currentState.isPlaying && audioCtx.state === 'running') ? (audioCtx.currentTime - displayAudioStartTime) : (currentState.currentTime || 0);
+  displayPauseTime = currentActualTime;
+  currentState.currentTime = currentActualTime;
   currentState.isPlaying = false;
+  lastRenderedDisplayTime = currentActualTime;
+  lastSyncTimestamp = 0;
   updatePlaybackStatusUI();
-  socket.emit('player_command', { command: 'pause' });
+  const dur = getResolvedDuration();
+  if (displayTimelineSlider && !isDraggingDisplaySlider) {
+    displayTimelineSlider.value = currentActualTime;
+  }
+  if (displayTimeDisplay) {
+    displayTimeDisplay.innerText = formatDisplayTimeDisplay(currentActualTime, dur);
+  }
+  updateLyrics(currentActualTime);
+  socket.emit('player_command', { command: 'pause', time: currentActualTime });
+  socket.emit('update_state', { isPlaying: false, currentTime: currentActualTime });
 }
 
 async function toggleDisplayPlayPause() {
@@ -315,6 +341,14 @@ if (toggleSidebarBtn) {
   });
 }
 
+
+
+// On narrow screens (phone), default sidebar to collapsed so lyrics are fully visible
+if (window.innerWidth <= 768) {
+  displayContainer.classList.add('sidebar-hidden');
+  if (toggleSidebarBtn) toggleSidebarBtn.classList.add('disk-hidden-mode');
+}
+
 // On display tab load/reload, ensure local state and UI are strictly paused
 currentState.isPlaying = false;
 stopDisplayAudio();
@@ -346,6 +380,8 @@ function toggleAudioBlockedBanner(isBlocked) {
 socket.on('sync_state', (state) => {
   const previousSongId = currentState.songId;
   const previousQueueId = currentState.queueId;
+  const wasPlaying = currentState.isPlaying;
+  const prevRenderedTime = lastRenderedDisplayTime || getDisplayCurrentTime();
   currentState = { ...currentState, ...state };
 
   if (state.showKaraokeSlide !== undefined) {
@@ -368,15 +404,29 @@ socket.on('sync_state', (state) => {
       const now = performance.now();
       const localElapsed = lastSyncTimestamp > 0 ? (now - lastSyncTimestamp) / 1000 : 0;
       const currentInterpolated = (currentState.currentTime || 0) + localElapsed;
-      // Only jump if there's a real seek or large delta (>0.45s); ignore minor latency drift
-      if (Math.abs(state.currentTime - currentInterpolated) > 0.45) {
+      const delta = state.currentTime - currentInterpolated;
+      if (Math.abs(delta) > 0.45) {
         currentState.currentTime = state.currentTime;
+        lastSyncTimestamp = now;
+      } else {
+        // Soft clock correction: nudge base time to eliminate accumulated drift without visual jitter
+        currentState.currentTime = currentInterpolated + delta * 0.2;
         lastSyncTimestamp = now;
       }
     } else {
-      currentState.currentTime = state.currentTime;
+      // Paused state: if transitioning from playing, do not trim backward by a few pixels
+      if (wasPlaying && prevRenderedTime > state.currentTime && (prevRenderedTime - state.currentTime) < 0.35) {
+        currentState.currentTime = prevRenderedTime;
+      } else {
+        currentState.currentTime = state.currentTime;
+      }
+      lastRenderedDisplayTime = currentState.currentTime;
       lastSyncTimestamp = 0;
     }
+  } else if (state.isPlaying === false && wasPlaying) {
+    currentState.currentTime = prevRenderedTime;
+    lastRenderedDisplayTime = prevRenderedTime;
+    lastSyncTimestamp = 0;
   }
 
   if (state.volumes && displayGainNodes.inst) {
@@ -417,7 +467,7 @@ socket.on('sync_state', (state) => {
       if (displayTimeDisplay) displayTimeDisplay.innerText = formatDisplayTimeDisplay(state.currentTime, dur);
     }
     checkAndRenderNextUpQueue(state.currentTime || 0, dur);
-  } else if (!state.songId || !state.songData) {
+  } else if (state.songId === null || state.songData === null) {
     songData = null;
     displayDuration = 0;
     if (displayTimelineSlider) {
@@ -451,6 +501,7 @@ socket.on('player_command', (cmd) => {
   if (cmd.command === 'seek' && typeof cmd.time === 'number') {
     displayPauseTime = cmd.time;
     currentState.currentTime = cmd.time;
+    lastRenderedDisplayTime = cmd.time;
     if (currentState.isPlaying) {
       lastSyncTimestamp = performance.now();
     }
@@ -466,6 +517,29 @@ socket.on('player_command', (cmd) => {
     if (currentState.isPlaying && (displaySources.leadVoc || displaySources.inst)) {
       playDisplayAudio(cmd.time);
     }
+  } else if (cmd.command === 'pause') {
+    stopDisplayAudio();
+    const prevRenderedTime = lastRenderedDisplayTime || getDisplayCurrentTime();
+    let targetTime = prevRenderedTime;
+    if (typeof cmd.time === 'number' && !isNaN(cmd.time)) {
+      if (cmd.time >= prevRenderedTime || (prevRenderedTime - cmd.time) >= 0.35) {
+        targetTime = cmd.time;
+      }
+    }
+    displayPauseTime = targetTime;
+    currentState.currentTime = targetTime;
+    currentState.isPlaying = false;
+    lastRenderedDisplayTime = targetTime;
+    lastSyncTimestamp = 0;
+    updatePlaybackStatusUI();
+    const dur = getResolvedDuration();
+    if (displayTimelineSlider && !isDraggingDisplaySlider) {
+      displayTimelineSlider.value = targetTime;
+    }
+    if (displayTimeDisplay) {
+      displayTimeDisplay.innerText = formatDisplayTimeDisplay(targetTime, dur);
+    }
+    updateLyrics(targetTime);
   }
 });
 
@@ -911,23 +985,31 @@ function calculateLyricsLineBreaks() {
   const oldMeasureBox = document.getElementById('lyricsLineMeasureBox');
   if (oldMeasureBox) oldMeasureBox.remove();
 
-  // Find a representative non-instrumental lyric line to measure exact rendered content width
+  // Calculate maximum line width available within lyricsContainer
+  const computedContainer = window.getComputedStyle(lyricsContainer);
+  const containerPadLeft = parseFloat(computedContainer.paddingLeft) || 24;
+  const containerPadRight = parseFloat(computedContainer.paddingRight) || 24;
+  const containerInnerWidth = lyricsContainer.clientWidth - containerPadLeft - containerPadRight;
+
   const sampleLine = lyricsContainer.querySelector('.lyric-line:not(.is-instrumental)') || lyricsContainer.querySelector('.lyric-line');
-  let availableWidth = 0;
-  if (sampleLine && sampleLine.clientWidth > 0) {
+  let linePad = 48; // default 1.5rem (24px) each side
+  let textPad = 18; // default 0.25em each side
+  if (sampleLine) {
     const lineStyle = window.getComputedStyle(sampleLine);
-    const padLeft = parseFloat(lineStyle.paddingLeft) || 20;
-    const padRight = parseFloat(lineStyle.paddingRight) || 20;
-    availableWidth = sampleLine.clientWidth - padLeft - padRight;
-  } else {
-    const computedContainer = window.getComputedStyle(lyricsContainer);
-    const containerPadLeft = parseFloat(computedContainer.paddingLeft) || 24;
-    const containerPadRight = parseFloat(computedContainer.paddingRight) || 24;
-    availableWidth = lyricsContainer.clientWidth - containerPadLeft - containerPadRight - 40;
+    linePad = (parseFloat(lineStyle.paddingLeft) || 24) + (parseFloat(lineStyle.paddingRight) || 24);
+    const sampleText = sampleLine.querySelector('.lyric-text');
+    if (sampleText) {
+      const textStyle = window.getComputedStyle(sampleText);
+      textPad = (parseFloat(textStyle.paddingLeft) || 0) + (parseFloat(textStyle.paddingRight) || 0);
+    }
   }
 
-  // Available content width minus slight breathing margin (10px)
-  const maxLineWidth = Math.max(180, Math.floor(availableWidth - 10));
+  // Available width accounting for container limits, line limits (3rem = 48px), and inner text padding
+  const maxLineBoxWidth = Math.min(containerInnerWidth, containerInnerWidth - 48);
+  const availableWidth = Math.max(180, maxLineBoxWidth - linePad - textPad);
+
+  // Available content width minus breathing margin (16px)
+  const maxLineWidth = Math.max(180, Math.floor(availableWidth - 16));
 
   const ctx = getLyricsMeasureContext();
   const sampleComputed = sampleLine ? window.getComputedStyle(sampleLine) : window.getComputedStyle(lyricsContainer);
@@ -1023,16 +1105,8 @@ function karaokeLoop() {
 
   if (!songData || !displayLyrics || displayLyrics.length === 0) return;
 
-  let curTime = 0;
-  if (currentState.isPlaying && audioCtx.state === 'running' && (displaySources.leadVoc || displaySources.inst)) {
-    curTime = audioCtx.currentTime - displayAudioStartTime;
-  } else if (currentState.isPlaying) {
-    const now = performance.now();
-    const elapsed = lastSyncTimestamp > 0 ? (now - lastSyncTimestamp) / 1000 : 0;
-    curTime = Math.max(0, (currentState.currentTime || 0) + elapsed);
-  } else {
-    curTime = currentState.currentTime || 0;
-  }
+  const curTime = getDisplayCurrentTime();
+  lastRenderedDisplayTime = curTime;
 
   updateLyrics(curTime);
 
@@ -1207,7 +1281,7 @@ setInterval(() => {
       socket.emit('update_state', { currentTime: curTime });
     }
   } else if (currentState.isPlaying) {
-    const curTime = currentState.currentTime || 0;
+    const curTime = getDisplayCurrentTime();
     if (!isDraggingDisplaySlider && displayTimelineSlider) {
       displayTimelineSlider.value = curTime;
     }
@@ -1604,6 +1678,8 @@ window.__displayCtrl = {
   calculateLyricsLineBreaks,
   balanceLyricLine,
   getLyricsMeasureContext,
-  updateKaraokeSlideVisibility
+  updateKaraokeSlideVisibility,
+  getDisplayCurrentTime,
+  pauseDisplayAudio
 };
 

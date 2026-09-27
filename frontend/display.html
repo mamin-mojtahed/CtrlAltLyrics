@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Display | Ctrl+Alt+Lyrics</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="icon" type="image/png" href="/ctrlaltlyrics-logo.webp">
@@ -13,7 +14,9 @@
     </div>
     <canvas id="visualizer"></canvas>
     
-    <!-- Left 1/3 Section: Song Info Sidebar -->
+
+
+    <!-- Song Info Sidebar (Desktop: Left Sidebar, Mobile: Bottom Sheet Drawer) -->
     <aside class="song-info-sidebar glass" id="songSidebar">
         <div class="cover-wrapper">
           <img id="displaySongCover" src="/ctrlaltlyrics-logo.webp" alt="Album Cover" onerror="this.onerror=null; this.src='/ctrlaltlyrics-logo.webp';">

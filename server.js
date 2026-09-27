@@ -63,6 +63,9 @@ io.on('connection', (socket) => {
       currentState.isPlaying = true;
     } else if (cmd.command === 'pause') {
       currentState.isPlaying = false;
+      if (typeof cmd.time === 'number' && !isNaN(cmd.time)) {
+        currentState.currentTime = cmd.time;
+      }
     } else if (cmd.command === 'seek' && typeof cmd.time === 'number') {
       currentState.currentTime = cmd.time;
     } else if (cmd.command === 'set_volumes' && cmd.volumes) {
