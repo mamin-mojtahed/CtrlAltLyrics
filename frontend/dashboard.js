@@ -623,6 +623,291 @@ volLeadVoc.addEventListener('input', (e) => {
 
 updateAllFaderTrackFills();
 
+// Magic Mouse Stem Fader Control (Multi-Button Drag)
+const magicMouseFaderBtn = document.getElementById('magicMouseFaderBtn');
+const magicMouseBtnLeft = document.getElementById('magicMouseBtnLeft');
+const magicMouseBtnMiddle = document.getElementById('magicMouseBtnMiddle');
+const magicMouseBtnRight = document.getElementById('magicMouseBtnRight');
+
+if (magicMouseFaderBtn) {
+  let isMagicActive = false;
+  let activePointerId = null;
+  let lastClientY = null;
+  let isLeftHeld = false;
+  let isMiddleHeld = false;
+  let isRightHeld = false;
+
+  function updateSvgButtons(left, middle, right) {
+    isLeftHeld = left;
+    isMiddleHeld = middle;
+    isRightHeld = right;
+    if (magicMouseBtnLeft) magicMouseBtnLeft.classList.toggle('active', left);
+    if (magicMouseBtnMiddle) magicMouseBtnMiddle.classList.toggle('active', middle);
+    if (magicMouseBtnRight) magicMouseBtnRight.classList.toggle('active', right);
+  }
+
+  function applyMagicMovement(dy) {
+    if (!isMagicActive || dy === 0) return;
+    if (!isLeftHeld && !isMiddleHeld && !isRightHeld) return;
+
+    // dy > 0: dragged down (decrease volume)
+    // dy < 0: dragged up (increase volume)
+    const delta = -dy * 0.006;
+
+    let instVal = parseFloat(volInst.value) || 0;
+    let backVal = parseFloat(volBackVoc.value) || 0;
+    let leadVal = parseFloat(volLeadVoc.value) || 0;
+
+    const clamp = (v) => Math.max(0, Math.min(1, Math.round(v * 1000) / 1000));
+
+    let instChanged = false;
+    let backChanged = false;
+    let leadChanged = false;
+
+    // Apply delta to directly held channels
+    if (isLeftHeld) {
+      instVal = clamp(instVal + delta);
+      instChanged = true;
+    }
+    if (isMiddleHeld) {
+      backVal = clamp(backVal + delta);
+      backChanged = true;
+    }
+    if (isRightHeld) {
+      leadVal = clamp(leadVal + delta);
+      leadChanged = true;
+    }
+
+    // Apply linking constraints
+    if (isInstBackLinked && isBackLeadLinked) {
+      // All three linked
+      if (instChanged) {
+        backVal = instVal;
+        leadVal = instVal;
+      } else if (backChanged) {
+        instVal = backVal;
+        leadVal = backVal;
+      } else if (leadChanged) {
+        instVal = leadVal;
+        backVal = leadVal;
+      }
+    } else if (isInstBackLinked) {
+      // Inst & Back linked
+      if (instChanged && !backChanged) {
+        backVal = instVal;
+      } else if (backChanged && !instChanged) {
+        instVal = backVal;
+      } else if (instChanged && backChanged) {
+        backVal = instVal;
+      }
+    } else if (isBackLeadLinked) {
+      // Back & Lead linked
+      if (backChanged && !leadChanged) {
+        leadVal = backVal;
+      } else if (leadChanged && !backChanged) {
+        backVal = leadVal;
+      } else if (backChanged && leadChanged) {
+        leadVal = backVal;
+      }
+    }
+
+    volInst.value = instVal;
+    volBackVoc.value = backVal;
+    volLeadVoc.value = leadVal;
+
+    if (gainNodes.inst) gainNodes.inst.gain.value = instVal;
+    if (gainNodes.backVoc) gainNodes.backVoc.gain.value = backVal;
+    if (gainNodes.leadVoc) gainNodes.leadVoc.gain.value = leadVal;
+
+    updateAllFaderTrackFills();
+
+    socket.emit('update_state', {
+      volumes: {
+        ...currentState.volumes,
+        instrumentals: instVal,
+        back: backVal,
+        lead: leadVal
+      }
+    });
+  }
+
+  function startMagicMode(e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    isMagicActive = true;
+    magicMouseFaderBtn.classList.add('active');
+    lastClientY = e.clientY;
+    activePointerId = e.pointerId ?? null;
+
+    // Determine pressed buttons
+    let buttons = e.buttons;
+    if (!buttons) {
+      if (e.button === 0) buttons = 1;
+      else if (e.button === 1) buttons = 4;
+      else if (e.button === 2) buttons = 2;
+    }
+
+    const left = (buttons & 1) !== 0;
+    const right = (buttons & 2) !== 0;
+    const middle = (buttons & 4) !== 0;
+    updateSvgButtons(left, middle, right);
+
+    // Request pointer lock to hold pointer in place
+    if (magicMouseFaderBtn.requestPointerLock) {
+      try {
+        const p = magicMouseFaderBtn.requestPointerLock();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      } catch (err) {}
+    }
+
+    // Pointer capture fallback/supplement
+    if (typeof e.pointerId === 'number' && magicMouseFaderBtn.setPointerCapture) {
+      try {
+        magicMouseFaderBtn.setPointerCapture(e.pointerId);
+      } catch (err) {}
+    }
+  }
+
+  function updateHeldButtonsFromEvent(e) {
+    if (!isMagicActive) return;
+
+    let buttons = e.buttons;
+    if (e.type === 'pointerup' || e.type === 'mouseup') {
+      if (e.button === 0) buttons &= ~1;
+      else if (e.button === 1) buttons &= ~4;
+      else if (e.button === 2) buttons &= ~2;
+    } else if (e.type === 'pointerdown' || e.type === 'mousedown') {
+      if (e.button === 0) buttons |= 1;
+      else if (e.button === 1) buttons |= 4;
+      else if (e.button === 2) buttons |= 2;
+    }
+
+    if (buttons === 0) {
+      endMagicMode();
+      return;
+    }
+
+    const left = (buttons & 1) !== 0;
+    const right = (buttons & 2) !== 0;
+    const middle = (buttons & 4) !== 0;
+    updateSvgButtons(left, middle, right);
+  }
+
+  function endMagicMode() {
+    if (!isMagicActive) return;
+    isMagicActive = false;
+    magicMouseFaderBtn.classList.remove('active');
+    updateSvgButtons(false, false, false);
+
+    if (document.pointerLockElement === magicMouseFaderBtn) {
+      try {
+        document.exitPointerLock?.();
+      } catch (err) {}
+    }
+
+    if (activePointerId !== null && magicMouseFaderBtn.releasePointerCapture) {
+      try {
+        magicMouseFaderBtn.releasePointerCapture(activePointerId);
+      } catch (err) {}
+      activePointerId = null;
+    }
+    lastClientY = null;
+  }
+
+  magicMouseFaderBtn.addEventListener('pointerdown', (e) => {
+    startMagicMode(e);
+  });
+
+  magicMouseFaderBtn.addEventListener('mousedown', (e) => {
+    if (!isMagicActive) startMagicMode(e);
+  });
+
+  window.addEventListener('pointerdown', (e) => {
+    if (isMagicActive) {
+      e.preventDefault();
+      updateHeldButtonsFromEvent(e);
+    }
+  });
+
+  window.addEventListener('mousedown', (e) => {
+    if (isMagicActive) {
+      e.preventDefault();
+      updateHeldButtonsFromEvent(e);
+    }
+  });
+
+  window.addEventListener('pointermove', (e) => {
+    if (!isMagicActive) return;
+    e.preventDefault();
+
+    let dy = 0;
+    if (document.pointerLockElement === magicMouseFaderBtn && typeof e.movementY === 'number' && e.movementY !== 0) {
+      dy = e.movementY;
+    } else if (lastClientY !== null && typeof e.clientY === 'number') {
+      dy = e.clientY - lastClientY;
+    }
+    if (typeof e.clientY === 'number') {
+      lastClientY = e.clientY;
+    }
+
+    updateHeldButtonsFromEvent(e);
+    applyMagicMovement(dy);
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!isMagicActive) return;
+    if (!window.PointerEvent) {
+      e.preventDefault();
+      let dy = 0;
+      if (document.pointerLockElement === magicMouseFaderBtn && typeof e.movementY === 'number') {
+        dy = e.movementY;
+      } else if (lastClientY !== null) {
+        dy = e.clientY - lastClientY;
+      }
+      lastClientY = e.clientY;
+      updateHeldButtonsFromEvent(e);
+      applyMagicMovement(dy);
+    }
+  });
+
+  window.addEventListener('pointerup', (e) => {
+    if (isMagicActive) {
+      e.preventDefault();
+      updateHeldButtonsFromEvent(e);
+    }
+  });
+
+  window.addEventListener('mouseup', (e) => {
+    if (isMagicActive) {
+      e.preventDefault();
+      updateHeldButtonsFromEvent(e);
+    }
+  });
+
+  window.addEventListener('pointercancel', () => {
+    if (isMagicActive) endMagicMode();
+  });
+
+  magicMouseFaderBtn.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+  });
+  window.addEventListener('contextmenu', (e) => {
+    if (isMagicActive) e.preventDefault();
+  }, { capture: true });
+
+  magicMouseFaderBtn.addEventListener('auxclick', (e) => {
+    e.preventDefault();
+  });
+  window.addEventListener('auxclick', (e) => {
+    if (isMagicActive) e.preventDefault();
+  }, { capture: true });
+
+  window.addEventListener('blur', () => {
+    if (isMagicActive) endMagicMode();
+  });
+}
+
 // Keyboard Shortcuts
 window.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;

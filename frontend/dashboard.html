@@ -160,12 +160,22 @@
 
           <!-- Stem Audio Title & Shortcuts directly below title -->
           <div style="display:flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 0.25rem;">
-            <h3>Stem Mixer</h3>
-            <p class="mixer-shortcuts-hint" style="font-size:0.75rem; color:var(--text-secondary); margin-top: 0.25rem;">Q/A: Inst | W/S: Back | E/D: Lead</p>
+            <div class="stem-mixer-header-row" style="display:flex; align-items: center; justify-content: center; gap: 0.5rem;">
+              <h3 style="margin: 0;">Stem Mixer</h3>
+              <button id="magicMouseFaderBtn" class="magic-mouse-fader-btn magicMouseFaderBtn" title="Stem Mouse Fader: Hold Left (Inst), Middle (Back), Right (Lead) & Drag to Adjust" aria-label="Mouse Stem Fader Control">
+                <svg viewBox="0 0 24 30" class="magic-mouse-svg" xmlns="http://www.w3.org/2000/svg">
+                  <path id="magicMouseBtnLeft" class="mouse-btn mouse-btn-left" d="M 3,12.5 L 3,7 C 3,4.2 5.2,2 8.4,2 L 8.4,12.5 Z" />
+                  <path id="magicMouseBtnMiddle" class="mouse-btn mouse-btn-middle" d="M 9.3,2 L 14.7,2 L 14.7,12.5 L 9.3,12.5 Z" />
+                  <path id="magicMouseBtnRight" class="mouse-btn mouse-btn-right" d="M 15.6,2 C 18.8,2 21,4.2 21,7 L 21,12.5 L 15.6,12.5 Z" />
+                  <path class="mouse-body" d="M 3,13.8 L 21,13.8 L 21,21 C 21,25.5 17.5,28 12,28 C 6.5,28 3,25.5 3,21 Z" />
+                </svg>
+              </button>
+            </div>
           </div>
           
           <div class="mixer">
             <div class="fader-container">
+              <span class="fader-shortcut-key">Q/A</span>
               <input type="range" id="volInst" min="0" max="1" step="0.01" value="1">
               <span class="fader-label">Inst</span>
             </div>
@@ -174,6 +184,7 @@
             <button id="linkInstBackBtn" class="btn mixer-link-btn" title="Unlinked Inst & Back (Click to Link)"><i class="icon-unlink-2"></i></button>
 
             <div class="fader-container">
+              <span class="fader-shortcut-key">W/S</span>
               <input type="range" id="volBackVoc" min="0" max="1" step="0.01" value="1">
               <span class="fader-label">Back</span>
             </div>
@@ -182,6 +193,7 @@
             <button id="linkBackLeadBtn" class="btn mixer-link-btn" title="Unlinked Back & Lead (Click to Link)"><i class="icon-unlink-2"></i></button>
 
             <div class="fader-container">
+              <span class="fader-shortcut-key">E/D</span>
               <input type="range" id="volLeadVoc" min="0" max="1" step="0.01" value="1">
               <span class="fader-label">Lead</span>
             </div>

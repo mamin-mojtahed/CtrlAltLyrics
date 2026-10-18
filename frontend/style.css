@@ -510,6 +510,88 @@ input[type="text"]:focus, input[type="search"]:focus {
   box-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
 }
 
+/* Magic Mouse Stem Fader Button */
+.magic-mouse-fader-btn,
+.magicMouseFaderBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  cursor: ns-resize;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  transition: all 0.15s ease;
+}
+
+.magic-mouse-fader-btn:hover,
+.magicMouseFaderBtn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.35);
+}
+
+.magic-mouse-fader-btn.active,
+.magicMouseFaderBtn.active {
+  background: rgba(99, 102, 241, 0.18);
+  border-color: var(--accent, #6366f1);
+  box-shadow: 0 0 16px rgba(99, 102, 241, 0.65);
+  transform: scale(1.06);
+}
+
+.magic-mouse-svg {
+  width: 26px;
+  height: 32px;
+  overflow: visible;
+  display: block;
+}
+
+.magic-mouse-svg .mouse-btn {
+  fill: transparent;
+  stroke: rgba(255, 255, 255, 0.75);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  transition: fill 0.08s ease, stroke 0.08s ease, filter 0.08s ease;
+}
+
+.magic-mouse-svg .mouse-body {
+  fill: transparent;
+  stroke: rgba(255, 255, 255, 0.75);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  transition: stroke 0.15s ease;
+}
+
+.magic-mouse-fader-btn.active .mouse-body,
+.magicMouseFaderBtn.active .mouse-body {
+  stroke: rgba(255, 255, 255, 0.95);
+  stroke-width: 1.5;
+}
+
+/* Three real-life mouse buttons active fills */
+.magic-mouse-svg .mouse-btn-left.active {
+  fill: #6366f1;
+  stroke: #ffffff;
+  filter: drop-shadow(0 0 3px rgba(99, 102, 241, 0.9));
+}
+
+.magic-mouse-svg .mouse-btn-middle.active {
+  fill: #a855f7;
+  stroke: #ffffff;
+  filter: drop-shadow(0 0 3px rgba(168, 85, 247, 0.9));
+}
+
+.magic-mouse-svg .mouse-btn-right.active {
+  fill: #ec4899;
+  stroke: #ffffff;
+  filter: drop-shadow(0 0 3px rgba(236, 72, 153, 0.9));
+}
+
 /* Search Popup */
 .search-results-popup {
   position: absolute;
@@ -1431,6 +1513,22 @@ input[type="text"]:focus, input[type="search"]:focus {
   accent-color: var(--accent);
   /* background-color: rgba(255, 255, 255, 0.35); */
   border-radius: 4px;
+}
+
+.fader-shortcut-key {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+  line-height: 1.1;
+  text-align: center;
+  letter-spacing: 0.04em;
+  user-select: none;
+  font-family: monospace;
 }
 
 .fader-label {
@@ -3007,6 +3105,25 @@ canvas#visualizer {
 
   .mixer-shortcuts-hint {
     display: none !important;
+  }
+
+  .magic-mouse-fader-btn,
+  .magicMouseFaderBtn {
+    width: 38px !important;
+    height: 38px !important;
+    padding: 3px !important;
+    border-radius: 8px !important;
+  }
+
+  .magic-mouse-svg {
+    width: 20px !important;
+    height: 25px !important;
+  }
+
+  .fader-shortcut-key {
+    font-size: 0.58rem !important;
+    padding: 0.08rem 0.25rem !important;
+    border-radius: 3px !important;
   }
 
   .mixer {
