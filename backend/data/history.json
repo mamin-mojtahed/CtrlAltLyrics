@@ -881,5 +881,58 @@
     "spotifyTrackId": null,
     "isSpotify": false,
     "isUploaded": true
+  },
+  {
+    "id": "1377813701",
+    "title": "Sweet Child O' Mine",
+    "artist": "Guns N' Roses",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/a0/4d/c4/a04dc484-03cc-02aa-fa82-5334fcb4bc16/18UMGIM24878.rgb.jpg/100x100bb.jpg",
+    "query": "Sweet Child O' Mine Guns N' Roses",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/1377813701/instrumental.mp3",
+      "lead": "/audio/1377813701/lead_vocal.mp3",
+      "back": "/audio/1377813701/back_vocal.mp3",
+      "full": "/audio/1377813701/audio.mp3"
+    },
+    "downloadMethod": "yt-dlp Direct (Title + Artist)",
+    "downloadAttempts": [
+      {
+        "provider": "SpotDL",
+        "status": "failed",
+        "detail": "SpotDL verified search failed on Spotify catalog for \"Sweet Child O' Mine Guns N' Roses\""
+      },
+      {
+        "provider": "yt-dlp Direct (Title + Artist)",
+        "status": "success",
+        "detail": "Audio extracted via YouTube audio search for \"Sweet Child O' Mine Guns N' Roses\""
+      },
+      {
+        "provider": "yt-dlp Title Fallback",
+        "status": "skipped",
+        "detail": "Not needed (acquired via yt-dlp Direct)"
+      }
+    ],
+    "engineSettings": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "isCustom": false
+    },
+    "separationInfo": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "primaryModel": "UVR-MDX-NET-Inst_HQ_3.onnx",
+      "karaokeModel": "5_HP-Karaoke-UVR.pth",
+      "isCustom": false
+    },
+    "lyricsProvider": "LRCLIB (Synced)",
+    "isSynced": true,
+    "hasLyrics": true,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false
   }
 ]

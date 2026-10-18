@@ -20,6 +20,10 @@ let librarySortOrder = 'desc';
 let draggedCard = null;
 let dragDropped = false;
 let isDraggingQueue = false;
+let isDraggingLibrary = false;
+let draggedLibrarySongId = null;
+let draggedLibraryCard = null;
+let queueDropPlaceholder = null;
 let initialQueueIds = [];
 let currentQueueData = [];
 let queueContainerDragDropInitialized = false;
@@ -516,7 +520,7 @@ timelineSlider.addEventListener('change', (e) => {
 if (linkInstBackBtn) {
   linkInstBackBtn.addEventListener('click', () => {
     isInstBackLinked = !isInstBackLinked;
-    linkInstBackBtn.innerHTML = isInstBackLinked ? '<i class="icon-link"></i>' : '<i class="icon-unlink"></i>';
+    linkInstBackBtn.innerHTML = isInstBackLinked ? '<i class="icon-link-2"></i>' : '<i class="icon-unlink-2"></i>';
     linkInstBackBtn.style.opacity = isInstBackLinked ? '1' : '0.4';
     linkInstBackBtn.title = isInstBackLinked ? 'Linked Inst & Back (Click to Unlink)' : 'Unlinked Inst & Back (Click to Link)';
   });
@@ -525,7 +529,7 @@ if (linkInstBackBtn) {
 if (linkBackLeadBtn) {
   linkBackLeadBtn.addEventListener('click', () => {
     isBackLeadLinked = !isBackLeadLinked;
-    linkBackLeadBtn.innerHTML = isBackLeadLinked ? '<i class="icon-link"></i>' : '<i class="icon-unlink"></i>';
+    linkBackLeadBtn.innerHTML = isBackLeadLinked ? '<i class="icon-link-2"></i>' : '<i class="icon-unlink-2"></i>';
     linkBackLeadBtn.style.opacity = isBackLeadLinked ? '1' : '0.4';
     linkBackLeadBtn.title = isBackLeadLinked ? 'Linked Back & Lead (Click to Unlink)' : 'Unlinked Back & Lead (Click to Link)';
   });
@@ -828,7 +832,9 @@ function renderLibrary() {
   container.innerHTML = filtered.map(song => {
     const isActive = currentSong && currentSong.id === song.id;
     return `
-      <div class="song-card ${isActive ? 'active-playing' : ''}">
+      <div class="song-card library-card ${isActive ? 'active-playing' : ''}" 
+           draggable="true" 
+           data-song-id="${song.id}">
         <!-- Row 1: Song Info & Top-Right Playing Badge -->
         <div class="song-card-header">
           <div class="song-card-meta">
@@ -859,6 +865,8 @@ function renderLibrary() {
       </div>
     `;
   }).join('');
+
+  setupLibraryDragAndDrop();
 }
 
 window.openSongSourceLink = (id) => {
@@ -1002,7 +1010,7 @@ function updateQueueArrowButtons() {
 }
 
 function getDragAfterElement(container, y) {
-  const draggableElements = [...container.querySelectorAll('.queue-card:not(.dragging)')];
+  const draggableElements = [...container.querySelectorAll('.queue-card:not(.dragging):not(.queue-drop-placeholder)')];
   if (draggableElements.length === 0) return null;
 
   // Clamping checks:
@@ -1027,14 +1035,149 @@ function getDragAfterElement(container, y) {
   }, { offset: Number.NEGATIVE_INFINITY }).element || null;
 }
 
+function getOrCreateQueueDropPlaceholder(songId) {
+  if (!queueDropPlaceholder) {
+    queueDropPlaceholder = document.createElement('div');
+    queueDropPlaceholder.className = 'song-card queue-card queue-drop-placeholder';
+  }
+  const song = (rawLibraryData || []).find(s => s.id === songId);
+  const title = song ? song.title : 'Track';
+  const artist = song ? song.artist : '';
+  queueDropPlaceholder.innerHTML = `
+    <i class="icon-plus"></i>
+    <span class="placeholder-text">Insert: <strong>${escapeHtml(title)}</strong> ${artist ? `– ${escapeHtml(artist)}` : ''}</span>
+  `;
+  return queueDropPlaceholder;
+}
+
+function removeQueueDropPlaceholder() {
+  if (queueDropPlaceholder && queueDropPlaceholder.parentNode) {
+    queueDropPlaceholder.parentNode.removeChild(queueDropPlaceholder);
+  }
+}
+
+function showQueueDragOutHint() {
+  const hint = document.getElementById('queueDragOutHint');
+  if (hint) {
+    hint.style.display = 'inline-flex';
+    hint.classList.remove('active');
+  }
+}
+
+function hideQueueDragOutHint() {
+  const hint = document.getElementById('queueDragOutHint');
+  if (hint) {
+    hint.style.display = 'none';
+    hint.classList.remove('active');
+  }
+}
+
+function showQueueRemoveToast() {
+  const toast = document.getElementById('queueRemoveToast');
+  if (toast) {
+    toast.style.display = 'flex';
+  }
+}
+
+function hideQueueRemoveToast() {
+  const toast = document.getElementById('queueRemoveToast');
+  if (toast) {
+    toast.style.display = 'none';
+  }
+}
+
+function setupLibraryDragAndDrop() {
+  const container = document.getElementById('libraryList');
+  if (!container) return;
+  const cards = container.querySelectorAll('.library-card');
+  cards.forEach(card => {
+    card.addEventListener('dragstart', (e) => {
+      // Don't initiate drag if clicking buttons, action groups or links
+      if (e.target.closest('button') || e.target.closest('.emoji-btn-group') || e.target.closest('a')) {
+        e.preventDefault();
+        return;
+      }
+
+      isDraggingLibrary = true;
+      draggedLibraryCard = card;
+      draggedLibrarySongId = card.dataset.songId;
+
+      e.dataTransfer.effectAllowed = 'copy';
+      e.dataTransfer.setData('text/plain', card.dataset.songId);
+      e.dataTransfer.setData('application/x-ctrlaltlyrics-song-id', card.dataset.songId);
+
+      setTimeout(() => {
+        if (draggedLibraryCard) {
+          draggedLibraryCard.classList.add('library-card-dragging');
+        }
+      }, 0);
+    });
+
+    card.addEventListener('dragend', () => {
+      if (draggedLibraryCard) {
+        draggedLibraryCard.classList.remove('library-card-dragging');
+      }
+      removeQueueDropPlaceholder();
+      if (!currentQueueData || currentQueueData.length === 0) {
+        if (queueList && !queueList.querySelector('.queue-card')) {
+          queueList.innerHTML = '<div class="empty-state">No songs in queue. Use the search bar above to add a track!</div>';
+        }
+      }
+      setTimeout(() => {
+        isDraggingLibrary = false;
+      }, 100);
+      draggedLibrarySongId = null;
+      draggedLibraryCard = null;
+    });
+  });
+}
+
 function initQueueContainerDragDrop() {
   if (queueContainerDragDropInitialized || !queueList) return;
   queueContainerDragDropInitialized = true;
 
+  // Global document dragover to track dragging out of queue to remove
+  document.addEventListener('dragover', (e) => {
+    if (!isDraggingQueue || !draggedCard) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    const isOverQueue = queueList && queueList.contains(e.target);
+    const hint = document.getElementById('queueDragOutHint');
+    if (!isOverQueue) {
+      draggedCard.classList.add('dragging-remove');
+      if (hint) hint.classList.add('active');
+      showQueueRemoveToast();
+    } else {
+      draggedCard.classList.remove('dragging-remove');
+      if (hint) hint.classList.remove('active');
+      hideQueueRemoveToast();
+    }
+  });
+
+  // Global document drop for removing when dropped outside queue
+  document.addEventListener('drop', async (e) => {
+    if (!isDraggingQueue || !draggedCard) return;
+    const isOverQueue = queueList && queueList.contains(e.target);
+    if (!isOverQueue) {
+      e.preventDefault();
+      dragDropped = true;
+      const qId = draggedCard.dataset.queueId || draggedCard.dataset.id;
+      hideQueueRemoveToast();
+      hideQueueDragOutHint();
+      if (draggedCard) {
+        draggedCard.classList.remove('dragging', 'dragging-remove');
+      }
+      if (qId) {
+        await removeFromQueue(qId);
+      }
+      draggedCard = null;
+      isDraggingQueue = false;
+    }
+  });
+
   queueList.addEventListener('dragover', (e) => {
     e.preventDefault();
-    if (!draggedCard) return;
-    e.dataTransfer.dropEffect = 'move';
 
     // Auto-scroll when dragging near container boundaries
     const containerRect = queueList.getBoundingClientRect();
@@ -1044,6 +1187,38 @@ function initQueueContainerDragDrop() {
     } else if (e.clientY > containerRect.bottom - scrollThreshold) {
       queueList.scrollTop += 8;
     }
+
+    // Case 1: Dragging a song from Library to insert into Queue
+    if (isDraggingLibrary && draggedLibrarySongId) {
+      e.dataTransfer.dropEffect = 'copy';
+      const placeholder = getOrCreateQueueDropPlaceholder(draggedLibrarySongId);
+      
+      // If queue is currently showing empty state, clear empty state for insertion preview
+      const emptyState = queueList.querySelector('.empty-state');
+      if (emptyState) {
+        emptyState.remove();
+      }
+
+      const afterElement = getDragAfterElement(queueList, e.clientY);
+      if (afterElement) {
+        if (placeholder.nextElementSibling !== afterElement) {
+          queueList.insertBefore(placeholder, afterElement);
+        }
+      } else {
+        if (placeholder.nextElementSibling !== null || !placeholder.parentNode) {
+          queueList.appendChild(placeholder);
+        }
+      }
+      return;
+    }
+
+    // Case 2: Dragging a Queue card to reorder inside Queue
+    if (!draggedCard) return;
+    e.dataTransfer.dropEffect = 'move';
+    draggedCard.classList.remove('dragging-remove');
+    hideQueueRemoveToast();
+    const hint = document.getElementById('queueDragOutHint');
+    if (hint) hint.classList.remove('active');
 
     const afterElement = getDragAfterElement(queueList, e.clientY);
     if (afterElement) {
@@ -1061,13 +1236,42 @@ function initQueueContainerDragDrop() {
 
   queueList.addEventListener('drop', async (e) => {
     e.preventDefault();
+
+    // Case 1: Drop from Library into Queue
+    if (isDraggingLibrary) {
+      dragDropped = true;
+      let insertIndex = 0;
+      if (queueDropPlaceholder && queueDropPlaceholder.parentNode === queueList) {
+        let sib = queueDropPlaceholder.previousElementSibling;
+        while (sib) {
+          if (sib.classList.contains('queue-card') && !sib.classList.contains('queue-drop-placeholder')) {
+            insertIndex++;
+          }
+          sib = sib.previousElementSibling;
+        }
+      }
+      const songIdToEnqueue = draggedLibrarySongId || e.dataTransfer.getData('application/x-ctrlaltlyrics-song-id') || e.dataTransfer.getData('text/plain');
+      removeQueueDropPlaceholder();
+
+      if (songIdToEnqueue) {
+        await enqueueSong(songIdToEnqueue, insertIndex);
+      }
+      isDraggingLibrary = false;
+      draggedLibrarySongId = null;
+      draggedLibraryCard = null;
+      return;
+    }
+
+    // Case 2: Drop Queue card inside Queue (reorder)
     if (!draggedCard) return;
     dragDropped = true;
 
-    const currentCards = [...queueList.querySelectorAll('.queue-card')];
+    const currentCards = [...queueList.querySelectorAll('.queue-card:not(.queue-drop-placeholder)')];
     const newQueueIds = currentCards.map(c => c.dataset.queueId || c.dataset.id);
 
-    draggedCard.classList.remove('dragging');
+    draggedCard.classList.remove('dragging', 'dragging-remove');
+    hideQueueRemoveToast();
+    hideQueueDragOutHint();
 
     const hasChanged = newQueueIds.length === initialQueueIds.length && 
       newQueueIds.some((id, idx) => id !== initialQueueIds[idx]);
@@ -1102,7 +1306,9 @@ function setupQueueDragAndDrop() {
       isDraggingQueue = true;
       draggedCard = card;
       dragDropped = false;
-      initialQueueIds = [...queueList.querySelectorAll('.queue-card')].map(c => c.dataset.queueId || c.dataset.id);
+      initialQueueIds = [...queueList.querySelectorAll('.queue-card:not(.queue-drop-placeholder)')].map(c => c.dataset.queueId || c.dataset.id);
+
+      showQueueDragOutHint();
 
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', card.dataset.queueId || card.dataset.id);
@@ -1117,14 +1323,18 @@ function setupQueueDragAndDrop() {
 
     card.addEventListener('dragend', () => {
       if (draggedCard) {
-        draggedCard.classList.remove('dragging');
+        draggedCard.classList.remove('dragging', 'dragging-remove');
       }
+      hideQueueDragOutHint();
+      hideQueueRemoveToast();
+      removeQueueDropPlaceholder();
+
       setTimeout(() => {
         isDraggingQueue = false;
       }, 100);
 
       if (!dragDropped) {
-        // Drag was cancelled or dropped outside the queue
+        // Drag was cancelled (e.g. Escape key) or dropped in cancelled state
         renderQueue(currentQueueData);
       }
       draggedCard = null;
@@ -1754,26 +1964,30 @@ if (submitUploadBtn) {
   });
 }
 
-window.enqueueNewSong = async (song) => {
-  searchResults.style.display = 'none';
-  searchInput.value = '';
+window.enqueueNewSong = async (song, insertIndex = undefined) => {
+  if (searchResults) searchResults.style.display = 'none';
+  if (searchInput) searchInput.value = '';
   const payloadSettings = engineSettings.isCustom ? engineSettings : { mode: 'balanced', format: 'MP3', bitrate: '192k', isCustom: false };
+  const payload = {
+    song,
+    engineSettings: payloadSettings
+  };
+  if (typeof insertIndex === 'number' && Number.isInteger(insertIndex)) {
+    payload.insertIndex = insertIndex;
+  }
   await fetch('/api/enqueue', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({
-      song,
-      engineSettings: payloadSettings
-    })
+    body: JSON.stringify(payload)
   });
 };
 
-window.enqueueSong = async (id) => {
+window.enqueueSong = async (id, insertIndex = undefined) => {
   try {
     const res = await fetch(`/api/song/${id}`);
     if (res.ok) {
       const song = await res.json();
-      await window.enqueueNewSong(song);
+      await window.enqueueNewSong(song, insertIndex);
     }
   } catch (e) {
     console.error("Error enqueuing song:", e);

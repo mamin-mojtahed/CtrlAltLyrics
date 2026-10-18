@@ -69,7 +69,10 @@
           </div>
         </div>
 
-        <h2 style="margin-top: 0.5rem;">Queue</h2>
+        <div class="queue-header-row" style="display: flex; align-items: center; justify-content: space-between; margin-top: 0.5rem; margin-bottom: 0.5rem;">
+          <h2 style="margin: 0;">Queue</h2>
+          <div id="queueDragOutHint" class="queue-drag-out-hint" style="display: none;"><i class="icon-trash-2"></i> Drag outside to remove</div>
+        </div>
         <div id="queueList" class="queue-list"></div>
       </div>
 
@@ -167,7 +170,7 @@
             </div>
             
             <!-- Link Inst & Back -->
-            <button id="linkInstBackBtn" class="btn" style="padding: 0.3rem 0.4rem; font-size: 1rem; background: rgba(255,255,255,0.08); border: 1px solid var(--border); border-radius: 6px; opacity: 0.4;" title="Unlinked Inst & Back (Click to Link)"><i class="icon-unlink"></i></button>
+            <button id="linkInstBackBtn" class="btn" style="padding: 0.3rem 0.4rem; font-size: 1rem; background: rgba(255,255,255,0.08); border: 1px solid var(--border); border-radius: 6px; opacity: 0.4;" title="Unlinked Inst & Back (Click to Link)"><i class="icon-unlink-2"></i></button>
 
             <div class="fader-container">
               <input type="range" id="volBackVoc" min="0" max="1" step="0.01" value="1">
@@ -175,7 +178,7 @@
             </div>
 
             <!-- Link Back & Lead -->
-            <button id="linkBackLeadBtn" class="btn" style="padding: 0.3rem 0.4rem; font-size: 1rem; background: rgba(255,255,255,0.08); border: 1px solid var(--border); border-radius: 6px; opacity: 0.4;" title="Unlinked Back & Lead (Click to Link)"><i class="icon-unlink"></i></button>
+            <button id="linkBackLeadBtn" class="btn" style="padding: 0.3rem 0.4rem; font-size: 1rem; background: rgba(255,255,255,0.08); border: 1px solid var(--border); border-radius: 6px; opacity: 0.4;" title="Unlinked Back & Lead (Click to Link)"><i class="icon-unlink-2"></i></button>
 
             <div class="fader-container">
               <input type="range" id="volLeadVoc" min="0" max="1" step="0.01" value="1">
@@ -301,6 +304,11 @@
       <div id="componentManagerBody" class="modal-body"></div>
       <button id="dismissComponentManagerBtn" class="btn" style="width: 100%;">Close</button>
     </div>
+  </div>
+
+  <!-- Floating Queue Drag Remove Indicator -->
+  <div id="queueRemoveToast" class="queue-remove-toast" style="display: none;">
+    <i class="icon-trash-2"></i> Drop here to remove from queue
   </div>
 
   <script type="module" src="/dashboard.js"></script>

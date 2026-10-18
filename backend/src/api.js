@@ -503,10 +503,17 @@ router.post('/search', async (req, res) => {
 });
 
 router.post('/enqueue', async (req, res) => {
-  const { song, engineSettings } = req.body;
+  const { song, engineSettings, insertIndex } = req.body;
   
   const history = readHistory();
   const existing = history.find(s => s.id === song.id);
+
+  const getInsertIndex = (arr) => {
+    if (typeof insertIndex === 'number' && Number.isInteger(insertIndex) && insertIndex >= 0 && insertIndex <= arr.length) {
+      return insertIndex;
+    }
+    return arr.length;
+  };
 
   if (existing) {
     const songDir = path.join(DOWNLOADS_DIR, existing.id);
@@ -518,7 +525,8 @@ router.post('/enqueue', async (req, res) => {
         ...lyricsData,
         queueId: generateQueueId()
       };
-      queue.push(fullSong);
+      const idx = getInsertIndex(queue);
+      queue.splice(idx, 0, fullSong);
       res.json(fullSong);
       req.app.get('io').emit('queue_updated', queue);
       return;
@@ -535,7 +543,8 @@ router.post('/enqueue', async (req, res) => {
     lyrics: []
   };
   saveLightweightHistoryItem(newSong);
-  queue.push(newSong);
+  const idx = getInsertIndex(queue);
+  queue.splice(idx, 0, newSong);
   const io = req.app.get('io');
   if (io) {
     io.emit('queue_updated', queue);

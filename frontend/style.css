@@ -768,7 +768,139 @@ input[type="text"]:focus, input[type="search"]:focus {
   cursor: grabbing !important;
 }
 
-.queue-card.dragging * {
+.queue-card.dragging-remove {
+  border: 1.5px dashed #ef4444 !important;
+  background: rgba(239, 68, 68, 0.16) !important;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.4), inset 0 0 12px rgba(239, 68, 68, 0.2) !important;
+  transform: scale(0.96) !important;
+  opacity: 0.85 !important;
+}
+
+.queue-card.dragging *,
+.queue-card.dragging-remove * {
+  pointer-events: none;
+}
+
+/* Queue Drop Placeholder for inserting from Library */
+.queue-drop-placeholder {
+  border: 2px dashed var(--accent, #6366f1) !important;
+  background: rgba(99, 102, 241, 0.12) !important;
+  color: var(--accent-light, #a5b4fc) !important;
+  padding: 0.65rem 0.85rem !important;
+  border-radius: 8px !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 0.6rem !important;
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+  pointer-events: none !important;
+  animation: pulseDropPlaceholder 1.4s infinite ease-in-out;
+  box-shadow: 0 0 16px rgba(99, 102, 241, 0.25) !important;
+  min-height: 48px;
+  box-sizing: border-box;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.queue-drop-placeholder i {
+  font-size: 1.05rem;
+  color: var(--accent, #6366f1);
+  flex-shrink: 0;
+}
+
+.queue-drop-placeholder .placeholder-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes pulseDropPlaceholder {
+  0%, 100% {
+    border-color: rgba(99, 102, 241, 0.55);
+    background: rgba(99, 102, 241, 0.10);
+  }
+  50% {
+    border-color: var(--accent, #6366f1);
+    background: rgba(99, 102, 241, 0.18);
+  }
+}
+
+/* Queue Drag-Out Visual Cues */
+.queue-drag-out-hint {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  animation: fadeInToast 0.2s ease-out;
+  transition: all 0.2s ease;
+}
+
+.queue-drag-out-hint.active {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: #ef4444;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+  transform: scale(1.05);
+}
+
+.queue-remove-toast {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(220, 38, 38, 0.95);
+  color: #fff;
+  padding: 0.65rem 1.25rem;
+  border-radius: 9999px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-shadow: 0 8px 24px rgba(220, 38, 38, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+  z-index: 10000;
+  pointer-events: none;
+  animation: fadeInToast 0.2s ease-out;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+@keyframes fadeInToast {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* Library Card Drag Styling */
+.library-card {
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.library-card:active {
+  cursor: grabbing;
+}
+
+.library-card.library-card-dragging {
+  opacity: 0.45;
+  border: 1.5px dashed var(--accent, #6366f1) !important;
+  background: rgba(99, 102, 241, 0.08) !important;
+  transform: scale(0.99);
+}
+
+.library-card.library-card-dragging * {
   pointer-events: none;
 }
 
