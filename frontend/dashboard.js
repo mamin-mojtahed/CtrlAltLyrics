@@ -733,38 +733,38 @@ function renderEmojiStatusesHtml(song) {
   const hasSplitStems = (song.stems && song.stems.inst && song.stems.lead && song.stems.inst !== song.stems.lead) || song.status === 'fetching_lyrics' || song.status === 'ready';
   const hasLyricsLoaded = (song.lyrics && song.lyrics.length > 0) || song.hasLyrics === true;
 
-  // 1. Download Status (Aspect: icon-download, Phase: icon-loader-2 | icon-check | icon-x | icon-clock)
+  // 1. Download Status (Aspect: icon-download, Phase: icon-loader-2 | icon-check | icon-x)
   if (song.status === 'downloading') {
-    downloadBadge = `<span class="emoji-badge" title="Downloading audio..."><i class="icon-loader-2 icon-spin"></i><i class="icon-download"></i></span>`;
+    downloadBadge = `<span class="emoji-badge status-badge-download" title="Downloading audio..."><i class="icon-loader-2 icon-spin status-phase-icon"></i><i class="icon-download status-component-icon"></i></span>`;
+  } else if (song.downloadError || (song.status === 'error' && !hasAudio)) {
+    downloadBadge = `<span class="emoji-badge status-badge-download" title="Download Error: ${escapeHtml(song.downloadError || 'Failed')}"><i class="icon-x status-phase-icon" style="color:#ef4444;"></i><i class="icon-download status-component-icon"></i></span>`;
   } else if (hasAudio || song.status === 'ready') {
-    downloadBadge = `<span class="emoji-badge" title="Audio Downloaded"><i class="icon-check" style="color:#10b981;"></i><i class="icon-download"></i></span>`;
-  } else if (song.downloadError || song.status === 'error') {
-    downloadBadge = `<span class="emoji-badge" title="Download Error: ${escapeHtml(song.downloadError || 'Failed')}"><i class="icon-x" style="color:#ef4444;"></i><i class="icon-download"></i></span>`;
+    downloadBadge = `<span class="emoji-badge status-badge-download" title="Audio Downloaded"><i class="icon-check status-phase-icon" style="color:#10b981;"></i><i class="icon-download status-component-icon"></i></span>`;
   } else {
-    downloadBadge = `<span class="emoji-badge" title="Waiting to download audio..."><i class="icon-clock" style="color:#f59e0b;"></i><i class="icon-download"></i></span>`;
+    downloadBadge = `<span class="emoji-badge status-badge-download" title="Waiting to download audio..."><i class="icon-x status-phase-icon" style="color:#ef4444;"></i><i class="icon-download status-component-icon"></i></span>`;
   }
 
-  // 2. Split Status (Aspect: icon-scissors, Phase: icon-loader-2 | icon-check | icon-x | icon-clock)
+  // 2. Split Status (Aspect: icon-scissors, Phase: icon-loader-2 | icon-check | icon-x)
   if (song.status === 'splitting') {
-    splitBadge = `<span class="emoji-badge" title="Splitting vocal and instrumental stems..."><i class="icon-loader-2 icon-spin"></i><i class="icon-scissors"></i></span>`;
-  } else if (hasSplitStems || song.status === 'ready') {
-    splitBadge = `<span class="emoji-badge" title="Stems Separated"><i class="icon-check" style="color:#10b981;"></i><i class="icon-scissors"></i></span>`;
-  } else if (song.splitError || song.status === 'error') {
-    splitBadge = `<span class="emoji-badge" title="Stem Split Error: ${escapeHtml(song.splitError || 'Failed')}"><i class="icon-x" style="color:#ef4444;"></i><i class="icon-scissors"></i></span>`;
+    splitBadge = `<span class="emoji-badge status-badge-split" title="Splitting vocal and instrumental stems..."><i class="icon-loader-2 icon-spin status-phase-icon"></i><i class="icon-scissors status-component-icon"></i></span>`;
+  } else if (song.splitError) {
+    splitBadge = `<span class="emoji-badge status-badge-split" title="Stem Split Error: ${escapeHtml(song.splitError || 'Failed')}"><i class="icon-x status-phase-icon" style="color:#ef4444;"></i><i class="icon-scissors status-component-icon"></i></span>`;
+  } else if (hasSplitStems || (song.status === 'ready' && !song.splitError)) {
+    splitBadge = `<span class="emoji-badge status-badge-split" title="Stems Separated"><i class="icon-check status-phase-icon" style="color:#10b981;"></i><i class="icon-scissors status-component-icon"></i></span>`;
   } else {
-    splitBadge = `<span class="emoji-badge" title="Waiting to split stems..."><i class="icon-clock" style="color:#f59e0b;"></i><i class="icon-scissors"></i></span>`;
+    splitBadge = `<span class="emoji-badge status-badge-split" title="Waiting to split stems..."><i class="icon-x status-phase-icon" style="color:#ef4444;"></i><i class="icon-scissors status-component-icon"></i></span>`;
   }
 
-  // 3. Lyrics Status (Aspect: icon-file-text, Phase: icon-loader-2 | icon-check | icon-x | icon-clock)
+  // 3. Lyrics Status (Aspect: icon-file-text, Phase: icon-loader-2 | icon-check | icon-x)
   if (song.status === 'fetching_lyrics' || song.lyricsStatus) {
-    lyricsBadge = `<span class="emoji-badge" title="Fetching Lyrics: ${escapeHtml(song.lyricsStatus || 'Searching...')}"><i class="icon-loader-2 icon-spin"></i><i class="icon-file-text"></i></span>`;
+    lyricsBadge = `<span class="emoji-badge status-badge-lyrics" title="Fetching Lyrics: ${escapeHtml(song.lyricsStatus || 'Searching...')}"><i class="icon-loader-2 icon-spin status-phase-icon"></i><i class="icon-file-text status-component-icon"></i></span>`;
+  } else if (song.lyricsError || !hasLyricsLoaded) {
+    lyricsBadge = `<span class="emoji-badge status-badge-lyrics" title="Lyrics: ${escapeHtml(song.lyricsError || 'No lyrics found')}"><i class="icon-x status-phase-icon" style="color:#ef4444;"></i><i class="icon-file-text status-component-icon"></i></span>`;
   } else if (hasLyricsLoaded) {
     const prov = song.lyricsProvider ? ` (${song.lyricsProvider})` : '';
-    lyricsBadge = `<span class="emoji-badge" title="Lyrics Loaded${escapeHtml(prov)}"><i class="icon-check" style="color:#10b981;"></i><i class="icon-file-text"></i></span>`;
-  } else if (song.lyricsError || (song.status === 'ready' && !hasLyricsLoaded)) {
-    lyricsBadge = `<span class="emoji-badge" title="Lyrics Error: ${escapeHtml(song.lyricsError || 'No lyrics found')}"><i class="icon-x" style="color:#ef4444;"></i><i class="icon-file-text"></i></span>`;
+    lyricsBadge = `<span class="emoji-badge status-badge-lyrics" title="Lyrics Loaded${escapeHtml(prov)}"><i class="icon-check status-phase-icon" style="color:#10b981;"></i><i class="icon-file-text status-component-icon"></i></span>`;
   } else {
-    lyricsBadge = `<span class="emoji-badge" title="Waiting to fetch lyrics..."><i class="icon-clock" style="color:#f59e0b;"></i><i class="icon-file-text"></i></span>`;
+    lyricsBadge = `<span class="emoji-badge status-badge-lyrics" title="Waiting to fetch lyrics..."><i class="icon-x status-phase-icon" style="color:#ef4444;"></i><i class="icon-file-text status-component-icon"></i></span>`;
   }
 
   return `
@@ -897,6 +897,46 @@ async function fetchQueue() {
     queueList.innerHTML = '<div class="error-state"><i class="icon-alert-triangle"></i> Connection error. <button class="btn" onclick="fetchQueue()" style="padding:0.2rem 0.5rem; font-size:0.7rem;">Retry</button></div>';
   }
 }
+function renderQueueStatusBadge(song) {
+  let iconClass = 'icon-loader-2 icon-spin';
+  let label = 'Processing';
+  let statusClass = 'status-processing';
+  let tooltip = 'Processing track...';
+
+  if (song.status === 'downloading') {
+    iconClass = 'icon-loader-2 icon-spin';
+    label = 'Downloading';
+    statusClass = 'status-downloading';
+    tooltip = 'Downloading audio...';
+  } else if (song.status === 'splitting') {
+    iconClass = 'icon-loader-2 icon-spin';
+    label = 'Splitting';
+    statusClass = 'status-splitting';
+    tooltip = 'Separating stems...';
+  } else if (song.status === 'fetching_lyrics') {
+    iconClass = 'icon-loader-2 icon-spin';
+    label = 'Lyrics';
+    statusClass = 'status-lyrics';
+    tooltip = 'Fetching lyrics...';
+  } else if (song.status === 'error') {
+    iconClass = 'icon-alert-triangle';
+    label = 'Error';
+    statusClass = 'status-error';
+    tooltip = escapeHtml(song.downloadError || song.splitError || song.lyricsError || 'Processing error');
+  } else if (song.status === 'pending') {
+    iconClass = 'icon-clock';
+    label = 'Queued';
+    statusClass = 'status-pending';
+    tooltip = 'Queued for processing...';
+  }
+
+  return `
+    <div class="queue-status-badge queue-processing-badge ${statusClass}" title="${tooltip}">
+      <i class="${iconClass}"></i>
+      <span class="queue-processing-label">${label}</span>
+    </div>
+  `;
+}
 
 function renderQueue(data) {
   currentQueueData = data || [];
@@ -960,12 +1000,7 @@ function renderQueue(data) {
                 <span class="currently-playing-label">Playing</span>
               </div>
             ` : ''}
-            ${isProcessing ? `
-              <span class="queue-processing-badge" title="Processing">
-                <i class="icon-clock"></i>
-                <span class="queue-processing-label">Processing</span>
-              </span>
-            ` : ''}
+            ${!isActive && isProcessing ? renderQueueStatusBadge(song) : ''}
             <!-- Queue Management Controls (Icons Only) -->
             <div class="queue-controls-group" onclick="event.stopPropagation();">
               <button class="queue-icon-btn" onclick="removeFromQueue('${qId}', event)" title="Remove from Queue"><i class="icon-x"></i></button>

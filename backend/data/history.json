@@ -792,7 +792,7 @@
     "artist": "هایده",
     "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/eb/71/af/eb71afc4-546a-6388-e61c-8a6a4c95ebaf/859742684654_cover.jpg/100x100bb.jpg",
     "query": "Hamkhooneh (feat. Viguen) هایده",
-    "status": "ready",
+    "status": "splitting",
     "stems": {
       "inst": "/audio/6792690860/instrumental.mp3",
       "lead": "/audio/6792690860/lead_vocal.mp3",
@@ -818,10 +818,10 @@
       }
     ],
     "engineSettings": {
-      "mode": "balanced",
+      "mode": "ultra",
       "format": "MP3",
       "bitrate": "192k",
-      "isCustom": false
+      "isCustom": true
     },
     "separationInfo": {
       "mode": "balanced",
@@ -930,6 +930,31 @@
     "lyricsProvider": "LRCLIB (Synced)",
     "isSynced": true,
     "hasLyrics": true,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false
+  },
+  {
+    "id": "1736816483",
+    "title": "Gelooband",
+    "artist": "Erfan Tahmasbi",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/ba/2b/c0/ba2bc095-f2d7-de16-0f41-e75e5456a45c/cover.jpg/100x100bb.jpg",
+    "query": "Gelooband Erfan Tahmasbi",
+    "status": "downloading",
+    "stems": {},
+    "downloadMethod": "SpotDL",
+    "downloadAttempts": [],
+    "engineSettings": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "isCustom": false
+    },
+    "separationInfo": null,
+    "lyricsProvider": null,
+    "isSynced": true,
+    "hasLyrics": false,
     "spotifyUrl": null,
     "spotifyTrackId": null,
     "isSpotify": false,
