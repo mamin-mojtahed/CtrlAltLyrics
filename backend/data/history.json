@@ -792,7 +792,7 @@
     "artist": "هایده",
     "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/eb/71/af/eb71afc4-546a-6388-e61c-8a6a4c95ebaf/859742684654_cover.jpg/100x100bb.jpg",
     "query": "Hamkhooneh (feat. Viguen) هایده",
-    "status": "splitting",
+    "status": "ready",
     "stems": {
       "inst": "/audio/6792690860/instrumental.mp3",
       "lead": "/audio/6792690860/lead_vocal.mp3",
@@ -824,12 +824,12 @@
       "isCustom": true
     },
     "separationInfo": {
-      "mode": "balanced",
+      "mode": "ultra",
       "format": "MP3",
       "bitrate": "192k",
-      "primaryModel": "UVR-MDX-NET-Inst_HQ_3.onnx",
+      "primaryModel": "BS-Roformer-Viperx-1297",
       "karaokeModel": "5_HP-Karaoke-UVR.pth",
-      "isCustom": false
+      "isCustom": true
     },
     "lyricsProvider": "Musixmatch (Synced)",
     "isSynced": true,
@@ -941,20 +941,48 @@
     "artist": "Erfan Tahmasbi",
     "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/ba/2b/c0/ba2bc095-f2d7-de16-0f41-e75e5456a45c/cover.jpg/100x100bb.jpg",
     "query": "Gelooband Erfan Tahmasbi",
-    "status": "downloading",
-    "stems": {},
-    "downloadMethod": "SpotDL",
-    "downloadAttempts": [],
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/1736816483/instrumental.mp3",
+      "lead": "/audio/1736816483/lead_vocal.mp3",
+      "back": "/audio/1736816483/back_vocal.mp3",
+      "full": "/audio/1736816483/audio.mp3"
+    },
+    "downloadMethod": "yt-dlp Direct (Title + Artist)",
+    "downloadAttempts": [
+      {
+        "provider": "SpotDL",
+        "status": "failed",
+        "detail": "SpotDL verified search failed on Spotify catalog for \"Gelooband Erfan Tahmasbi\""
+      },
+      {
+        "provider": "yt-dlp Direct (Title + Artist)",
+        "status": "success",
+        "detail": "Audio extracted via YouTube audio search for \"Gelooband Erfan Tahmasbi\""
+      },
+      {
+        "provider": "yt-dlp Title Fallback",
+        "status": "skipped",
+        "detail": "Not needed (acquired via yt-dlp Direct)"
+      }
+    ],
     "engineSettings": {
       "mode": "balanced",
       "format": "MP3",
       "bitrate": "192k",
       "isCustom": false
     },
-    "separationInfo": null,
-    "lyricsProvider": null,
-    "isSynced": true,
-    "hasLyrics": false,
+    "separationInfo": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "primaryModel": "UVR-MDX-NET-Inst_HQ_3.onnx",
+      "karaokeModel": "5_HP-Karaoke-UVR.pth",
+      "isCustom": false
+    },
+    "lyricsProvider": "LRCLIB (Plain)",
+    "isSynced": false,
+    "hasLyrics": true,
     "spotifyUrl": null,
     "spotifyTrackId": null,
     "isSpotify": false,
