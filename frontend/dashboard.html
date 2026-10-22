@@ -86,7 +86,7 @@
             <button id="uploadSongBtn" class="btn upload-btn" title="Upload Local Audio File (MP3, WAV, M4A, FLAC, etc.)"><i class="icon-upload"></i> Upload</button>
           </div>
           <div class="library-controls-group">
-            <input type="search" id="libraryFilterInput" class="library-filter-input" placeholder="Filter library..." autocomplete="off">
+            <input type="search" id="libraryFilterInput" class="library-filter-input" placeholder="Filter..." autocomplete="off">
             <div class="sort-wrapper">
               <button id="librarySortBtn" class="btn sort-btn" title="Sort Options"><i class="icon-arrow-up-down"></i> Sort</button>
               <div id="librarySortMenu" class="sort-menu" style="display: none;">
@@ -148,7 +148,7 @@
             <div style="display:flex; align-items:center; gap: 0.5rem; font-size: 0.85rem;">
               <label class="subtitle-toggle-btn" title="Pronunciation">
                 <input type="checkbox" id="toggleTranslit">
-                <span class="toggle-content"><i class="icon-book-a"></i></span>
+                <span class="toggle-content"><i class="icon-ear"></i></span>
               </label>
               <label class="subtitle-toggle-btn" title="Translation">
                 <input type="checkbox" id="toggleTranslat">
@@ -163,7 +163,10 @@
 
           <!-- Stem Audio Title & Shortcuts directly below title -->
           <div style="display:flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 0.25rem;">
-            <div class="stem-mixer-header-row" style="display:flex; align-items: center; justify-content: center; gap: 0.5rem;">
+            <div class="stem-mixer-header-row" style="display:flex; align-items: center; justify-content: center; gap: 0.5rem; position: relative;">
+              <button id="toggleMixerShortcutsBtn" class="mixer-shortcuts-toggle-btn active" title="Toggle Mixer Keyboard Shortcuts" aria-label="Toggle Mixer Keyboard Shortcuts">
+                <i class="icon-keyboard"></i>
+              </button>
               <h3 style="margin: 0;">Stem Mixer</h3>
               <button id="magicMouseFaderBtn" class="magic-mouse-fader-btn magicMouseFaderBtn" title="Stem Mouse Fader: Hold Left (Inst), Middle (Back), Right (Lead) & Drag to Adjust" aria-label="Mouse Stem Fader Control">
                 <svg viewBox="0 0 24 30" class="magic-mouse-svg" xmlns="http://www.w3.org/2000/svg">
@@ -178,27 +181,36 @@
           
           <div class="mixer">
             <div class="fader-container">
-              <span class="fader-shortcut-key">Q/A</span>
+              <span class="fader-shortcut-key" title="Keyboard Shortcuts: Q (Vol +), A (Vol -), Z (Mute)"><span>Q +</span><span>A -</span><span>Z ×</span></span>
               <input type="range" id="volInst" min="0" max="1" step="0.01" value="1">
-              <span class="fader-label">Inst</span>
+              <div class="fader-bottom">
+                <button type="button" class="fader-mute-btn" id="muteInstBtn" title="Mute Inst (Z)"><i class="icon-volume-2"></i></button>
+                <span class="fader-label">Inst</span>
+              </div>
             </div>
             
             <!-- Link Inst & Back -->
             <button id="linkInstBackBtn" class="btn mixer-link-btn" title="Unlinked Inst & Back (Click to Link)"><i class="icon-unlink-2"></i></button>
 
             <div class="fader-container">
-              <span class="fader-shortcut-key">W/S</span>
+              <span class="fader-shortcut-key" title="Keyboard Shortcuts: W (Vol +), S (Vol -), X (Mute)"><span>W +</span><span>S -</span><span>X ×</span></span>
               <input type="range" id="volBackVoc" min="0" max="1" step="0.01" value="1">
-              <span class="fader-label">Back</span>
+              <div class="fader-bottom">
+                <button type="button" class="fader-mute-btn" id="muteBackBtn" title="Mute Back (X)"><i class="icon-volume-2"></i></button>
+                <span class="fader-label">Back</span>
+              </div>
             </div>
 
             <!-- Link Back & Lead -->
             <button id="linkBackLeadBtn" class="btn mixer-link-btn" title="Unlinked Back & Lead (Click to Link)"><i class="icon-unlink-2"></i></button>
 
             <div class="fader-container">
-              <span class="fader-shortcut-key">E/D</span>
+              <span class="fader-shortcut-key" title="Keyboard Shortcuts: E (Vol +), D (Vol -), C (Mute)"><span>E +</span><span>D -</span><span>C ×</span></span>
               <input type="range" id="volLeadVoc" min="0" max="1" step="0.01" value="1">
-              <span class="fader-label">Lead</span>
+              <div class="fader-bottom">
+                <button type="button" class="fader-mute-btn" id="muteLeadBtn" title="Mute Lead (C)"><i class="icon-volume-2"></i></button>
+                <span class="fader-label">Lead</span>
+              </div>
             </div>
           </div>
         </div>

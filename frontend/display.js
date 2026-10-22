@@ -1131,6 +1131,19 @@ requestAnimationFrame(karaokeLoop);
 
 // Keyboard shortcuts (Parity with Audio Controls Card)
 window.addEventListener('keydown', (e) => {
+  // Escape key always escapes/blurs any focused text field
+  if (e.key === 'Escape') {
+    const isTextInput = (e.target && (
+      (e.target.tagName === 'INPUT' && e.target.type !== 'range' && e.target.type !== 'button' && e.target.type !== 'submit' && e.target.type !== 'checkbox' && e.target.type !== 'radio') ||
+      e.target.tagName === 'TEXTAREA' ||
+      e.target.isContentEditable
+    ));
+    if (isTextInput && typeof e.target.blur === 'function') {
+      e.target.blur();
+      return;
+    }
+  }
+
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
   
   // Space: Toggle Play/Pause

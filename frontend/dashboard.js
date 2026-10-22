@@ -42,6 +42,9 @@ const lyricsCounter = document.getElementById('lyricsCounter');
 const volInst = document.getElementById('volInst');
 const volLeadVoc = document.getElementById('volLeadVoc');
 const volBackVoc = document.getElementById('volBackVoc');
+const muteInstBtn = document.getElementById('muteInstBtn');
+const muteBackBtn = document.getElementById('muteBackBtn');
+const muteLeadBtn = document.getElementById('muteLeadBtn');
 
 const timeDisplay = document.getElementById('timeDisplay');
 const linkInstBackBtn = document.getElementById('linkInstBackBtn');
@@ -535,6 +538,75 @@ if (linkBackLeadBtn) {
   });
 }
 
+const prevFaderVolumes = {
+  inst: 1.0,
+  back: 1.0,
+  lead: 1.0
+};
+
+function updateMuteButtonUI(stem) {
+  let slider, btn, shortcutKey;
+  if (stem === 'inst') {
+    slider = volInst;
+    btn = muteInstBtn;
+    shortcutKey = 'Z';
+  } else if (stem === 'back') {
+    slider = volBackVoc;
+    btn = muteBackBtn;
+    shortcutKey = 'X';
+  } else if (stem === 'lead') {
+    slider = volLeadVoc;
+    btn = muteLeadBtn;
+    shortcutKey = 'C';
+  }
+  if (!btn || !slider) return;
+
+  const val = parseFloat(slider.value) || 0;
+  const isMuted = val <= 0.001;
+  const capitalized = stem === 'inst' ? 'Inst' : (stem === 'back' ? 'Back' : 'Lead');
+
+  if (isMuted) {
+    btn.classList.add('is-muted');
+    btn.innerHTML = '<i class="icon-volume-x"></i>';
+    btn.title = `Unmute ${capitalized} (${shortcutKey})`;
+  } else {
+    btn.classList.remove('is-muted');
+    btn.innerHTML = '<i class="icon-volume-2"></i>';
+    btn.title = `Mute ${capitalized} (${shortcutKey})`;
+  }
+}
+
+function updateAllMuteButtonsUI() {
+  updateMuteButtonUI('inst');
+  updateMuteButtonUI('back');
+  updateMuteButtonUI('lead');
+}
+
+function toggleStemMute(stem) {
+  let slider;
+  if (stem === 'inst') slider = volInst;
+  else if (stem === 'back') slider = volBackVoc;
+  else if (stem === 'lead') slider = volLeadVoc;
+  if (!slider) return;
+
+  const currentVal = parseFloat(slider.value) || 0;
+  if (currentVal > 0.001) {
+    // Currently playing/audible -> Mute
+    prevFaderVolumes[stem] = currentVal;
+    slider.value = 0;
+    slider.dispatchEvent(new CustomEvent('input', { detail: { skipLinking: true } }));
+  } else {
+    // Currently muted -> Unmute (restore previous level, or bump if min level)
+    let restoreVal = prevFaderVolumes[stem];
+    if (!restoreVal || restoreVal <= 0.01) {
+      restoreVal = 1.0;
+    }
+    slider.value = restoreVal;
+    slider.dispatchEvent(new CustomEvent('input', { detail: { skipLinking: true } }));
+  }
+  updateMuteButtonUI(stem);
+}
+
 function updateFaderTrackFill(input) {
   if (!input) return;
   const val = parseFloat(input.value) || 0;
@@ -543,12 +615,19 @@ function updateFaderTrackFill(input) {
   const pct = Math.max(0, Math.min(100, ((val - min) / (max - min)) * 100));
   input.style.background = `linear-gradient(to top, var(--accent, #6366f1) ${pct}%, #ffffff ${pct}%)`;
   input.style.backgroundClip = 'content-box';
+
+  if (val > 0.001) {
+    if (input === volInst) prevFaderVolumes.inst = val;
+    else if (input === volBackVoc) prevFaderVolumes.back = val;
+    else if (input === volLeadVoc) prevFaderVolumes.lead = val;
+  }
 }
 
 function updateAllFaderTrackFills() {
   updateFaderTrackFill(volInst);
   updateFaderTrackFill(volBackVoc);
   updateFaderTrackFill(volLeadVoc);
+  updateAllMuteButtonsUI();
 }
 
 // Stem Volumes & Dual Linking
@@ -556,7 +635,7 @@ volInst.addEventListener('input', (e) => {
   const val = e.target.value;
   if (gainNodes.inst) gainNodes.inst.gain.value = val;
   
-  if (isInstBackLinked) {
+  if (isInstBackLinked && !(e.detail && e.detail.skipLinking)) {
     volBackVoc.value = val;
     if (gainNodes.backVoc) gainNodes.backVoc.gain.value = val;
     if (isBackLeadLinked) {
@@ -579,11 +658,11 @@ volBackVoc.addEventListener('input', (e) => {
   const val = e.target.value;
   if (gainNodes.backVoc) gainNodes.backVoc.gain.value = val;
   
-  if (isInstBackLinked) {
+  if (isInstBackLinked && !(e.detail && e.detail.skipLinking)) {
     volInst.value = val;
     if (gainNodes.inst) gainNodes.inst.gain.value = val;
   }
-  if (isBackLeadLinked) {
+  if (isBackLeadLinked && !(e.detail && e.detail.skipLinking)) {
     volLeadVoc.value = val;
     if (gainNodes.leadVoc) gainNodes.leadVoc.gain.value = val;
   }
@@ -602,7 +681,7 @@ volLeadVoc.addEventListener('input', (e) => {
   const val = e.target.value;
   if (gainNodes.leadVoc) gainNodes.leadVoc.gain.value = val;
   
-  if (isBackLeadLinked) {
+  if (isBackLeadLinked && !(e.detail && e.detail.skipLinking)) {
     volBackVoc.value = val;
     if (gainNodes.backVoc) gainNodes.backVoc.gain.value = val;
     if (isInstBackLinked) {
@@ -621,7 +700,59 @@ volLeadVoc.addEventListener('input', (e) => {
   });
 });
 
+muteInstBtn?.addEventListener('click', (e) => {
+  e.preventDefault();
+  toggleStemMute('inst');
+});
+muteBackBtn?.addEventListener('click', (e) => {
+  e.preventDefault();
+  toggleStemMute('back');
+});
+muteLeadBtn?.addEventListener('click', (e) => {
+  e.preventDefault();
+  toggleStemMute('lead');
+});
+
 updateAllFaderTrackFills();
+
+// Stem Mixer Keyboard Shortcuts Toggle
+const toggleMixerShortcutsBtn = document.getElementById('toggleMixerShortcutsBtn');
+const mixerCard = document.querySelector('.mixer-card');
+
+function setMixerShortcutsVisible(visible) {
+  if (mixerCard) {
+    mixerCard.classList.toggle('mixer-shortcuts-hidden', !visible);
+  }
+  if (toggleMixerShortcutsBtn) {
+    toggleMixerShortcutsBtn.classList.toggle('active', visible);
+    toggleMixerShortcutsBtn.title = visible
+      ? 'Hide Mixer Keyboard Shortcuts'
+      : 'Show Mixer Keyboard Shortcuts';
+  }
+  try {
+    localStorage.setItem('ctrlaltlyrics_mixer_shortcuts_visible', visible ? '1' : '0');
+  } catch (_) {}
+}
+
+if (toggleMixerShortcutsBtn) {
+  // Restore saved state (default: visible)
+  try {
+    const saved = localStorage.getItem('ctrlaltlyrics_mixer_shortcuts_visible');
+    if (saved === '0') {
+      setMixerShortcutsVisible(false);
+    } else {
+      setMixerShortcutsVisible(true);
+    }
+  } catch (_) {
+    setMixerShortcutsVisible(true);
+  }
+
+  toggleMixerShortcutsBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    const isCurrentlyHidden = mixerCard ? mixerCard.classList.contains('mixer-shortcuts-hidden') : false;
+    setMixerShortcutsVisible(isCurrentlyHidden);
+  });
+}
 
 // Magic Mouse Stem Fader Control (Multi-Button Drag)
 const magicMouseFaderBtn = document.getElementById('magicMouseFaderBtn');
@@ -910,16 +1041,105 @@ if (magicMouseFaderBtn) {
 
 // Keyboard Shortcuts
 window.addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  // Escape key always resets search/filter and escapes/blurs any focused text field
+  if (e.key === 'Escape') {
+    const isTextInput = (e.target && (
+      (e.target.tagName === 'INPUT' && e.target.type !== 'range' && e.target.type !== 'button' && e.target.type !== 'submit' && e.target.type !== 'checkbox' && e.target.type !== 'radio') ||
+      e.target.tagName === 'TEXTAREA' ||
+      e.target.isContentEditable
+    ));
+    if (isTextInput) {
+      // If escaping library filter, clear query and re-render full library
+      if (e.target === libraryFilterInput || e.target.id === 'libraryFilterInput') {
+        if (libraryFilterInput.value) {
+          libraryFilterInput.value = '';
+          libraryFilterQuery = '';
+          renderLibrary();
+        }
+      }
+      // If escaping search input, clear search input and close search dropdown
+      if (e.target === searchInput || e.target.id === 'searchInput') {
+        if (searchInput.value) {
+          searchInput.value = '';
+        }
+      }
+      if (searchResults) searchResults.style.display = 'none';
+
+      if (typeof e.target.blur === 'function') {
+        e.target.blur();
+      }
+      return;
+    }
+
+    // Close open dropdowns/menus if open
+    if (searchResults && searchResults.style.display !== 'none') {
+      searchResults.style.display = 'none';
+      return;
+    }
+    if (librarySortMenu && librarySortMenu.style.display !== 'none') {
+      librarySortMenu.style.display = 'none';
+      return;
+    }
+    if (engineSettingsPanel && engineSettingsPanel.style.display !== 'none') {
+      engineSettingsPanel.style.display = 'none';
+      return;
+    }
+
+    // Close open modals (in order of topmost/nested first) if no pending save or action
+    const metadataModal = document.getElementById('metadataModal');
+    if (metadataModal && metadataModal.style.display !== 'none') {
+      metadataModal.style.display = 'none';
+      return;
+    }
+
+    const syncModal = document.getElementById('syncEditorModal');
+    if (syncModal && syncModal.style.display !== 'none') {
+      // If tap to sync is actively running, escape exits tap-to-sync mode
+      if (tapSyncState && tapSyncState.active) {
+        window.toggleTapToSyncMode(tapSyncState.songId);
+        return;
+      }
+      // closeLyricsSyncModal checks if there are unsaved changes and prompts if dirty
+      if (typeof window.closeLyricsSyncModal === 'function') {
+        window.closeLyricsSyncModal();
+      } else {
+        syncModal.style.display = 'none';
+      }
+      return;
+    }
+
+    const compModal = document.getElementById('componentManagerModal');
+    if (compModal && compModal.style.display !== 'none') {
+      compModal.style.display = 'none';
+      return;
+    }
+
+    const uploadModal = document.getElementById('uploadSongModal');
+    if (uploadModal && uploadModal.style.display !== 'none') {
+      // If an upload is actively progressing (submit button says Uploading... or is disabled while progress bar visible), don't close
+      const isUploading = uploadProgressBarContainer && uploadProgressBarContainer.style.display !== 'none';
+      if (!isUploading) {
+        closeUploadModal();
+        return;
+      }
+    }
+  }
+
+  if ((e.target.tagName === 'INPUT' && e.target.type !== 'range') || e.target.tagName === 'TEXTAREA') return;
 
   const syncModal = document.getElementById('syncEditorModal');
   const compModal = document.getElementById('componentManagerModal');
   const metaModal = document.getElementById('metadataModal');
+  const uploadModal = document.getElementById('uploadSongModal');
   if ((syncModal && syncModal.style.display !== 'none') ||
       (compModal && compModal.style.display !== 'none') ||
-      (metaModal && metaModal.style.display !== 'none')) {
+      (metaModal && metaModal.style.display !== 'none') ||
+      (uploadModal && uploadModal.style.display !== 'none')) {
     return;
   }
+
+  // Allow browser/system combinations (e.g. Cmd+C, Cmd+Z, Ctrl+C) to pass through
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
   
   // Space: Toggle Play/Pause
   if (e.code === 'Space') {
@@ -970,31 +1190,66 @@ window.addEventListener('keydown', (e) => {
     return;
   }
 
-  // Stem Volume Shortcuts: Q/A (Inst), W/S (Back), E/D (Lead)
-  const step = 0.05;
-  if (e.key === 'q') {
+  // Stem Volume & Mute Shortcuts:
+  // Q/A (Inst up/down), Z (Inst mute/unmute)
+  // W/S (Back up/down), X (Back mute/unmute)
+  // E/D (Lead up/down), C (Lead mute/unmute)
+  // Holding Shift makes increase/decrease faster (step 0.15 vs 0.05)
+  const key = e.key.toLowerCase();
+  const step = e.shiftKey ? 0.15 : 0.05;
+
+  if (key === 'q') {
+    e.preventDefault();
     volInst.value = Math.min(1, parseFloat(volInst.value) + step);
     volInst.dispatchEvent(new Event('input'));
+    return;
   }
-  if (e.key === 'a') {
+  if (key === 'a') {
+    e.preventDefault();
     volInst.value = Math.max(0, parseFloat(volInst.value) - step);
     volInst.dispatchEvent(new Event('input'));
+    return;
   }
-  if (e.key === 'w') {
+  if (key === 'z') {
+    e.preventDefault();
+    toggleStemMute('inst');
+    return;
+  }
+
+  if (key === 'w') {
+    e.preventDefault();
     volBackVoc.value = Math.min(1, parseFloat(volBackVoc.value) + step);
     volBackVoc.dispatchEvent(new Event('input'));
+    return;
   }
-  if (e.key === 's') {
+  if (key === 's') {
+    e.preventDefault();
     volBackVoc.value = Math.max(0, parseFloat(volBackVoc.value) - step);
     volBackVoc.dispatchEvent(new Event('input'));
+    return;
   }
-  if (e.key === 'e') {
+  if (key === 'x') {
+    e.preventDefault();
+    toggleStemMute('back');
+    return;
+  }
+
+  if (key === 'e') {
+    e.preventDefault();
     volLeadVoc.value = Math.min(1, parseFloat(volLeadVoc.value) + step);
     volLeadVoc.dispatchEvent(new Event('input'));
+    return;
   }
-  if (e.key === 'd') {
+  if (key === 'd') {
+    e.preventDefault();
     volLeadVoc.value = Math.max(0, parseFloat(volLeadVoc.value) - step);
     volLeadVoc.dispatchEvent(new Event('input'));
+    return;
+  }
+  if (key === 'c') {
+    e.preventDefault();
+    toggleStemMute('lead');
+    return;
   }
 });
 
@@ -1670,10 +1925,15 @@ function setupQueueDragAndDrop() {
 
 // Attach Library Filter & Sort Listeners
 if (libraryFilterInput) {
-  libraryFilterInput.addEventListener('input', (e) => {
-    libraryFilterQuery = e.target.value.trim().toLowerCase();
+  const updateLibraryFilter = () => {
+    libraryFilterQuery = libraryFilterInput.value.trim().toLowerCase();
     renderLibrary();
-  });
+  };
+
+  libraryFilterInput.addEventListener('input', updateLibraryFilter);
+  // Support webkit search cancel ('x' icon click) & change
+  libraryFilterInput.addEventListener('search', updateLibraryFilter);
+  libraryFilterInput.addEventListener('change', updateLibraryFilter);
 }
 
 if (librarySortBtn && librarySortMenu) {
@@ -1816,6 +2076,12 @@ searchInput.addEventListener('input', (e) => {
     searchDebounceTimeout = setTimeout(() => {
       executeSearch();
     }, 250);
+  }
+});
+
+searchInput.addEventListener('search', () => {
+  if (!searchInput.value.trim()) {
+    searchResults.style.display = 'none';
   }
 });
 
@@ -3386,18 +3652,7 @@ const LUCIDE_PLUS_ICON = `<i class="icon-plus"></i>`;
 const LUCIDE_MINUS_ICON = `<i class="icon-minus"></i>`;
 const LUCIDE_X_ICON = `<i class="icon-x"></i>`;
 const LUCIDE_PLAY_ICON = `<i class="icon-play"></i>`;
-const LUCIDE_BOOK_A_ICON = `<i class="icon-book-a"></i>`;
-
-const LUCIDE_METRONOME_SVG = LUCIDE_METRONOME_ICON;
-const LUCIDE_UNDO_SVG = LUCIDE_UNDO_ICON;
-const LUCIDE_REDO_SVG = LUCIDE_REDO_ICON;
-const LUCIDE_LANGUAGES_SVG = LUCIDE_LANGUAGES_ICON;
-const LUCIDE_SAVE_SVG = LUCIDE_SAVE_ICON;
-const LUCIDE_PLUS_SVG = LUCIDE_PLUS_ICON;
-const LUCIDE_MINUS_SVG = LUCIDE_MINUS_ICON;
-const LUCIDE_X_SVG = LUCIDE_X_ICON;
-const LUCIDE_PLAY_SVG = LUCIDE_PLAY_ICON;
-const LUCIDE_BOOK_A_SVG = LUCIDE_BOOK_A_ICON;
+const LUCIDE_EAR_ICON = `<i class="icon-ear"></i>`;
 
 window.formatCentiseconds = (totalSeconds) => {
   if (totalSeconds === undefined || totalSeconds === null || isNaN(totalSeconds) || totalSeconds < 0) totalSeconds = 0;
@@ -3950,7 +4205,7 @@ window.openSyncEditorModal = async (songId) => {
           <!-- Column Toggles -->
           <div class="sync-btn-group">
             <button type="button" id="syncToggleTlBtn_${song.id}" class="sync-btn-icon ${lyricsEditorState.showTransliteration ? 'active' : ''}" onclick="toggleSyncColumn('transliteration')" title="Toggle Transliteration Column">
-              ${LUCIDE_BOOK_A_ICON}
+              ${LUCIDE_EAR_ICON}
             </button>
             <button type="button" id="syncToggleTrBtn_${song.id}" class="sync-btn-icon ${lyricsEditorState.showTranslation ? 'active' : ''}" onclick="toggleSyncColumn('translation')" title="Toggle Translation Column">
               ${LUCIDE_LANGUAGES_ICON}

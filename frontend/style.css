@@ -270,6 +270,26 @@ input[type="text"]:focus, input[type="search"]:focus {
   border-color: var(--accent);
 }
 
+/* Style search input clear/cancel button with a clean solid icon (no gradient) */
+input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 16px;
+  width: 16px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='18' y1='6' x2='6' y2='18'%3E%3C/line%3E%3Cline x1='6' y1='6' x2='18' y2='18'%3E%3C/line%3E%3C/svg%3E");
+  background-size: 14px 14px;
+  background-position: center;
+  background-repeat: no-repeat;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.15s ease, filter 0.15s ease;
+}
+
+input[type="search"]::-webkit-search-cancel-button:hover {
+  opacity: 1;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='18' y1='6' x2='6' y2='18'%3E%3C/line%3E%3Cline x1='6' y1='6' x2='18' y2='18'%3E%3C/line%3E%3C/svg%3E");
+}
+
 .panel {
   padding: 1.25rem;
   display: flex;
@@ -279,7 +299,7 @@ input[type="text"]:focus, input[type="search"]:focus {
 
 /* Upper & Lower Panel Layout */
 .upper-panel {
-  flex: var(--upper-panel-flex, 1 1 60%);
+  flex: var(--upper-panel-flex, 1 1 50%);
   min-height: 0;
   display: flex;
   flex-direction: row;
@@ -322,7 +342,7 @@ input[type="text"]:focus, input[type="search"]:focus {
 }
 
 .lower-panel {
-  flex: var(--lower-panel-flex, 0 0 auto);
+  flex: var(--lower-panel-flex, 1 1 50%);
   height: var(--lower-panel-height, auto);
   min-height: 0;
   display: flex;
@@ -610,6 +630,49 @@ input[type="text"]:focus, input[type="search"]:focus {
   fill: #ec4899;
   stroke: #ffffff;
   filter: drop-shadow(0 0 3px rgba(236, 72, 153, 0.9));
+}
+
+/* Mixer Keyboard Shortcuts Toggle Button */
+.mixer-shortcuts-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: all 0.15s ease;
+}
+
+.mixer-shortcuts-toggle-btn [class^="icon-"],
+.mixer-shortcuts-toggle-btn [class*=" icon-"] {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.mixer-shortcuts-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: var(--text-primary);
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
+}
+
+.mixer-shortcuts-toggle-btn.active {
+  background: rgba(99, 102, 241, 0.18);
+  border-color: var(--accent, #6366f1);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.5);
+}
+
+/* Hide shortcut labels when toggle is turned off */
+.mixer-card.mixer-shortcuts-hidden .fader-shortcut-key {
+  display: none !important;
 }
 
 /* Search Popup */
@@ -1546,19 +1609,68 @@ input[type="text"]:focus, input[type="search"]:focus {
 }
 
 .fader-shortcut-key {
-  font-size: 0.65rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  font-size: 0.62rem;
   font-weight: 700;
   text-transform: uppercase;
   color: var(--text-secondary);
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 4px;
-  padding: 0.1rem 0.35rem;
-  line-height: 1.1;
+  padding: 0.15rem 0.25rem;
+  line-height: 1.15;
   text-align: center;
   letter-spacing: 0.04em;
   user-select: none;
   font-family: monospace;
+}
+
+.fader-shortcut-key span {
+  display: block;
+}
+
+.fader-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.fader-mute-btn {
+  background: transparent;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  line-height: 1;
+  transition: color 0.15s ease, transform 0.1s ease;
+  user-select: none;
+}
+
+.fader-mute-btn:hover {
+  color: var(--text-primary);
+  transform: scale(1.15);
+}
+
+.fader-mute-btn.is-muted {
+  color: #ef4444;
+}
+
+.fader-mute-btn.is-muted:hover {
+  color: #f87171;
+  transform: scale(1.15);
 }
 
 .fader-label {
@@ -1566,6 +1678,7 @@ input[type="text"]:focus, input[type="search"]:focus {
   font-weight: 600;
   text-transform: uppercase;
   color: var(--text-secondary);
+  user-select: none;
 }
 
 /* Display Window Layout */
@@ -3149,6 +3262,18 @@ canvas#visualizer {
     display: none !important;
   }
 
+  .mixer-shortcuts-toggle-btn {
+    width: 26px !important;
+    height: 26px !important;
+    padding: 2px !important;
+    border-radius: 6px !important;
+  }
+
+  .mixer-shortcuts-toggle-btn [class^="icon-"],
+  .mixer-shortcuts-toggle-btn [class*=" icon-"] {
+    font-size: 0.9rem !important;
+  }
+
   .magic-mouse-fader-btn,
   .magicMouseFaderBtn {
     width: 38px !important;
@@ -3163,9 +3288,19 @@ canvas#visualizer {
   }
 
   .fader-shortcut-key {
-    font-size: 0.58rem !important;
-    padding: 0.08rem 0.25rem !important;
+    font-size: 0.52rem !important;
+    padding: 0.08rem 0.2rem !important;
     border-radius: 3px !important;
+    line-height: 1.1 !important;
+    gap: 0px !important;
+  }
+
+  .fader-bottom {
+    gap: 1px !important;
+  }
+
+  .fader-mute-btn {
+    font-size: 0.8rem !important;
   }
 
   .mixer {
