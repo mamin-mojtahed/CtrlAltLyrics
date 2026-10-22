@@ -46,11 +46,29 @@ io.on('connection', (socket) => {
   });
 
   socket.on('update_state', (newState) => {
+    if (newState && newState.volumes) {
+      const inst = newState.volumes.inst ?? newState.volumes.instrumentals;
+      const lead = newState.volumes.lead ?? newState.volumes.vocals;
+      const back = newState.volumes.back;
+      const normalized = { ...newState.volumes };
+      if (inst !== undefined) {
+        normalized.inst = inst;
+        normalized.instrumentals = inst;
+      }
+      if (lead !== undefined) {
+        normalized.lead = lead;
+        normalized.vocals = lead;
+      }
+      if (back !== undefined) {
+        normalized.back = back;
+      }
+      newState.volumes = { ...(currentState.volumes || {}), ...normalized };
+    }
     currentState = { ...currentState, ...newState };
     if (newState.isPlaying !== undefined) {
       io.emit('sync_state', currentState);
     } else {
-      socket.broadcast.emit('sync_state', currentState);
+      socket.broadcast.emit('sync_state', newState);
     }
   });
 
@@ -61,6 +79,9 @@ io.on('connection', (socket) => {
       currentState.isPlaying = !currentState.isPlaying;
     } else if (cmd.command === 'play') {
       currentState.isPlaying = true;
+      if (typeof cmd.time === 'number' && !isNaN(cmd.time)) {
+        currentState.currentTime = cmd.time;
+      }
     } else if (cmd.command === 'pause') {
       currentState.isPlaying = false;
       if (typeof cmd.time === 'number' && !isNaN(cmd.time)) {
@@ -68,14 +89,37 @@ io.on('connection', (socket) => {
       }
     } else if (cmd.command === 'seek' && typeof cmd.time === 'number') {
       currentState.currentTime = cmd.time;
+    } else if (cmd.command === 'select_song') {
+      currentState.songId = cmd.id;
+      currentState.queueId = cmd.queueId || null;
     } else if (cmd.command === 'set_volumes' && cmd.volumes) {
-      currentState.volumes = { ...currentState.volumes, ...cmd.volumes };
+      const inst = cmd.volumes.inst ?? cmd.volumes.instrumentals;
+      const lead = cmd.volumes.lead ?? cmd.volumes.vocals;
+      const back = cmd.volumes.back;
+      const normalized = { ...cmd.volumes };
+      if (inst !== undefined) {
+        normalized.inst = inst;
+        normalized.instrumentals = inst;
+      }
+      if (lead !== undefined) {
+        normalized.lead = lead;
+        normalized.vocals = lead;
+      }
+      if (back !== undefined) {
+        normalized.back = back;
+      }
+      currentState.volumes = { ...(currentState.volumes || {}), ...normalized };
+    }
+    if (cmd.audioMaster) {
+      currentState.audioMaster = cmd.audioMaster;
     }
 
-    if (['toggle_play', 'play', 'pause', 'seek', 'set_volumes'].includes(cmd.command)) {
-      io.emit('sync_state', currentState);
+    if (cmd.command === 'set_volumes' && cmd.volumes) {
+      socket.broadcast.emit('sync_state', { volumes: currentState.volumes });
+    } else if (['toggle_play', 'play', 'pause', 'seek'].includes(cmd.command)) {
+      socket.broadcast.emit('sync_state', currentState);
     }
-    io.emit('player_command', cmd);
+    socket.broadcast.emit('player_command', cmd);
   });
 
   socket.on('disconnect', () => {

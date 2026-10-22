@@ -8,56 +8,7 @@
   <link rel="icon" type="image/png" href="/ctrlaltlyrics-logo.webp">
 </head>
 <body>
-  <div class="display-container" id="displayContainer">
-    <div id="audioBlockedBanner" class="audio-blocked-banner" style="display: none;">
-      <span><i class="icon-alert-triangle" style="margin-right: 0.35rem;"></i>Browser sound paused. Click anywhere on Dashboard to enable audio playback!</span>
-    </div>
-    <canvas id="visualizer"></canvas>
-    
-
-
-    <!-- Song Info Sidebar (Desktop: Left Sidebar, Mobile: Bottom Sheet Drawer) -->
-    <aside class="song-info-sidebar glass" id="songSidebar">
-        <div class="cover-wrapper">
-          <img id="displaySongCover" src="/ctrlaltlyrics-logo.webp" alt="Album Cover" onerror="this.onerror=null; this.src='/ctrlaltlyrics-logo.webp';">
-        </div>
-        <div class="song-meta">
-          <h2 id="displaySongTitle" class="meta-title"></h2>
-          <p id="displaySongArtist" class="meta-artist"></p>
-        </div>
-
-        <!-- Playback Timeline & Timer -->
-        <div class="display-timeline-section" id="displayTimelineSection">
-          <span id="displayTimeDisplay" class="display-time-display">--:-- / --:--</span>
-          <input type="range" id="displayTimelineSlider" min="0" max="0" value="0" step="any" disabled aria-label="Playback Timeline">
-        </div>
-
-        <!-- Next Up in Queue (up to three songs) -->
-        <div class="display-queue-section" id="displayQueueSection">
-          <div class="display-queue-header">
-            <span class="display-queue-heading"><i class="icon-list"></i> Next Up</span>
-          </div>
-          <div class="display-queue-list" id="displayQueueList">
-            <div class="display-queue-empty">No upcoming songs</div>
-          </div>
-          <div class="display-queue-more" id="displayQueueMore" style="display: none;"></div>
-        </div>
-    </aside>
-
-    <!-- Invisible border resizer between sidebar and main lyrics -->
-    <div class="panel-border-resizer resizer-display-sidebar" id="resizerDisplaySidebar" aria-hidden="true" title="Drag border to resize, double-tap to reset"></div>
-
-    <!-- Right 2/3 Section: Main Scrollable Lyrics -->
-    <main class="lyrics-main-content">
-      <div class="lyrics-container" id="lyricsContainer" dir="auto"></div>
-    </main>
-
-    <!-- Bottom-Left Floating Control Buttons -->
-    <div class="display-floating-controls">
-      <button id="displayPlayPauseBtn" class="btn glass-btn floating-control-btn" title="Play / Pause (Space)"><i class="icon-play"></i></button>
-      <button id="toggleSidebarBtn" class="btn glass-btn floating-control-btn disk-btn" title="Toggle Song Info"><i class="icon-disc"></i></button>
-    </div>
-  </div>
-  <script type="module" src="/display.js"></script>
+  <div id="root"></div>
+  <script type="module" src="/src/display.jsx"></script>
 </body>
 </html>

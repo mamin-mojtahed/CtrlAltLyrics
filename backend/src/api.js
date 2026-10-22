@@ -1527,6 +1527,16 @@ router.get('/song_details/:id', (req, res) => {
     isCustom: !!(song.engineSettings && song.engineSettings.isCustom)
   };
 
+  const defaultLyAttempts = [];
+  const lyProv = song.lyricsProvider || (song.lyrics && song.lyrics.length > 0 ? 'LRCLIB' : null);
+  if (lyProv) {
+    defaultLyAttempts.push({ provider: lyProv, status: 'success', detail: `Found synced LRC (${(song.lyrics || []).length} lines)` });
+    if (lyProv !== 'Musixmatch') defaultLyAttempts.push({ provider: 'Musixmatch', status: 'skipped', detail: 'Skipped (synced lyrics already found)' });
+    if (lyProv !== 'NetEase') defaultLyAttempts.push({ provider: 'NetEase', status: 'skipped', detail: 'Skipped (synced lyrics already found)' });
+  } else if (song.lyricsError) {
+    defaultLyAttempts.push({ provider: 'All Providers', status: 'failed', detail: song.lyricsError });
+  }
+
   res.json({
     song,
     components: {
@@ -1549,7 +1559,7 @@ router.get('/song_details/:id', (req, res) => {
         provider: song.lyricsProvider || null,
         count: (song.lyrics || []).length,
         hasLyrics: !!song.hasLyrics,
-        attempts: song.lyricsAttempts || [],
+        attempts: (song.lyricsAttempts && song.lyricsAttempts.length > 0) ? song.lyricsAttempts : defaultLyAttempts,
         error: song.lyricsError || null
       }
     }
