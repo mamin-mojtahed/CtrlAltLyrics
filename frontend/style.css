@@ -279,36 +279,39 @@ input[type="text"]:focus, input[type="search"]:focus {
 
 /* Upper & Lower Panel Layout */
 .upper-panel {
-  flex: 1 1 60%;
+  flex: var(--upper-panel-flex, 1 1 60%);
   min-height: 0;
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
-  gap: 1.25rem;
-  overflow: hidden;
+  gap: 0;
+  overflow: visible;
+  position: relative;
 }
 
 .upper-left {
-  flex: 1 1 50%;
+  flex: var(--upper-left-flex, 1 1 50%);
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   overflow: hidden;
-  padding-right: 0.5rem;
+  padding-right: 1.25rem;
+  position: relative;
 }
 
 .upper-right {
-  flex: 1 1 50%;
+  flex: var(--upper-right-flex, 1 1 50%);
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  overflow: hidden;
-  padding-left: 0.75rem;
+  overflow: visible;
+  padding-left: 1.25rem;
   border-left: 1px solid var(--border);
+  position: relative;
 }
 
 .search-header-block {
@@ -319,11 +322,13 @@ input[type="text"]:focus, input[type="search"]:focus {
 }
 
 .lower-panel {
-  flex: 0 0 auto;
+  flex: var(--lower-panel-flex, 0 0 auto);
+  height: var(--lower-panel-height, auto);
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
+  position: relative;
 }
 
 .lower-container {
@@ -335,29 +340,39 @@ input[type="text"]:focus, input[type="search"]:focus {
   gap: 1.25rem;
   width: 100%;
   min-width: 0;
+  flex: 1 1 0px;
+  min-height: 0;
+  height: 100%;
 }
 
 .audio-controls-card {
-  flex: 1 1 55%;
+  flex: var(--audio-controls-flex, 1 1 55%);
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: space-evenly;
   text-align: center;
-  gap: 0.75rem;
+  gap: clamp(0.2rem, 1vh, 0.75rem);
   background: rgba(0, 0, 0, 0.15);
-  padding: 1rem 1.25rem;
+  padding: clamp(0.4rem, 1.2vh, 1rem) clamp(0.5rem, 1.2vw, 1.25rem);
   border-radius: 12px;
   border: 1px solid var(--border);
   overflow: hidden;
+  position: relative;
 }
 
 .audio-controls-card h2 {
+  font-size: clamp(0.85rem, 1.8vh, 1.25rem);
+  margin: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   width: 100%;
+  flex: 0 0 auto;
 }
 
 .audio-controls-card .btn,
@@ -444,31 +459,36 @@ input[type="text"]:focus, input[type="search"]:focus {
 }
 
 .mixer-card {
-  flex: 0 0 auto;
-  width: 340px;
-  max-width: 45%;
+  flex: var(--mixer-card-flex, 0 0 auto);
+  width: var(--mixer-card-width, 340px);
+  max-width: var(--mixer-card-max-width, 45%);
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   text-align: center;
-  gap: 0.75rem;
+  gap: clamp(0.2rem, 0.8vh, 0.5rem);
   background: rgba(0, 0, 0, 0.15);
-  padding: 1rem 1.25rem;
+  padding: clamp(0.4rem, 1vh, 0.85rem) clamp(0.4rem, 1vw, 1rem);
   border-radius: 12px;
   border: 1px solid var(--border);
   overflow: hidden;
+  position: relative;
 }
 
 .mixer-toggles-row {
+  flex: 0 0 auto;
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 0.75rem;
-  padding-bottom: 0.5rem;
+  gap: clamp(0.35rem, 0.8vw, 0.75rem);
+  padding-bottom: 0.35rem;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.15rem;
   width: 100%;
 }
 
@@ -1427,18 +1447,25 @@ input[type="text"]:focus, input[type="search"]:focus {
 /* Mixer */
 .mixer {
   display: flex;
-  gap: 0.75rem;
+  gap: clamp(0.2rem, 0.8vw, 0.75rem);
   justify-content: center;
   align-items: center;
-  padding: 0.5rem 0;
+  padding: 0.2rem 0;
   width: 100%;
+  flex: 1 1 0px;
+  min-height: 0;
 }
 
 .fader-container {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: space-between;
+  gap: clamp(0.15rem, 0.5vh, 0.4rem);
+  flex: 1 1 0px;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
 }
 
 .fader-container input[type="range"] {
@@ -1447,7 +1474,10 @@ input[type="text"]:focus, input[type="search"]:focus {
   -webkit-appearance: none;
   appearance: none;
   width: 32px;
-  height: 120px;
+  flex: 1 1 40px;
+  height: 100%;
+  min-height: 40px;
+  max-height: 160px;
   vertical-align: bottom;
   background-color: rgba(255, 255, 255, 1);
   border-radius: 12px;
@@ -1559,11 +1589,12 @@ input[type="text"]:focus, input[type="search"]:focus {
 
 /* Left 1/3 Section: Song Info Sidebar */
 .song-info-sidebar {
-  flex: 0 0 33.333%;
-  width: 33.333%;
-  max-width: 33.333%;
+  flex: 0 0 var(--sidebar-width, 33.333%);
+  width: var(--sidebar-width, 33.333%);
+  max-width: var(--sidebar-width, 33.333%);
   min-width: 0;
   height: 100vh;
+  position: relative;
   z-index: 10;
   display: flex;
   flex-direction: column;
@@ -2105,8 +2136,8 @@ input[type="text"]:focus, input[type="search"]:focus {
 
 /* Right 2/3 Section: Main Scrollable Lyrics */
 .lyrics-main-content {
-  flex: 1 1 66.666%;
-  width: 66.666%;
+  flex: 1 1 calc(100% - var(--sidebar-width, 33.333%));
+  width: calc(100% - var(--sidebar-width, 33.333%));
   max-width: 100%;
   min-width: 0;
   height: 100vh;
@@ -2124,7 +2155,7 @@ input[type="text"]:focus, input[type="search"]:focus {
 
 /* Collapsed Sidebar Hidden State */
 .display-container.sidebar-hidden .song-info-sidebar {
-  margin-left: -33.333%;
+  margin-left: calc(-1 * var(--sidebar-width, 33.333%));
   opacity: 0;
   pointer-events: none;
   visibility: hidden;
@@ -2595,12 +2626,12 @@ canvas#visualizer {
     transition: height 0.35s ease;
   }
 
-  /* When bottom sheet is open, lyrics area strictly fills the top 50% of screen */
+  /* When bottom sheet is open, lyrics area fills the top of screen */
   .display-container:not(.sidebar-hidden) .lyrics-main-content {
-    height: 50vh !important;
-    height: 50dvh !important;
-    max-height: 50vh !important;
-    max-height: 50dvh !important;
+    height: calc(100vh - var(--sidebar-sheet-height, 50vh)) !important;
+    height: calc(100dvh - var(--sidebar-sheet-height, 50dvh)) !important;
+    max-height: calc(100vh - var(--sidebar-sheet-height, 50vh)) !important;
+    max-height: calc(100dvh - var(--sidebar-sheet-height, 50dvh)) !important;
     overflow-y: auto;
   }
 
@@ -2635,7 +2666,7 @@ canvas#visualizer {
     font-size: clamp(1.4rem, 5vw, 1.8rem);
   }
 
-  /* Song Info Sidebar: strictly fills lower half of screen (50% height) with opaque background */
+  /* Song Info Sidebar: strictly fills lower portion of screen with opaque background */
   .song-info-sidebar {
     position: fixed;
     bottom: 0;
@@ -2645,10 +2676,10 @@ canvas#visualizer {
     width: 100%;
     max-width: 100%;
     flex: none;
-    height: 50vh;
-    height: 50dvh;
-    max-height: 50vh;
-    max-height: 50dvh;
+    height: var(--sidebar-sheet-height, 50vh);
+    height: var(--sidebar-sheet-height, 50dvh);
+    max-height: var(--sidebar-sheet-height, 50vh);
+    max-height: var(--sidebar-sheet-height, 50dvh);
     margin-left: 0 !important;
     border-right: none;
     border-left: none;
@@ -2840,11 +2871,11 @@ canvas#visualizer {
 
   /* Upper panel changes orientation to column */
   .upper-panel {
-    flex: 1 1 auto;
+    flex: var(--upper-panel-flex, 1 1 auto) !important;
     min-height: 0;
     display: flex;
     flex-direction: column !important;
-    gap: 0.45rem;
+    gap: 0 !important;
     padding: 0.5rem;
     overflow-y: auto !important;
     overflow-x: hidden !important;
@@ -2854,11 +2885,12 @@ canvas#visualizer {
   /* div.upper-left goes on top */
   .upper-left {
     flex: 0 0 auto !important;
+    height: var(--upper-left-height, auto);
     width: 100% !important;
     max-width: 100% !important;
     min-height: 0;
     padding-right: 0 !important;
-    padding-bottom: 0.2rem;
+    padding-bottom: 0.5rem !important;
     overflow: visible;
   }
 
@@ -2908,7 +2940,7 @@ canvas#visualizer {
     max-width: 100% !important;
     min-height: 120px;
     padding-left: 0 !important;
-    padding-top: 0.4rem;
+    padding-top: 0.5rem !important;
     border-left: none !important;
     border-top: 1px solid var(--border);
     overflow: visible;
@@ -3001,10 +3033,11 @@ canvas#visualizer {
 
   /* div.lower-panel and div.lower-container stay side-by-side */
   .lower-panel {
-    flex: 0 0 auto !important;
+    flex: var(--lower-panel-flex, 0 0 auto) !important;
+    height: var(--lower-panel-height, auto);
     min-height: 0;
     padding: 0.45rem 0.5rem !important;
-    overflow: hidden;
+    overflow: visible;
   }
 
   .lower-container {
@@ -3016,25 +3049,34 @@ canvas#visualizer {
     gap: 0.35rem;
     width: 100%;
     min-width: 0;
+    flex: 1 1 0px !important;
+    min-height: 0 !important;
+    height: 100% !important;
   }
 
   .audio-controls-card {
-    flex: 1 1 52% !important;
+    flex: var(--audio-controls-flex, 1 1 52%) !important;
     min-width: 0 !important;
+    min-height: 0 !important;
+    height: 100% !important;
     max-width: none !important;
     padding: 0.45rem 0.4rem !important;
     gap: 0.3rem !important;
     border-radius: 10px;
+    overflow: hidden;
   }
 
   .mixer-card {
-    flex: 1 1 48% !important;
-    width: auto !important;
-    max-width: none !important;
+    flex: var(--mixer-card-flex, 1 1 48%) !important;
+    width: var(--mixer-card-width, auto) !important;
+    max-width: var(--mixer-card-max-width, none) !important;
     min-width: 0 !important;
+    min-height: 0 !important;
+    height: 100% !important;
     padding: 0.45rem 0.3rem !important;
     gap: 0.2rem !important;
     border-radius: 10px;
+    overflow: hidden;
   }
 
   .audio-controls-card h2 {
@@ -3131,15 +3173,22 @@ canvas#visualizer {
     padding: 0 !important;
     width: 100% !important;
     justify-content: space-evenly !important;
+    flex: 1 1 0px !important;
+    min-height: 0 !important;
   }
 
   .fader-container {
     gap: 0.2rem !important;
-    flex: 0 0 auto !important;
+    flex: 1 1 0px !important;
+    height: 100% !important;
+    min-height: 0 !important;
   }
 
   .fader-container input[type="range"] {
-    height: 75px !important;
+    flex: 1 1 35px !important;
+    height: 100% !important;
+    min-height: 35px !important;
+    max-height: 90px !important;
     width: 26px !important;
   }
 
@@ -4603,4 +4652,127 @@ input.sync-shift-input,
   background: rgba(0, 0, 0, 0.2);
   border: 1px dashed rgba(255, 255, 255, 0.1);
   border-radius: 8px;
+}
+
+/* ==========================================================================
+   Invisible Panel Border Resizers (No New UI)
+   ========================================================================== */
+.panel-border-resizer {
+  position: absolute;
+  z-index: 45;
+  background: transparent;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: auto;
+}
+
+/* Active drag state cursor locks */
+body.is-resizing-col,
+body.is-resizing-col * {
+  cursor: col-resize !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+body.is-resizing-row,
+body.is-resizing-row * {
+  cursor: row-resize !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+body.is-resizing-col .lyrics-main-content,
+body.is-resizing-row .lyrics-main-content,
+body.is-resizing-col .song-info-sidebar,
+body.is-resizing-row .song-info-sidebar,
+body.is-resizing-col .lyrics-container,
+body.is-resizing-row .lyrics-container,
+body.is-resizing-col .upper-panel,
+body.is-resizing-row .upper-panel,
+body.is-resizing-col .lower-panel,
+body.is-resizing-row .lower-panel {
+  transition: none !important;
+}
+
+/* Dashboard Vertical: Upper vs Lower Split (Horizontal border) */
+.resizer-dash-vertical {
+  top: calc(-1.25rem - 4px);
+  left: 0;
+  right: 0;
+  height: calc(1.25rem + 8px);
+  cursor: row-resize;
+}
+@media (max-width: 768px) {
+  .resizer-dash-vertical {
+    top: calc(-0.4rem - 6px);
+    height: calc(0.4rem + 12px);
+  }
+}
+
+/* Dashboard Upper Columns: Search/Queue vs Library (Vertical border desktop, Horizontal mobile) */
+.resizer-upper-split {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 24px;
+  margin-left: -12px;
+  cursor: col-resize;
+}
+@media (max-width: 900px) {
+  .resizer-upper-split {
+    top: 0;
+    bottom: auto;
+    left: 0;
+    right: 0;
+    width: auto;
+    height: 24px;
+    margin-left: 0;
+    margin-top: -12px;
+    cursor: row-resize;
+  }
+}
+
+/* Dashboard Lower Cards: Audio Controls vs Mixer (Vertical border) */
+.resizer-lower-split {
+  top: 0;
+  bottom: 0;
+  left: calc(-1.25rem - 4px);
+  width: calc(1.25rem + 8px);
+  cursor: col-resize;
+}
+@media (max-width: 768px) {
+  .resizer-lower-split {
+    left: calc(-0.35rem - 6px);
+    width: calc(0.35rem + 12px);
+  }
+}
+
+/* Display Tab: Sidebar vs Lyrics */
+.resizer-display-sidebar {
+  top: 0;
+  bottom: 0;
+  left: var(--sidebar-width, 33.333%);
+  width: 24px;
+  margin-left: -12px;
+  cursor: col-resize;
+  z-index: 60;
+}
+@media (max-width: 768px) {
+  .resizer-display-sidebar {
+    top: auto;
+    bottom: var(--sidebar-sheet-height, 50vh);
+    bottom: var(--sidebar-sheet-height, 50dvh);
+    left: 0;
+    right: 0;
+    width: auto;
+    height: 24px;
+    margin-left: 0;
+    margin-bottom: -12px;
+    cursor: row-resize;
+    z-index: 120;
+  }
+}
+.display-container.sidebar-hidden > .resizer-display-sidebar {
+  display: none !important;
 }
