@@ -44,6 +44,8 @@ export default function DashboardApp() {
   const setLibrary = useLibraryStore((state) => state.setLibrary);
 
   const closeAllModals = useModalStore((state) => state.closeAllModals);
+  const lyricsSyncModalSong = useModalStore((state) => state.lyricsSyncModalSong);
+  const stemEditorModalSong = useModalStore((state) => state.stemEditorModalSong);
 
   // Hook for all dashboard border dividers and persistent CSS variables
   useDashboardResizers();
@@ -193,6 +195,11 @@ export default function DashboardApp() {
         return;
       }
 
+      // If a modal with dedicated keyboard controls is open, let the modal handle shortcuts
+      if (lyricsSyncModalSong || stemEditorModalSong) {
+        return;
+      }
+
       // Skip system combinations (Cmd+C, Ctrl+R, etc.)
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
@@ -276,7 +283,7 @@ export default function DashboardApp() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [togglePlayPause, playNext, playPrev, jumpToNextLine, jumpToPrevLine, seek, currentTime, duration, volumes, setVolumes, toggleStemMute, closeAllModals]);
+  }, [togglePlayPause, playNext, playPrev, jumpToNextLine, jumpToPrevLine, seek, currentTime, duration, volumes, setVolumes, toggleStemMute, closeAllModals, lyricsSyncModalSong, stemEditorModalSong]);
 
   return (
     <div id="app" className="dashboard-vertical">

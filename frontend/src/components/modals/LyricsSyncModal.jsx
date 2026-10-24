@@ -5,6 +5,7 @@ import { formatCentiseconds, parseCentiseconds } from '../../utils/themeColors';
 import { isInstrumentalText } from '../../utils/lyricsWrapping';
 import * as audioPlayer from '../../services/audioPlayer';
 import { emitUpdateState } from '../../services/socket';
+import LyricsTimelineSpectrumEditor from './LyricsTimelineSpectrumEditor';
 
 export default function LyricsSyncModal() {
   const rawModalSong = useModalStore((state) => state.lyricsSyncModalSong);
@@ -33,6 +34,23 @@ export default function LyricsSyncModal() {
 
   const savedSnapshotRef = useRef('');
   const nudgeStep = Math.max(0.01, parseFloat(nudgeUnit) || 0.1);
+  const timelineRef = useRef(null);
+
+  // Fresh state refs for global event listener
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
+  const selectedRowIndexRef = useRef(selectedRowIndex);
+  selectedRowIndexRef.current = selectedRowIndex;
+  const linesRef = useRef(lines);
+  linesRef.current = lines;
+  const activeTapIndexRef = useRef(activeTapIndex);
+  activeTapIndexRef.current = activeTapIndex;
+  const isTapModeRef = useRef(isTapMode);
+  isTapModeRef.current = isTapMode;
+  const nudgeStepRef = useRef(nudgeStep);
+  nudgeStepRef.current = nudgeStep;
+  const durationRef = useRef(duration);
+  durationRef.current = duration;
 
   // Expose global helper for backward compatibility
   useEffect(() => {
@@ -210,8 +228,13 @@ export default function LyricsSyncModal() {
     setTimeStrings({});
   };
 
-  const handleAddLine = (afterIndex) => {
-    const prevTime = afterIndex >= 0 && lines[afterIndex] ? lines[afterIndex].time + 2 : 0;
+  const handleAddLine = (afterIndex, optionalTime) => {
+    let prevTime = 0;
+    if (optionalTime !== undefined) {
+      prevTime = Math.max(0, Math.round(optionalTime * 100) / 100);
+    } else if (afterIndex >= 0 && lines[afterIndex]) {
+      prevTime = lines[afterIndex].time + 2;
+    }
     const newLine = {
       id: Date.now(),
       time: prevTime,
@@ -221,9 +244,27 @@ export default function LyricsSyncModal() {
       isInstrumental: true
     };
     const next = [...lines];
-    next.splice(afterIndex + 1, 0, newLine);
+    const insertIdx = afterIndex >= 0 ? afterIndex + 1 : next.length;
+    next.splice(insertIdx, 0, newLine);
+    if (optionalTime !== undefined) {
+      next.sort((a, b) => a.time - b.time);
+    }
     pushUndo(next);
-    setSelectedRowIndex(afterIndex + 1);
+    const newIdx = next.indexOf(newLine);
+    setSelectedRowIndex(newIdx >= 0 ? newIdx : insertIdx);
+  };
+
+  const handleUpdateLineTime = (index, newTime) => {
+    const next = [...lines];
+    if (!next[index]) return;
+    const rounded = Math.max(0, Math.round(newTime * 100) / 100);
+    next[index] = { ...next[index], time: rounded };
+    pushUndo(next);
+    setTimeStrings((prev) => {
+      const copy = { ...prev };
+      delete copy[index];
+      return copy;
+    });
   };
 
   const handleDeleteLine = (index) => {
@@ -245,24 +286,27 @@ export default function LyricsSyncModal() {
   };
 
   const handleStampCurrentLine = () => {
-    const curTime = audioPlayer.getCurrentPlaybackTime(isPlaying) || 0;
+    const curTime = audioPlayer.getCurrentPlaybackTime(isPlayingRef.current) || 0;
     const stamped = Math.round(curTime * 100) / 100;
-    const next = [...lines];
-    if (next[activeTapIndex]) {
-      next[activeTapIndex] = { ...next[activeTapIndex], time: stamped };
+    const next = [...linesRef.current];
+    const targetIdx = isTapModeRef.current ? activeTapIndexRef.current : (selectedRowIndexRef.current >= 0 ? selectedRowIndexRef.current : 0);
+    if (next[targetIdx]) {
+      next[targetIdx] = { ...next[targetIdx], time: stamped };
       pushUndo(next);
       setTimeStrings((prev) => {
         const copy = { ...prev };
-        delete copy[activeTapIndex];
+        delete copy[targetIdx];
         return copy;
       });
     }
-    if (activeTapIndex < lines.length - 1) {
-      const nextIdx = activeTapIndex + 1;
-      setActiveTapIndex(nextIdx);
-      setSelectedRowIndex(nextIdx);
-    } else {
-      setIsTapMode(false);
+    if (isTapModeRef.current) {
+      if (activeTapIndexRef.current < linesRef.current.length - 1) {
+        const nextIdx = activeTapIndexRef.current + 1;
+        setActiveTapIndex(nextIdx);
+        setSelectedRowIndex(nextIdx);
+      } else {
+        setIsTapMode(false);
+      }
     }
   };
 
@@ -325,7 +369,11 @@ export default function LyricsSyncModal() {
   useEffect(() => {
     if (!rawModalSong) return;
     const handleKeyDown = (e) => {
-      const isInput = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA');
+      const isInput = e.target && (
+        (e.target.tagName === 'INPUT' && e.target.type !== 'range') ||
+        e.target.tagName === 'TEXTAREA' ||
+        e.target.isContentEditable
+      );
 
       // Save shortcut: Ctrl+S / Cmd+S
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
@@ -343,7 +391,7 @@ export default function LyricsSyncModal() {
         return;
       }
 
-      // Redo: Ctrl+Y or Ctrl+Shift+Z
+      // Redo: Ctrl+Y or Ctrl+Shift+Z / Cmd+Shift+Z
       if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) {
         if (!isInput) {
           e.preventDefault();
@@ -352,9 +400,9 @@ export default function LyricsSyncModal() {
         return;
       }
 
-      // Escape
+      // Escape: exit tap mode or close modal
       if (e.key === 'Escape') {
-        if (isTapMode) {
+        if (isTapModeRef.current) {
           e.preventDefault();
           setIsTapMode(false);
         } else {
@@ -363,40 +411,174 @@ export default function LyricsSyncModal() {
         return;
       }
 
-      // Tap-to-sync shortcuts (when not typing in an input)
-      if (isTapMode && !isInput) {
-        if (e.code === 'ArrowDown') {
+      // All transport, editing, and navigation controls when not typing inside an input/textarea
+      if (!isInput) {
+        // Space: Play / Pause (or Shift+Space: Play active line)
+        if (e.code === 'Space') {
+          e.preventDefault();
+          if (e.shiftKey) {
+            const curIdx = isTapModeRef.current ? activeTapIndexRef.current : selectedRowIndexRef.current;
+            const curLines = linesRef.current;
+            if (curIdx >= 0 && curLines[curIdx]) {
+              seek(curLines[curIdx].time);
+              if (!isPlayingRef.current) togglePlayPause();
+            }
+          } else {
+            togglePlayPause();
+          }
+          return;
+        }
+
+        // K: Stop & Rewind to 0
+        if (e.key.toLowerCase() === 'k' && !e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          seek(0);
+          return;
+        }
+
+        // Enter: Stamp current line at playhead
+        if (e.key === 'Enter') {
           e.preventDefault();
           handleStampCurrentLine();
-        } else if (e.code === 'ArrowUp' || e.key === '<' || e.key === ',') {
+          return;
+        }
+
+        // ArrowUp / ArrowDown: Navigate lines & smooth scroll
+        if (e.code === 'ArrowDown') {
           e.preventDefault();
-          if (activeTapIndex > 0) {
-            const newIdx = activeTapIndex - 1;
-            setActiveTapIndex(newIdx);
-            setSelectedRowIndex(newIdx);
-            if (lines[newIdx]) seek(lines[newIdx].time);
+          if (isTapModeRef.current) {
+            handleStampCurrentLine();
+          } else {
+            const curIdx = selectedRowIndexRef.current;
+            const curLines = linesRef.current;
+            if (curIdx < curLines.length - 1) {
+              const newIdx = curIdx + 1;
+              setSelectedRowIndex(newIdx);
+              const rowEl = document.getElementById(`sync-line-${newIdx}`);
+              if (rowEl) rowEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
           }
-        } else if (e.key === '>' || e.key === '.') {
+          return;
+        }
+
+        if (e.code === 'ArrowUp') {
           e.preventDefault();
-          if (activeTapIndex < lines.length - 1) {
-            const newIdx = activeTapIndex + 1;
-            setActiveTapIndex(newIdx);
-            setSelectedRowIndex(newIdx);
-            if (lines[newIdx]) seek(lines[newIdx].time);
+          if (isTapModeRef.current) {
+            if (activeTapIndexRef.current > 0) {
+              const newIdx = activeTapIndexRef.current - 1;
+              setActiveTapIndex(newIdx);
+              setSelectedRowIndex(newIdx);
+              if (linesRef.current[newIdx]) seek(linesRef.current[newIdx].time);
+            }
+          } else {
+            const curIdx = selectedRowIndexRef.current;
+            if (curIdx > 0) {
+              const newIdx = curIdx - 1;
+              setSelectedRowIndex(newIdx);
+              const rowEl = document.getElementById(`sync-line-${newIdx}`);
+              if (rowEl) rowEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
           }
-        } else if (e.code === 'ArrowLeft') {
+          return;
+        }
+
+        // ArrowLeft / ArrowRight: Nudge timestamp by nudgeStep (or Shift+Arrow to seek 5s)
+        if (e.code === 'ArrowLeft') {
           e.preventDefault();
-          handleTimeNudge(activeTapIndex, -nudgeStep);
-        } else if (e.code === 'ArrowRight') {
+          if (e.shiftKey) {
+            const curTime = audioPlayer.getCurrentPlaybackTime(isPlayingRef.current) || 0;
+            seek(Math.max(0, curTime - 5));
+          } else {
+            const curIdx = isTapModeRef.current ? activeTapIndexRef.current : selectedRowIndexRef.current;
+            if (curIdx >= 0) {
+              handleTimeNudge(curIdx, -nudgeStepRef.current);
+            }
+          }
+          return;
+        }
+
+        if (e.code === 'ArrowRight') {
           e.preventDefault();
-          handleTimeNudge(activeTapIndex, nudgeStep);
+          if (e.shiftKey) {
+            const curTime = audioPlayer.getCurrentPlaybackTime(isPlayingRef.current) || 0;
+            const d = durationRef.current || audioPlayer.getLoadedDuration() || 0;
+            seek(Math.min(d, curTime + 5));
+          } else {
+            const curIdx = isTapModeRef.current ? activeTapIndexRef.current : selectedRowIndexRef.current;
+            if (curIdx >= 0) {
+              handleTimeNudge(curIdx, nudgeStepRef.current);
+            }
+          }
+          return;
+        }
+
+        // < / , and > / .: Prev / Next line & seek (aligned with dashboard)
+        if (e.key === '<' || e.key === ',') {
+          e.preventDefault();
+          const curIdx = isTapModeRef.current ? activeTapIndexRef.current : selectedRowIndexRef.current;
+          if (curIdx > 0) {
+            const newIdx = curIdx - 1;
+            if (isTapModeRef.current) setActiveTapIndex(newIdx);
+            setSelectedRowIndex(newIdx);
+            if (linesRef.current[newIdx]) seek(linesRef.current[newIdx].time);
+            const rowEl = document.getElementById(`sync-line-${newIdx}`);
+            if (rowEl) rowEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+          return;
+        }
+
+        if (e.key === '>' || e.key === '.') {
+          e.preventDefault();
+          const curIdx = isTapModeRef.current ? activeTapIndexRef.current : selectedRowIndexRef.current;
+          const curLines = linesRef.current;
+          if (curIdx < curLines.length - 1) {
+            const newIdx = curIdx + 1;
+            if (isTapModeRef.current) setActiveTapIndex(newIdx);
+            setSelectedRowIndex(newIdx);
+            if (linesRef.current[newIdx]) seek(linesRef.current[newIdx].time);
+            const rowEl = document.getElementById(`sync-line-${newIdx}`);
+            if (rowEl) rowEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+          return;
+        }
+
+        // Timeline Zoom & Navigation shortcuts
+        if (e.key === '+' || e.key === '=') {
+          e.preventDefault();
+          timelineRef.current?.zoomIn();
+          return;
+        }
+
+        if (e.key === '-' || e.key === '_') {
+          e.preventDefault();
+          timelineRef.current?.zoomOut();
+          return;
+        }
+
+        if (e.key.toLowerCase() === 'z' && !e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          timelineRef.current?.zoomToActiveLine();
+          return;
+        }
+
+        if (e.key.toLowerCase() === 'f' && !e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          timelineRef.current?.zoomFit();
+          return;
+        }
+
+        // Toggle Shortcuts Help: ?
+        if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
+          e.preventDefault();
+          timelineRef.current?.toggleShortcutsModal();
+          return;
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [rawModalSong, isDirty, lines, activeTapIndex, isTapMode, nudgeStep, undoStack, redoStack]);
+  }, [rawModalSong, isDirty, undoStack, redoStack]);
 
   if (!rawModalSong) return null;
 
@@ -406,7 +588,7 @@ export default function LyricsSyncModal() {
     <div className="modal-backdrop" style={{ display: 'flex', zIndex: 3000 }} onClick={handleClose}>
       <div
         className="modal-box lyrics-sync-modal-box"
-        style={{ maxWidth: '880px', width: '95vw', maxHeight: '92vh' }}
+        style={{ maxWidth: '1060px', width: '96vw', maxHeight: '94vh' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -428,6 +610,24 @@ export default function LyricsSyncModal() {
           </div>
         ) : (
           <>
+            {/* Visual Audio Spectrum & Timeline Editor */}
+            <LyricsTimelineSpectrumEditor
+              ref={timelineRef}
+              song={song}
+              lines={lines}
+              selectedRowIndex={selectedRowIndex}
+              onSelectRow={setSelectedRowIndex}
+              onUpdateLineTime={handleUpdateLineTime}
+              onAddLine={handleAddLine}
+              playbackTime={playbackTime}
+              isPlaying={isPlaying}
+              duration={duration || audioPlayer.getLoadedDuration() || song?.duration || 0}
+              onSeek={seek}
+              onTogglePlayPause={togglePlayPause}
+              nudgeStep={nudgeStep}
+              onStampCurrentLine={handleStampCurrentLine}
+            />
+
             {/* Toolbar */}
             <div className="sync-toolbar">
               <div className="sync-toolbar-left">
@@ -614,6 +814,7 @@ export default function LyricsSyncModal() {
                   return (
                     <div
                       key={line.id || idx}
+                      id={`sync-line-${idx}`}
                       className={`sync-row-wrapper ${isSel ? 'is-selected' : ''}`}
                       onClick={() => {
                         setSelectedRowIndex(idx);
