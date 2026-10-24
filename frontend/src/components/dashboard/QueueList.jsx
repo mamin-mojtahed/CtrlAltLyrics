@@ -1,44 +1,55 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useQueueStore } from '../../stores/useQueueStore';
 import { usePlaybackStore } from '../../stores/usePlaybackStore';
+import { useLibraryStore } from '../../stores/useLibraryStore';
 
 function QueueStatusBadge({ song }) {
-  let iconClass = 'icon-loader-2 icon-spin';
-  let label = 'Processing';
+  if (!song) return null;
+
+  let icons = <i className="icon-loader-2 icon-spin" />;
   let statusClass = 'status-processing';
   let tooltip = 'Processing track...';
 
   if (song.status === 'downloading') {
-    iconClass = 'icon-loader-2 icon-spin';
-    label = 'Downloading';
+    icons = (
+      <>
+        <i className="icon-loader-2 icon-spin" />
+        <i className="icon-download" />
+      </>
+    );
     statusClass = 'status-downloading';
     tooltip = 'Downloading audio...';
   } else if (song.status === 'splitting') {
-    iconClass = 'icon-loader-2 icon-spin';
-    label = 'Splitting';
+    icons = (
+      <>
+        <i className="icon-loader-2 icon-spin" />
+        <i className="icon-scissors" />
+      </>
+    );
     statusClass = 'status-splitting';
     tooltip = 'Separating stems...';
   } else if (song.status === 'fetching_lyrics') {
-    iconClass = 'icon-loader-2 icon-spin';
-    label = 'Lyrics';
+    icons = (
+      <>
+        <i className="icon-loader-2 icon-spin" />
+        <i className="icon-file-text" />
+      </>
+    );
     statusClass = 'status-lyrics';
     tooltip = 'Fetching lyrics...';
   } else if (song.status === 'error') {
-    iconClass = 'icon-alert-triangle';
-    label = 'Error';
+    icons = <i className="icon-alert-triangle" />;
     statusClass = 'status-error';
     tooltip = song.downloadError || song.splitError || song.lyricsError || 'Processing error';
   } else if (song.status === 'pending') {
-    iconClass = 'icon-clock';
-    label = 'Queued';
+    icons = <i className="icon-clock" />;
     statusClass = 'status-pending';
     tooltip = 'Queued for processing...';
   }
 
   return (
-    <div className={`queue-status-badge queue-processing-badge ${statusClass}`} title={tooltip}>
-      <i className={iconClass} style={{ marginRight: '0.25rem' }}></i>
-      <span className="queue-processing-label">{label}</span>
+    <div className={`queue-status-badge queue-processing-badge ${statusClass}`} title={tooltip} aria-label={tooltip}>
+      {icons}
     </div>
   );
 }
@@ -55,6 +66,7 @@ export default function QueueList() {
 
   const currentSong = usePlaybackStore((state) => state.currentSong);
   const currentQueueId = usePlaybackStore((state) => state.currentQueueId);
+  const isPlaying = usePlaybackStore((state) => state.isPlaying);
   const selectSong = usePlaybackStore((state) => state.selectSong);
 
   const [draggedQueueId, setDraggedQueueId] = useState(null);
@@ -86,6 +98,35 @@ export default function QueueList() {
     }
     e.preventDefault();
     selectSong(song.id, true, qId);
+  };
+
+  const handleRevealInLibrary = (song) => {
+    if (!song || !song.id) return;
+
+    // Reset library filter if active so the target song is rendered
+    const { filterQuery, setFilterQuery } = useLibraryStore.getState();
+    if (filterQuery) {
+      setFilterQuery('');
+    }
+
+    // Scroll to library song card and trigger pulse animation
+    setTimeout(() => {
+      const el = document.getElementById(`library-song-${song.id}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.remove('highlight-pulse');
+        void el.offsetWidth;
+        el.classList.add('highlight-pulse');
+        setTimeout(() => {
+          el.classList.remove('highlight-pulse');
+        }, 2200);
+      } else {
+        const list = document.getElementById('libraryList');
+        if (list) {
+          list.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
+    }, 60);
   };
 
   // Helper to determine target element from pointer Y
@@ -283,11 +324,14 @@ export default function QueueList() {
           <>
             {queue.map((song, idx) => {
               const qId = String(song.queueId || song.id);
-              const isActive = Boolean(
-                currentQueueId
-                  ? (song.queueId && String(song.queueId) === String(currentQueueId))
-                  : (currentSong && String(currentSong.id) === String(song.id) && idx === 0)
-              );
+              const activeQueueId = currentQueueId || currentSong?.queueId;
+              let isActive = false;
+              if (activeQueueId && song.queueId) {
+                isActive = String(song.queueId) === String(activeQueueId);
+              } else if (currentSong && song.id && String(currentSong.id) === String(song.id)) {
+                const firstMatchIdx = queue.findIndex(s => String(s.id) === String(currentSong.id));
+                isActive = idx === firstMatchIdx;
+              }
               const isProcessing = song.status !== 'ready';
               const isBeingDragged = isDraggingAny && draggedQueueId === qId;
               const isTargetBefore = showPreview && targetQueueId === qId;
@@ -305,7 +349,7 @@ export default function QueueList() {
                   )}
 
                   <div
-                    className={`song-card queue-card ${isActive ? 'active-playing' : ''} ${isProcessing ? 'queue-card-processing' : ''} ${isBeingDragged ? 'dragging' : ''} ${isBeingDragged && isDragOutside ? 'dragging-remove' : ''}`}
+                    className={`song-card queue-card ${isActive ? (isPlaying ? 'active-playing' : 'active-playing is-paused') : ''} ${isProcessing ? 'queue-card-processing' : ''} ${isBeingDragged ? 'dragging' : ''} ${isBeingDragged && isDragOutside ? 'dragging-remove' : ''}`}
                     data-queue-id={qId}
                     draggable
                     onDragStart={(e) => handleQueueDragStart(e, qId, song)}
@@ -357,9 +401,12 @@ export default function QueueList() {
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
                         {isActive ? (
-                          <div className="currently-playing-badge" title="Currently Playing">
-                            <i className="icon-play" style={{ marginRight: '0.2rem' }}></i>
-                            <span className="currently-playing-label">Playing</span>
+                          <div
+                            className={`currently-playing-badge ${isPlaying ? 'is-playing' : 'is-paused'}`}
+                            title={isPlaying ? "Currently Playing" : "Currently Paused"}
+                            aria-label={isPlaying ? "Currently Playing" : "Currently Paused"}
+                          >
+                            <i className={isPlaying ? "icon-play" : "icon-pause"}></i>
                           </div>
                         ) : (
                           isProcessing && <QueueStatusBadge song={song} />
@@ -367,9 +414,19 @@ export default function QueueList() {
 
                         <div className="queue-controls-group" onClick={(e) => e.stopPropagation()}>
                           <button
+                            className="btn reveal-library-btn"
+                            title="Reveal in Library (scroll to song)"
+                            aria-label={`Reveal ${song.title || 'song'} in library`}
+                            onClick={() => handleRevealInLibrary(song)}
+                          >
+                            <i className="icon-library"></i>
+                          </button>
+
+                          <button
                             className="queue-icon-btn"
                             onClick={() => remove(qId)}
                             title="Remove from Queue"
+                            aria-label="Remove from Queue"
                           >
                             <i className="icon-x"></i>
                           </button>

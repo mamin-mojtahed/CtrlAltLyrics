@@ -339,7 +339,13 @@ export default function DisplayApp() {
       setCurrentTime(cur);
 
       emitPlayerCommand({ command: 'play', time: cur, audioMaster: 'display' });
-      emitUpdateState({ isPlaying: true, currentTime: cur, audioMaster: 'display' });
+      emitUpdateState({
+        isPlaying: true,
+        currentTime: cur,
+        audioMaster: 'display',
+        queueId: songRef.current?.queueId || null,
+        songId: songRef.current?.id || null
+      });
     } else {
       audioPlayer.pauseAudio();
 
@@ -350,7 +356,12 @@ export default function DisplayApp() {
       setCurrentTime(cur);
 
       emitPlayerCommand({ command: 'pause', time: cur });
-      emitUpdateState({ isPlaying: false, currentTime: cur });
+      emitUpdateState({
+        isPlaying: false,
+        currentTime: cur,
+        queueId: songRef.current?.queueId || null,
+        songId: songRef.current?.id || null
+      });
     }
   };
 

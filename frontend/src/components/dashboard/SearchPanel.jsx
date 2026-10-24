@@ -8,6 +8,8 @@ export default function SearchPanel() {
   const [results, setResults] = useState(null);
   const [searchError, setSearchError] = useState(null);
   const [showResults, setShowResults] = useState(false);
+  const [lastSearchedQuery, setLastSearchedQuery] = useState('');
+  const activeSearchRef = useRef(null);
 
   // Engine Settings state
   const [showEngineSettings, setShowEngineSettings] = useState(false);
@@ -18,6 +20,15 @@ export default function SearchPanel() {
 
   const enqueue = useQueueStore((state) => state.enqueue);
   const searchContainerRef = useRef(null);
+
+  const isUrl = (str) => {
+    if (!str) return false;
+    const trimmed = str.trim();
+    if (/^https?:\/\//i.test(trimmed)) return true;
+    if (/^spotify:/i.test(trimmed)) return true;
+    if (/(?:spotify\.com|spotify\.link|youtube\.com|youtu\.be|soundcloud\.com)/i.test(trimmed)) return true;
+    return false;
+  };
 
   // Close search popup & engine settings when clicking outside
   useEffect(() => {
@@ -31,26 +42,40 @@ export default function SearchPanel() {
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
-  const executeSearch = async (searchQuery) => {
+  const executeSearch = (searchQuery) => {
     const q = (searchQuery !== undefined ? searchQuery : query).trim();
     if (!q) {
       setShowResults(false);
-      return;
+      return Promise.resolve([]);
+    }
+
+    if (activeSearchRef.current && activeSearchRef.current.query === q) {
+      return activeSearchRef.current.promise;
     }
 
     setIsSearching(true);
     setSearchError(null);
     setShowResults(true);
 
-    try {
-      const data = await api.searchTracks(q);
-      setResults(data || []);
-    } catch (err) {
-      setSearchError(err.message || 'Search failed');
-      setResults([]);
-    } finally {
-      setIsSearching(false);
-    }
+    const promise = (async () => {
+      try {
+        const data = await api.searchTracks(q);
+        const res = Array.isArray(data) ? data : (data ? [data] : []);
+        setResults(res);
+        setLastSearchedQuery(q);
+        return res;
+      } catch (err) {
+        setSearchError(err.message || 'Search failed');
+        setResults([]);
+        return [];
+      } finally {
+        setIsSearching(false);
+        activeSearchRef.current = null;
+      }
+    })();
+
+    activeSearchRef.current = { query: q, promise };
+    return promise;
   };
 
   const handleInputChange = (e) => {
@@ -58,6 +83,8 @@ export default function SearchPanel() {
     setQuery(val);
     if (!val.trim()) {
       setShowResults(false);
+      setResults(null);
+      setLastSearchedQuery('');
       return;
     }
     // Auto search on Spotify URLs
@@ -66,22 +93,50 @@ export default function SearchPanel() {
     }
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      executeSearch();
-    } else if (e.key === 'Escape') {
-      setShowResults(false);
-      setShowEngineSettings(false);
-    }
-  };
-
   const handleEnqueue = async (song) => {
+    if (!song) return;
     const songPayload = isCustomEngine
       ? { ...song, engineSettings: { mode: engineMode, format: engineFormat, bitrate: engineBitrate } }
       : song;
     await enqueue(songPayload);
     setShowResults(false);
+    setResults(null);
+    setLastSearchedQuery('');
     setQuery('');
+  };
+
+  const handleKeyDown = async (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const trimmed = query.trim();
+      if (!trimmed) return;
+
+      // 1. If from previous enter/go only one result is shown, immediately queue it
+      if (showResults && results && results.length === 1 && !isSearching && lastSearchedQuery === trimmed) {
+        await handleEnqueue(results[0]);
+        return;
+      }
+
+      // 2. If it's a URL, immediately queue
+      if (isUrl(trimmed)) {
+        if (showResults && results && results.length > 0 && !isSearching && lastSearchedQuery === trimmed) {
+          await handleEnqueue(results[0]);
+          return;
+        }
+
+        const searchRes = await executeSearch(trimmed);
+        if (Array.isArray(searchRes) && searchRes.length > 0) {
+          await handleEnqueue(searchRes[0]);
+        }
+        return;
+      }
+
+      // 3. Regular search query: execute search
+      await executeSearch(trimmed);
+    } else if (e.key === 'Escape') {
+      setShowResults(false);
+      setShowEngineSettings(false);
+    }
   };
 
   const engineBadgeText = isCustomEngine
@@ -188,6 +243,7 @@ export default function SearchPanel() {
       <div style={{ position: 'relative' }}>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <input
+            id="searchInput"
             type="search"
             value={query}
             onChange={handleInputChange}
@@ -195,7 +251,12 @@ export default function SearchPanel() {
             placeholder="Search song title or paste Spotify link..."
             autoComplete="off"
           />
-          <button className="btn" onClick={() => executeSearch()}>
+          <button
+            id="searchBtn"
+            className="btn search-go-btn"
+            onClick={() => executeSearch()}
+            disabled={!query.trim() || isSearching}
+          >
             Go
           </button>
         </div>

@@ -20,6 +20,7 @@ export default function LibraryList() {
   const setDraggedLibrarySong = useQueueStore((state) => state.setDraggedLibrarySong);
 
   const currentSong = usePlaybackStore((state) => state.currentSong);
+  const isPlaying = usePlaybackStore((state) => state.isPlaying);
 
   const openUploadModal = useModalStore((state) => state.openUploadModal);
   const openComponentManager = useModalStore((state) => state.openComponentManager);
@@ -170,7 +171,7 @@ export default function LibraryList() {
               <div
                 key={song.id}
                 id={`library-song-${song.id}`}
-                className={`song-card library-card ${isActive ? 'active-playing' : ''} ${isDragging ? 'library-card-dragging' : ''}`}
+                className={`song-card library-card ${isActive ? (isPlaying ? 'active-playing' : 'active-playing is-paused') : ''} ${isDragging ? 'library-card-dragging' : ''}`}
                 draggable
                 onDragStart={(e) => handleDragStart(e, song)}
                 onDragEnd={handleDragEnd}
@@ -189,9 +190,12 @@ export default function LibraryList() {
                     </div>
                   </div>
                   {isActive && (
-                    <div className="currently-playing-badge" title="Currently Playing">
-                      <i className="icon-play" style={{ marginRight: '0.2rem' }}></i>
-                      <span className="currently-playing-label">Playing</span>
+                    <div
+                      className={`currently-playing-badge ${isPlaying ? 'is-playing' : 'is-paused'}`}
+                      title={isPlaying ? "Currently Playing" : "Currently Paused"}
+                      aria-label={isPlaying ? "Currently Playing" : "Currently Paused"}
+                    >
+                      <i className={isPlaying ? "icon-play" : "icon-pause"}></i>
                     </div>
                   )}
                 </div>

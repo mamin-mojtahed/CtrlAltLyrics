@@ -196,7 +196,14 @@ export const usePlaybackStore = create((set, get) => ({
     set({ isPlaying: !blocked, currentTime: offset, audioBlocked: blocked, audioMaster: 'dashboard' });
 
     emitPlayerCommand({ command: 'play', time: offset, audioMaster: 'dashboard' });
-    emitUpdateState({ isPlaying: !blocked, currentTime: offset, audioBlocked: blocked, audioMaster: 'dashboard' });
+    emitUpdateState({
+      isPlaying: !blocked,
+      currentTime: offset,
+      audioBlocked: blocked,
+      audioMaster: 'dashboard',
+      queueId: state.currentQueueId || state.currentSong.queueId || null,
+      songId: state.currentSong.id
+    });
   },
 
   pause: () => {
@@ -209,7 +216,12 @@ export const usePlaybackStore = create((set, get) => ({
     }
     set({ isPlaying: false, currentTime: currentActualTime });
     emitPlayerCommand({ command: 'pause', time: currentActualTime });
-    emitUpdateState({ isPlaying: false, currentTime: currentActualTime });
+    emitUpdateState({
+      isPlaying: false,
+      currentTime: currentActualTime,
+      queueId: state.currentQueueId || state.currentSong?.queueId || null,
+      songId: state.currentSong?.id || null
+    });
   },
 
   togglePlayPause: async () => {
@@ -430,15 +442,20 @@ export const usePlaybackStore = create((set, get) => ({
       audioPlayer.setStemVolumes(vols);
     }
 
-    const incomingQueueId = state.queueId || state.songData?.queueId || null;
+    const incomingQueueId = ('queueId' in state)
+      ? state.queueId
+      : (state.songData && 'queueId' in state.songData ? state.songData.queueId : undefined);
+
     if (incomingQueueId !== undefined) {
       updates.currentQueueId = incomingQueueId;
     }
 
+    const effectiveQueueId = incomingQueueId !== undefined ? incomingQueueId : current.currentQueueId;
+
     const isNewTrack = state.songData && (
       !current.currentSong ||
       current.currentSong.id !== state.songData.id ||
-      (incomingQueueId && current.currentQueueId && String(incomingQueueId) !== String(current.currentQueueId))
+      (effectiveQueueId && current.currentQueueId && String(effectiveQueueId) !== String(current.currentQueueId))
     );
 
     if (isNewTrack) {
