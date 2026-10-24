@@ -59,6 +59,18 @@ function generateQueueId() {
   return typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `q_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
+// Resolve Python virtual environment activation script (.venv)
+function getVenvActivatePath() {
+  const dotVenv = path.resolve(__dirname, '../../.venv/bin/activate');
+  return fs.existsSync(dotVenv) ? dotVenv : null;
+}
+
+// Resolve Python executable (.venv, fallback to system python3)
+function getPythonExecutablePath() {
+  const dotPython = path.resolve(__dirname, '../../.venv/bin/python');
+  return fs.existsSync(dotPython) ? dotPython : 'python3';
+}
+
 function syncSongAcrossQueue(updatedSong) {
   if (!updatedSong || !updatedSong.id) return;
   for (let i = 0; i < queue.length; i++) {
@@ -753,7 +765,8 @@ async function downloadSongAudio(song, requestedSource = 'auto') {
     fs.mkdirSync(songDir, { recursive: true });
   }
 
-  const venvActivate = path.resolve(__dirname, '../../venv/bin/activate');
+  const venvActivate = getVenvActivatePath();
+  const activatePrefix = venvActivate ? `source "${venvActivate}" && ` : '';
   
   // Clean title & main artist extraction
   const cleanTitle = (song.title || '')
@@ -806,7 +819,7 @@ async function downloadSongAudio(song, requestedSource = 'auto') {
     if (!queryText) return false;
     try {
       // SpotDL with verified results filter and direct mp3 output
-      const spotdlCmd = `source "${venvActivate}" && spotdl "${queryText}" --only-verified-results --format mp3 --bitrate 192k --output "${songDir}/{title}.{output-ext}"`;
+      const spotdlCmd = `${activatePrefix}spotdl "${queryText}" --only-verified-results --format mp3 --bitrate 192k --output "${songDir}/{title}.{output-ext}"`;
       const result = await execPromise(spotdlCmd, { shell: '/bin/bash', timeout: 35000 });
       const fullLog = (result.stdout || '') + ' ' + (result.stderr || '');
       
@@ -888,7 +901,7 @@ async function downloadSongAudio(song, requestedSource = 'auto') {
   if (!audioDownloaded && requestedSource !== 'spotdl') {
     try {
       methodUsed = 'yt-dlp Direct (Title + Artist)';
-      const ytdlpCmd = `source "${venvActivate}" && yt-dlp --js-runtimes node --max-downloads 1 --match-filter "${ytFilter}" "ytsearch5:${cleanQuery} official audio" -x --audio-format mp3 -o "${songDir}/audio.%(ext)s"`;
+      const ytdlpCmd = `${activatePrefix}yt-dlp --js-runtimes node --max-downloads 1 --match-filter "${ytFilter}" "ytsearch5:${cleanQuery} official audio" -x --audio-format mp3 -o "${songDir}/audio.%(ext)s"`;
       try {
         await execPromise(ytdlpCmd, { shell: '/bin/bash', timeout: 50000 });
       } catch (e) {
@@ -915,7 +928,7 @@ async function downloadSongAudio(song, requestedSource = 'auto') {
     if (cleanTitle) {
       try {
         methodUsed = 'yt-dlp Direct (Title Only)';
-        const ytdlpCmd = `source "${venvActivate}" && yt-dlp --js-runtimes node --max-downloads 1 --match-filter "${ytFilter}" "ytsearch5:${cleanTitle} official audio" -x --audio-format mp3 -o "${songDir}/audio.%(ext)s"`;
+        const ytdlpCmd = `${activatePrefix}yt-dlp --js-runtimes node --max-downloads 1 --match-filter "${ytFilter}" "ytsearch5:${cleanTitle} official audio" -x --audio-format mp3 -o "${songDir}/audio.%(ext)s"`;
         try {
           await execPromise(ytdlpCmd, { shell: '/bin/bash', timeout: 50000 });
         } catch (e) {
@@ -984,7 +997,8 @@ async function downloadSongAudio(song, requestedSource = 'auto') {
 
 async function splitSongAudio(song) {
   const songDir = path.join(DOWNLOADS_DIR, song.id);
-  const venvActivate = path.resolve(__dirname, '../../venv/bin/activate');
+  const venvActivate = getVenvActivatePath();
+  const activatePrefix = venvActivate ? `source "${venvActivate}" && ` : '';
   const files = fs.existsSync(songDir) ? fs.readdirSync(songDir) : [];
   let audioFile = files.find(f => f.endsWith('.mp3') || f.endsWith('.m4a') || f.endsWith('.wav'));
 
@@ -1011,7 +1025,7 @@ async function splitSongAudio(song) {
   let splitErrorMsg = null;
 
   try {
-    const separateCmd = `source "${venvActivate}" && python "${path.join(__dirname, 'separate.py')}" --input "${audioPath}" --output_dir "${songDir}" --mode "${mode}" --format "${format}" --bitrate "${bitrate}"`;
+    const separateCmd = `${activatePrefix}python "${path.join(__dirname, 'separate.py')}" --input "${audioPath}" --output_dir "${songDir}" --mode "${mode}" --format "${format}" --bitrate "${bitrate}"`;
     await execPromise(separateCmd, { shell: '/bin/bash' });
   } catch (e) {
     console.warn("Splitting failed. Using fallback stem copies.", e);
@@ -1221,8 +1235,7 @@ async function fetchLyricsTranslationAndPronunciation(parsedLines) {
     try {
       const textsToFallback = missingTranslitIndices.map(idx => results[idx].text);
       const pythonScript = path.join(__dirname, 'transliterate.py');
-      const venvPython = path.join(__dirname, '..', '..', 'venv', 'bin', 'python');
-      const pythonPath = fs.existsSync(venvPython) ? venvPython : 'python3';
+      const pythonPath = getPythonExecutablePath();
 
       const child = spawn(pythonPath, [pythonScript, '--stdin']);
       let stdout = '';
@@ -1265,14 +1278,15 @@ async function fetchAndProcessLyrics(song, requestedProvider = 'auto', io = null
 
   try {
     updateLyricsStatus('Starting search...');
-    const venvPython = path.resolve(__dirname, '../../venv/bin/activate');
+    const venvActivate = getVenvActivatePath();
+    const activatePrefix = venvActivate ? `source "${venvActivate}" && ` : '';
     const scriptPath = path.join(__dirname, 'fetch_lyrics.py');
     const safeTitle = (song.title || "").replace(/["\\]/g, " ");
     const safeArtist = (song.artist || "").replace(/["\\]/g, " ");
     const safeQuery = (song.query || `${song.title} ${song.artist}`).replace(/["\\]/g, " ");
 
     const spotifyTrackArg = song.spotifyTrackId ? ` --spotify_track_id "${song.spotifyTrackId}"` : '';
-    const cmd = `source "${venvPython}" && python "${scriptPath}" --title "${safeTitle}" --artist "${safeArtist}" --query "${safeQuery}" --provider "${requestedProvider}"${spotifyTrackArg}`;
+    const cmd = `${activatePrefix}python "${scriptPath}" --title "${safeTitle}" --artist "${safeArtist}" --query "${safeQuery}" --provider "${requestedProvider}"${spotifyTrackArg}`;
     
     const child = spawn('/bin/bash', ['-c', cmd]);
 

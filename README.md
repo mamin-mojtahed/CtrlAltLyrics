@@ -7,87 +7,69 @@ A local all-in-one full-stack Karaoke Player and Lyrics Studio designed for down
 
 ---
 
-## 🚀 Features
+## ⚡ Quick Setup
 
-- **Audio Stem Separation**: Automatically downloads songs and splits them into distinct audio stems (**Instrumental**, **Lead Vocals**, and **Backing Vocals**) using AI audio separation.
-- **Synchronized Lyrics**: Automatically fetches timestamped lyrics (LRC) with fallback multi-provider support.
-- **Pronunciation & Romanization**: Auto-generates Romanized pronunciations for non-English song lyrics.
-- **Live Queue & Library Management**: Add songs via search queries, track real-time processing status, and sort/filter your local library.
-- **Dual Display Modes**: Dedicated Dashboard controls and Display view with customizable fonts, colors, and line-by-line lyric highlighting.
-
----
-
-## 🛠️ Architecture
-
-- **Backend**: Node.js & Express server (`server.js`, `backend/src/api.js`) with Socket.IO for real-time progress updates.
-- **Frontend**: Vite web app (`frontend/`) built with Vanilla JS, HTML5, CSS Glassmorphism design system.
-- **Audio Processing**: Python environment (`venv/`) integrating `spotdl` for track fetching, Demucs audio separation (`separate.py`), and `fetch_lyrics.py`.
-
----
-
-## 📦 Prerequisites
-
-Before running the application, make sure you have installed:
-
-- **Node.js**: v18.x or later
+### Prerequisites
+- **Node.js**: v18+ 
 - **Python**: v3.10+ (v3.12 recommended)
-- **FFmpeg**: Required for audio stem splitting and processing.
+- **FFmpeg**: Required for audio stem splitting and processing
 
-### Python Package Requirements:
-- `spotdl`: Downloads audio tracks
-- `audio-separator`: AI audio stem separation engine
-- `requests`: HTTP requests for lyrics provider APIs
-- `pykakasi`: Japanese Kana/Kanji transliteration to Hepburn Romanized text
-- `unidecode`: Transliteration for Persian, Korean, Cyrillic, Greek, and non-ASCII scripts
-
----
-
-## ⚙️ Setup & Installation
-
-### 1. Clone & Install Node Dependencies
-
+### 1. Install Dependencies
 ```bash
-# Install root Node dependencies
-npm install
+# Install root & frontend Node dependencies
+npm install && cd frontend && npm install && cd ..
 
-# Install frontend dependencies
-cd frontend
-npm install
-cd ..
-```
-
-### 2. Python Virtual Environment Setup
-
-```bash
-# Create Python virtual environment
-python3 -m venv venv
-
-# Activate virtual environment
-source venv/bin/activate
-
-# Install required Python packages from requirements.txt
+# Setup Python virtual environment & dependencies
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+### 2. Start the Application
+Run in two separate terminals:
+
+```bash
+# Terminal 1: Backend Server (starts on http://localhost:3000)
+npm start
+
+# Terminal 2: Frontend Client (starts on http://localhost:5173)
+npm run dev
+```
+
+Open **`http://localhost:5173`** in your browser to launch the main hub, Dashboard, or Display view.
+
 ---
 
-## 🏃 Running the Application
+## 🚀 Key Features
 
-Start both the backend server and frontend development environment:
+- **AI Stem Separation**: Automatically downloads tracks and splits audio into distinct stems (**Instrumental**, **Lead Vocals**, **Backing Vocals**) via Demucs.
+- **Stem Mixer**: Real-time volume sliders, mute toggles, and keyboard shortcuts with seamless master handoff between views.
+- **Synchronized Lyrics**: Auto-fetches timestamped LRC lyrics with an integrated interactive sync editor.
+- **Pronunciation & Romanization**: Auto-generates Romanized pronunciations for non-English lyrics (Japanese via `pykakasi`; Persian, Korean, Cyrillic, Greek, etc. via `unidecode`).
+- **Dual Synced Views**:
+  - **Dashboard**: Queue management, song library, stem mixer, and lyrics synchronization.
+  - **Display View**: Clean stage/party screen with smooth 60fps lyric animations, visualizer canvas, and dynamic album-cover color palettes.
+- **Real-Time State Sync**: WebSocket-driven bidirectional synchronization across all tabs via Socket.IO.
 
-### Terminal 1: Backend Server
-```bash
-npm start
-# Server starts on http://localhost:3000
-```
+---
 
-### Terminal 2: Frontend Client
-```bash
-npm run dev
-# Vite dev server runs (default: http://localhost:5173)
-```
+## 🛠️ Architecture & Tech Stack
 
-Open `http://localhost:5173` (or the URL output by Vite) in your browser to access **CtrlAltLyrics**.
+### Frontend
+- **React 19 & Vite**: Component-driven architecture with dedicated multi-page entry points (`DashboardApp.jsx`, `DisplayApp.jsx`).
+- **Zustand**: Fast, lightweight reactive state management (`usePlaybackStore`, `useLibraryStore`, `useQueueStore`, `useSettingsStore`).
+- **Web Audio API**: Multi-node stem player (`audioPlayer.js`) with sample-accurate offsets, stem gain mixing, and master handoff.
+- **Glassmorphism UI**: Dynamic color extraction from album covers, responsive split-pane resizers, and Lucide icons.
+
+### Backend
+- **Node.js & Express**: RESTful endpoints (`backend/src/api.js`) for library management, downloads, and audio streaming.
+- **Socket.IO**: Real-time event pub/sub ensuring single-source-of-truth playback state between clients.
+- **SQLite3**: Lightweight local database for library metadata, queue items, and cache history.
+
+### Audio & Lyrics Processing (Python)
+- **`spotdl`**: Track downloader and metadata extraction.
+- **`audio-separator`**: Demucs-based neural audio stem splitting.
+- **`pykakasi` & `unidecode`**: Multi-language phonetics, transliteration, and Romanization.
 
 ---
 
@@ -95,25 +77,39 @@ Open `http://localhost:5173` (or the URL output by Vite) in your browser to acce
 
 ```
 CtrlAltLyrics/
+├── .venv/              # Python virtual environment (AI stem separation & lyrics)
 ├── backend/
-│   ├── data/           # Song cache history & lightweight metadata
-│   ├── downloads/      # Downloaded audio tracks & generated stems
-│   └── src/            # Backend API routes, separation scripts, & lyrics fetchers
-├── frontend/           # Vite application (Dashboard UI, Display view, Styles)
-├── venv/               # Python virtual environment for stem separation
-├── server.js           # Main Express & Socket.IO server entrypoint
-├── package.json        # Project root dependencies and run scripts
-├── requirements.txt    # Python dependencies list
-└── README.md           # Project documentation
+│   ├── data/           # SQLite database & song metadata cache
+│   ├── downloads/      # Downloaded audio tracks & separated stems
+│   └── src/            # Express routes, Python separation & lyrics scripts
+├── frontend/
+│   ├── public/         # Static assets and brand logos
+│   ├── src/
+│   │   ├── components/ # Dashboard, Display, & Modal UI components
+│   │   ├── hooks/      # Custom React hooks (resizers, shortcuts)
+│   │   ├── services/   # Web Audio player & Socket.IO client
+│   │   ├── stores/     # Zustand stores (playback, queue, library)
+│   │   ├── DashboardApp.jsx
+│   │   └── DisplayApp.jsx
+│   ├── index.html      # Hub page
+│   ├── dashboard.html  # Dashboard entrypoint
+│   ├── display.html    # Display entrypoint
+│   └── vite.config.js  # Multi-page Vite configuration
+├── media/              # Demo screenshots & previews
+├── server.js           # Main Express & Socket.IO server
+├── package.json        # Project scripts & Node dependencies
+└── requirements.txt    # Python package dependencies
 ```
 
 ---
 
-## Demo
+## 📸 Screenshots
 
-![tabs side-by-side demo](/media/demo-screenshot-tabs-sidebyside.webp)
+![tabs side-by-side demo](./media/demo-screenshot-tabs-sidebyside.webp)
+*Display view (left) and Dashboard controls (right) running in real-time sync.*
 
-![edit pop-up demo](/media/demo-screenshot-edit-popup.webp)
+![edit pop-up demo](./media/demo-screenshot-edit-popup.webp)
+*Interactive Lyrics & Sync Editor modal.*
 
 ---
 
