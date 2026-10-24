@@ -709,6 +709,23 @@ input[type="search"]::-webkit-search-cancel-button:hover {
   transition: background 0.2s ease, border-color 0.2s ease;
   overflow: hidden;
   flex-shrink: 0;
+  position: relative;
+}
+
+.current-lyric-preview .lyrics-waveform-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.current-lyric-preview .lyric-preview-icon,
+.current-lyric-preview .current-lyric-text {
+  position: relative;
+  z-index: 1;
 }
 
 .current-lyric-preview:hover {
@@ -3126,15 +3143,15 @@ input[type="search"]::-webkit-search-cancel-button:hover {
   filter: grayscale(0.5);
 }
 
-canvas#visualizer {
+canvas#visualizer,
+.lyrics-waveform-canvas {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
   z-index: 1;
-  opacity: 0.4;
-  mix-blend-mode: screen;
+  pointer-events: none;
 }
 
 .status-badge {
@@ -4289,6 +4306,42 @@ canvas#visualizer {
   word-break: break-all;
 }
 
+.open-source-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #93c5fd;
+  border-radius: 4px;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1.2;
+}
+
+.open-source-btn:hover {
+  background: rgba(59, 130, 246, 0.25);
+  border-color: rgba(59, 130, 246, 0.6);
+  color: #dbeafe;
+  transform: translateY(-1px);
+}
+
+.btn-reupload-quick {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  color: var(--text-primary) !important;
+  transition: all 0.2s ease !important;
+}
+
+.btn-reupload-quick:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.25) !important;
+  border-color: rgba(99, 102, 241, 0.6) !important;
+  color: #c7d2fe !important;
+  transform: translateY(-1px);
+}
+
 /* Component Manager Card Styling & Responsive Wrapping */
 #componentManagerModal .modal-box {
   width: 95vw;
@@ -4309,6 +4362,61 @@ canvas#visualizer {
   padding-right: 4px;
 }
 
+.component-editor-slot {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.component-editor-slot-stems:empty {
+  display: none;
+}
+
+.component-editor-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.85rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.component-editor-btn-meta {
+  background: rgba(147, 51, 234, 0.18) !important;
+  border: 1px solid rgba(147, 51, 234, 0.6) !important;
+  color: #d8b4fe !important;
+}
+
+.component-editor-btn-meta:hover {
+  background: rgba(147, 51, 234, 0.32) !important;
+  border-color: #a855f7 !important;
+  color: #f3e8ff !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(147, 51, 234, 0.3) !important;
+}
+
+.component-editor-btn-lyrics {
+  background: rgba(59, 130, 246, 0.18) !important;
+  border: 1px solid rgba(59, 130, 246, 0.6) !important;
+  color: #93c5fd !important;
+}
+
+.component-editor-btn-lyrics:hover {
+  background: rgba(59, 130, 246, 0.32) !important;
+  border-color: #60a5fa !important;
+  color: #eff6ff !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.3) !important;
+}
+
 .component-card {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -4325,31 +4433,54 @@ canvas#visualizer {
 
 @media (min-width: 768px) {
   #componentManagerModal .modal-box {
-    max-width: 1040px;
-    width: 94vw;
+    max-width: 1240px;
+    width: 96vw;
     height: 84vh;
     max-height: 880px;
   }
 
   #componentManagerBody {
     display: grid;
-    grid-template-columns: 1fr 1.08fr;
-    grid-template-rows: auto auto 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: auto 1fr;
     grid-template-areas:
-      "menu menu"
-      "download lyrics"
-      "splitting lyrics";
-    gap: 0.95rem;
+      "btn-meta btn-stems btn-lyrics"
+      "card-meta card-stems card-lyrics";
+    gap: 0.75rem 0.95rem;
     align-items: stretch;
     height: 100%;
+    min-height: 0;
     max-height: none;
     overflow-y: auto;
     padding-right: 4px;
   }
 
-  .component-manager-top-menu {
-    grid-area: menu;
-    margin-bottom: 0 !important;
+  .component-editor-slot-stems:empty {
+    display: block;
+  }
+
+  .component-editor-slot-meta {
+    grid-area: btn-meta;
+  }
+
+  .component-editor-slot-stems {
+    grid-area: btn-stems;
+  }
+
+  .component-editor-slot-lyrics {
+    grid-area: btn-lyrics;
+  }
+
+  .component-card-download {
+    grid-area: card-meta;
+  }
+
+  .component-card-splitting {
+    grid-area: card-stems;
+  }
+
+  .component-card-lyrics {
+    grid-area: card-lyrics;
   }
 
   .component-card {
@@ -4359,17 +4490,68 @@ canvas#visualizer {
     overflow-y: auto;
   }
 
-  .component-card-download {
-    grid-area: download;
+  .component-card .component-report-box {
+    flex: 1 1 auto;
+    max-height: none;
+    min-height: 140px;
   }
+}
 
-  .component-card-splitting {
-    grid-area: splitting;
-  }
+.component-sub-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
 
-  .component-card-lyrics {
-    grid-area: lyrics;
-  }
+.sub-actions-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.sub-actions-buttons {
+  display: flex;
+  gap: 0.35rem;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+}
+
+.btn-sub-action {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  font-size: 0.76rem;
+  padding: 0.32rem 0.55rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn-sub-action:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.2);
+  border-color: rgba(99, 102, 241, 0.5);
+  color: #c7d2fe;
+  transform: translateY(-1px);
+}
+
+.btn-sub-action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .btn-retry-component {

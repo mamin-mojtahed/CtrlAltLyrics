@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
+const fs = require('fs');
 const path = require('path');
 const apiRoutes = require('./backend/src/api');
 
@@ -13,6 +14,39 @@ app.use(express.json());
 app.use('/audio', express.static(path.join(__dirname, 'backend', 'downloads')));
 
 app.use('/api', apiRoutes);
+
+// Frontend routes: redirect to Vite dev server in development or serve built dist
+const distPath = path.join(__dirname, 'frontend', 'dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+}
+app.get(['/dashboard', '/dashboard.html'], (req, res) => {
+  if (process.env.NODE_ENV !== 'production') {
+    return res.redirect('http://localhost:5173/dashboard.html');
+  }
+  if (fs.existsSync(path.join(distPath, 'dashboard.html'))) {
+    return res.sendFile(path.join(distPath, 'dashboard.html'));
+  }
+  res.redirect('http://localhost:5173/dashboard.html');
+});
+app.get(['/display', '/display.html'], (req, res) => {
+  if (process.env.NODE_ENV !== 'production') {
+    return res.redirect('http://localhost:5173/display.html');
+  }
+  if (fs.existsSync(path.join(distPath, 'display.html'))) {
+    return res.sendFile(path.join(distPath, 'display.html'));
+  }
+  res.redirect('http://localhost:5173/display.html');
+});
+app.get('/', (req, res) => {
+  if (process.env.NODE_ENV !== 'production') {
+    return res.redirect('http://localhost:5173/');
+  }
+  if (fs.existsSync(path.join(distPath, 'index.html'))) {
+    return res.sendFile(path.join(distPath, 'index.html'));
+  }
+  res.redirect('http://localhost:5173/');
+});
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -34,7 +68,8 @@ let currentState = {
     lead: 1,
     back: 1
   },
-  showKaraokeSlide: true
+  showKaraokeSlide: true,
+  showWaveform: true
 };
 
 io.on('connection', (socket) => {

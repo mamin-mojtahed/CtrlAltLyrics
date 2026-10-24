@@ -10,12 +10,63 @@ let currentSongId = null;
 let audioLoadingPromise = null;
 let onSongEndCallback = null;
 let songEndFired = false;
+let analyserNode = null;
+let analyserData = null;
 
 export function getAudioContext() {
+  if (typeof window === 'undefined') return null;
   if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioCtxClass) {
+      audioCtx = new AudioCtxClass();
+    }
   }
   return audioCtx;
+}
+
+let timeDomainData = null;
+
+export function getAudioAnalyser() {
+  const ctx = getAudioContext();
+  if (!ctx) return null;
+  if (!analyserNode) {
+    try {
+      analyserNode = ctx.createAnalyser();
+      analyserNode.fftSize = 256;
+      analyserNode.smoothingTimeConstant = 0.7;
+      analyserData = new Uint8Array(analyserNode.frequencyBinCount);
+      timeDomainData = new Uint8Array(analyserNode.fftSize);
+    } catch (e) {
+      return null;
+    }
+  }
+  return { node: analyserNode, dataArray: analyserData };
+}
+
+export function getFrequencyData() {
+  if (!analyserNode || !analyserData) {
+    const a = getAudioAnalyser();
+    if (!a) return null;
+  }
+  try {
+    analyserNode.getByteFrequencyData(analyserData);
+    return analyserData;
+  } catch (e) {
+    return null;
+  }
+}
+
+export function getTimeDomainData() {
+  if (!analyserNode || !timeDomainData) {
+    const a = getAudioAnalyser();
+    if (!a) return null;
+  }
+  try {
+    analyserNode.getByteTimeDomainData(timeDomainData);
+    return timeDomainData;
+  } catch (e) {
+    return null;
+  }
 }
 
 export function isContextSuspended() {
@@ -82,6 +133,15 @@ export async function setupAudio(song, initialVolumes = { inst: 1, back: 1, lead
   gainNodes.inst.connect(ctx.destination);
   gainNodes.leadVoc.connect(ctx.destination);
   gainNodes.backVoc.connect(ctx.destination);
+
+  const analyser = getAudioAnalyser();
+  if (analyser && analyser.node) {
+    try {
+      gainNodes.inst.connect(analyser.node);
+      gainNodes.leadVoc.connect(analyser.node);
+      gainNodes.backVoc.connect(analyser.node);
+    } catch (e) {}
+  }
 
   gainNodes.inst.gain.value = parseFloat(initialVolumes.inst ?? 1);
   gainNodes.leadVoc.gain.value = parseFloat(initialVolumes.lead ?? 1);
@@ -245,4 +305,16 @@ export function setStemVolumes({ inst, back, lead }) {
 
 export function getLoadedDuration() {
   return buffers.leadBuf?.duration || buffers.instBuf?.duration || buffers.backBuf?.duration || 0;
+}
+
+export function getLoadedBuffer() {
+  return buffers.instBuf || buffers.leadBuf || buffers.backBuf || null;
+}
+
+export function getStemBuffers() {
+  return buffers;
+}
+
+export function isPlayingLocally() {
+  return !!(sources.inst || sources.leadVoc || sources.backVoc);
 }

@@ -17,6 +17,8 @@ export default function StemMixer() {
   const setShowTranslat = usePlaybackStore((state) => state.setShowTranslat);
   const showKaraokeSlide = usePlaybackStore((state) => state.showKaraokeSlide);
   const setShowKaraokeSlide = usePlaybackStore((state) => state.setShowKaraokeSlide);
+  const showWaveform = usePlaybackStore((state) => state.showWaveform);
+  const setShowWaveform = usePlaybackStore((state) => state.setShowWaveform);
 
   const [showShortcuts, setShowShortcuts] = useState(() => (typeof window !== 'undefined' ? window.innerWidth > 768 : true));
 
@@ -117,6 +119,14 @@ export default function StemMixer() {
               onChange={(e) => setShowKaraokeSlide(e.target.checked)}
             />
             <span className="toggle-content"><i className="icon-clock-fading"></i></span>
+          </label>
+          <label className="subtitle-toggle-btn" title="Audio Waveform Visualization">
+            <input
+              type="checkbox"
+              checked={showWaveform}
+              onChange={(e) => setShowWaveform(e.target.checked)}
+            />
+            <span className="toggle-content"><i className="icon-audio-waveform"></i></span>
           </label>
         </div>
       </div>

@@ -5,6 +5,7 @@ import { useModalStore } from '../../stores/useModalStore';
 import * as audioPlayer from '../../services/audioPlayer';
 import { formatTime } from '../../utils/themeColors';
 import { isRtlText } from '../../utils/lyricsWrapping';
+import VisualizerCanvas from '../display/VisualizerCanvas';
 
 /**
  * Pure, safe helper to determine active lyric index and karaoke progress percentage.
@@ -71,9 +72,9 @@ export default function PlaybackControls() {
   const openLyricsSyncModal = useModalStore((state) => state.openLyricsSyncModal);
   const currentSong = usePlaybackStore((state) => state.currentSong);
   const isPlaying = usePlaybackStore((state) => state.isPlaying);
-  const currentTime = usePlaybackStore((state) => state.currentTime);
   const duration = usePlaybackStore((state) => state.duration);
   const showKaraokeSlide = usePlaybackStore((state) => state.showKaraokeSlide);
+  const showWaveform = usePlaybackStore((state) => state.showWaveform);
   const audioMaster = usePlaybackStore((state) => state.audioMaster);
 
   const togglePlayPause = usePlaybackStore((state) => state.togglePlayPause);
@@ -85,7 +86,7 @@ export default function PlaybackControls() {
   const setDraggingSlider = usePlaybackStore((state) => state.setDraggingSlider);
 
   const [activeLineIndex, setActiveLineIndex] = useState(-1);
-  const [sliderTime, setSliderTime] = useState(currentTime || 0);
+  const [sliderTime, setSliderTime] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [showRemaining, setShowRemaining] = useState(false);
 
@@ -101,37 +102,54 @@ export default function PlaybackControls() {
   const syncAnchorRef = useRef({ time: 0, timestamp: performance.now(), isPlaying: false });
   const activeIndexRef = useRef(-1);
 
-  // Sync internal anchor whenever currentTime, isPlaying, or audioMaster updates from store
+  // Subscribe to store updates without triggering 10Hz React component re-renders
   useEffect(() => {
-    const now = performance.now();
-    const safeTime = typeof currentTime === 'number' && !isNaN(currentTime) ? currentTime : 0;
+    const unsub = usePlaybackStore.subscribe((state, prevState) => {
+      const safeTime = typeof state.currentTime === 'number' && !isNaN(state.currentTime) ? state.currentTime : 0;
+      const now = performance.now();
 
-    if (audioMaster === 'display') {
-      if (isPlaying) {
-        const curAnchor = syncAnchorRef.current;
-        if (curAnchor.isPlaying) {
-          const estimated = curAnchor.time + (now - curAnchor.timestamp) / 1000;
-          const delta = safeTime - estimated;
-          if (Math.abs(delta) > 0.45) {
+      if (state.audioMaster === 'display') {
+        if (state.isPlaying) {
+          const curAnchor = syncAnchorRef.current;
+          if (curAnchor.isPlaying) {
+            const estimated = curAnchor.time + (now - curAnchor.timestamp) / 1000;
+            const delta = safeTime - estimated;
+            if (Math.abs(delta) > 0.45) {
+              curAnchor.time = safeTime;
+              curAnchor.timestamp = now;
+            }
+          } else {
             curAnchor.time = safeTime;
             curAnchor.timestamp = now;
+            curAnchor.isPlaying = true;
           }
         } else {
-          curAnchor.time = safeTime;
-          curAnchor.timestamp = now;
-          curAnchor.isPlaying = true;
+          syncAnchorRef.current.time = safeTime;
+          syncAnchorRef.current.timestamp = now;
+          syncAnchorRef.current.isPlaying = false;
         }
       } else {
         syncAnchorRef.current.time = safeTime;
         syncAnchorRef.current.timestamp = now;
-        syncAnchorRef.current.isPlaying = false;
+        syncAnchorRef.current.isPlaying = state.isPlaying;
       }
-    } else {
-      syncAnchorRef.current.time = safeTime;
-      syncAnchorRef.current.timestamp = now;
-      syncAnchorRef.current.isPlaying = isPlaying;
-    }
-  }, [currentTime, isPlaying, audioMaster]);
+
+      // If audio is paused and user is not dragging, sync DOM slider & timestamps
+      if (!state.isPlaying && !isDragging) {
+        const maxDur = typeof state.duration === 'number' && state.duration > 0 ? state.duration : 0;
+        const bounded = maxDur > 0 ? Math.min(maxDur, safeTime) : safeTime;
+        if (sliderRef.current) sliderRef.current.value = bounded;
+        if (timeCurrentRef.current) timeCurrentRef.current.textContent = formatTime(bounded);
+        if (timeTotalRef.current) {
+          timeTotalRef.current.textContent = showRemainingRef.current
+            ? (maxDur > 0 ? `-${formatTime(Math.max(0, maxDur - bounded))}` : '--:--')
+            : (maxDur > 0 ? formatTime(maxDur) : '--:--');
+        }
+      }
+    });
+
+    return unsub;
+  }, [isDragging]);
 
   // Reset active line index tracking when currentSong changes
   useEffect(() => {
@@ -140,7 +158,7 @@ export default function PlaybackControls() {
     if (lyricPreviewRef.current) {
       lyricPreviewRef.current.style.removeProperty('--karaoke-progress');
     }
-    const safeTime = typeof currentTime === 'number' && !isNaN(currentTime) ? currentTime : 0;
+    const safeTime = usePlaybackStore.getState().currentTime || 0;
     if (sliderRef.current && !isDragging) {
       sliderRef.current.value = safeTime;
     }
@@ -157,8 +175,8 @@ export default function PlaybackControls() {
       const elapsed = (now - anchor.timestamp) / 1000;
       return Math.max(0, anchor.time + elapsed);
     }
-    return anchor.time || currentTime || 0;
-  }, [audioMaster, isPlaying, currentTime]);
+    return anchor.time || usePlaybackStore.getState().currentTime || 0;
+  }, [audioMaster, isPlaying]);
 
   // Smooth 60fps tracking animation loop
   useEffect(() => {
@@ -211,7 +229,7 @@ export default function PlaybackControls() {
       animId = requestAnimationFrame(frameLoop);
     } else {
       // Audio paused or stopped: sync static state
-      const cur = currentTime || 0;
+      const cur = usePlaybackStore.getState().currentTime || 0;
       const maxDur = typeof duration === 'number' && duration > 0 ? duration : 0;
       const bounded = maxDur > 0 ? Math.min(maxDur, cur) : cur;
 
@@ -247,7 +265,7 @@ export default function PlaybackControls() {
     return () => {
       if (animId) cancelAnimationFrame(animId);
     };
-  }, [isPlaying, currentSong, duration, isDragging, showKaraokeSlide, getPlaybackTime, currentTime]);
+  }, [isPlaying, currentSong, duration, isDragging, showKaraokeSlide, getPlaybackTime]);
 
   const handleSliderInput = (e) => {
     const val = parseFloat(e.target.value) || 0;
@@ -388,7 +406,7 @@ export default function PlaybackControls() {
         </div>
       </div>
 
-      {/* Middle 1: Current Lyric Preview with Karaoke Slide Animation */}
+      {/* Middle 1: Current Lyric Preview with Waveform Background & Karaoke Slide */}
       <div
         ref={lyricPreviewRef}
         className={`current-lyric-preview ${showKaraokeSlide && currentLyricText ? 'has-karaoke' : ''} ${isRtl ? 'rtl' : 'ltr'}`}
@@ -398,6 +416,17 @@ export default function PlaybackControls() {
           if (currentSong) openLyricsSyncModal(currentSong);
         }}
       >
+        {showWaveform && (
+          <VisualizerCanvas
+            song={currentSong}
+            duration={duration}
+            isPlaying={isPlaying}
+            syncAnchorRef={syncAnchorRef}
+            getPlaybackTime={getPlaybackTime}
+            mode="bottom"
+            id="dashboardLyricVisualizer"
+          />
+        )}
         <i className="icon-music lyric-preview-icon" aria-hidden="true" />
         <span className={`current-lyric-text ${!currentLyricText ? 'is-placeholder' : ''}`}>
           {currentLyricText || (currentSong ? (lyrics.length > 0 ? '♪ Instrumental / Intro ♪' : 'No lyrics synced') : '—')}
@@ -477,7 +506,7 @@ export default function PlaybackControls() {
       {/* Bottom: Timeline Slider & Time Display */}
       <div className="timeline-group">
         <span ref={timeCurrentRef} className="time-display time-current" title="Elapsed Time">
-          {formatTime(currentTime || 0)}
+          {formatTime(usePlaybackStore.getState().currentTime || 0)}
         </span>
 
         <input
@@ -486,13 +515,13 @@ export default function PlaybackControls() {
           id="timelineSlider"
           min="0"
           max={duration || 0}
-          defaultValue={currentTime || 0}
+          defaultValue={usePlaybackStore.getState().currentTime || 0}
           step="any"
           disabled={!currentSong}
           aria-label="Timeline seek slider"
           aria-valuemin="0"
           aria-valuemax={duration || 0}
-          aria-valuenow={currentTime || 0}
+          aria-valuenow={usePlaybackStore.getState().currentTime || 0}
           onInput={handleSliderInput}
           onChange={handleSliderChange}
         />
@@ -504,7 +533,7 @@ export default function PlaybackControls() {
           onClick={handleToggleRemaining}
         >
           {showRemaining
-            ? (duration && duration > 0 ? `-${formatTime(Math.max(0, duration - (currentTime || 0)))}` : '--:--')
+            ? (duration && duration > 0 ? `-${formatTime(Math.max(0, duration - (usePlaybackStore.getState().currentTime || 0)))}` : '--:--')
             : (duration && duration > 0 ? formatTime(duration) : '--:--')}
         </span>
       </div>

@@ -17,6 +17,7 @@ export const usePlaybackStore = create((set, get) => ({
   showTranslit: false,
   showTranslat: false,
   showKaraokeSlide: true,
+  showWaveform: true,
   audioBlocked: false,
   isDraggingSlider: false,
   audioMaster: 'dashboard',
@@ -124,6 +125,11 @@ export const usePlaybackStore = create((set, get) => ({
   setShowKaraokeSlide: (show) => {
     set({ showKaraokeSlide: show });
     emitUpdateState({ showKaraokeSlide: show });
+  },
+
+  setShowWaveform: (show) => {
+    set({ showWaveform: show });
+    emitUpdateState({ showWaveform: show });
   },
 
   selectSong: async (songOrId, forcePlay = null, queueId = null, remoteAudioMaster = null) => {
@@ -425,6 +431,7 @@ export const usePlaybackStore = create((set, get) => ({
     if (state.showTranslit !== undefined) updates.showTranslit = !!state.showTranslit;
     if (state.showTranslat !== undefined) updates.showTranslat = !!state.showTranslat;
     if (state.showKaraokeSlide !== undefined) updates.showKaraokeSlide = !!state.showKaraokeSlide;
+    if (state.showWaveform !== undefined) updates.showWaveform = !!state.showWaveform;
     if (state.audioBlocked !== undefined) updates.audioBlocked = !!state.audioBlocked;
 
     if (state.volumes) {

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import socket, { emitRequestSync, emitPlayerCommand, emitUpdateState } from './services/socket';
 import * as audioPlayer from './services/audioPlayer';
 import { fetchQueue, fetchSong } from './services/api';
-import VisualizerCanvas from './components/display/VisualizerCanvas';
 import SongSidebar from './components/display/SongSidebar';
 import LyricsDisplay from './components/display/LyricsDisplay';
 import { useDisplayResizer } from './hooks/useDisplayResizer';
@@ -20,6 +19,7 @@ export default function DisplayApp() {
   const [showTranslit, setShowTranslit] = useState(false);
   const [showTranslat, setShowTranslat] = useState(false);
   const [showKaraokeSlide, setShowKaraokeSlide] = useState(true);
+  const [showWaveform, setShowWaveform] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [accentColor, setAccentColor] = useState({ r: 99, g: 102, b: 241 });
 
@@ -144,6 +144,7 @@ export default function DisplayApp() {
       if (state.showTranslit !== undefined) setShowTranslit(state.showTranslit);
       if (state.showTranslat !== undefined) setShowTranslat(state.showTranslat);
       if (state.showKaraokeSlide !== undefined) setShowKaraokeSlide(state.showKaraokeSlide);
+      if (state.showWaveform !== undefined) setShowWaveform(state.showWaveform);
     });
 
     socket.on('player_command', (cmd) => {
@@ -606,8 +607,6 @@ export default function DisplayApp() {
       className={`display-container ${!sidebarOpen ? 'sidebar-hidden' : ''} ${!showKaraokeSlide ? 'disable-karaoke-slide' : ''}`}
       id="displayContainer"
     >
-      <VisualizerCanvas accentColor={accentColor} />
-
       {/* Song Info Sidebar */}
       <SongSidebar
         song={song}
@@ -627,15 +626,18 @@ export default function DisplayApp() {
         title="Drag border to resize, double-tap to reset"
       />
 
-      {/* Main Lyrics Content */}
+      {/* Main Lyrics Content with background waveform visualizer */}
       <LyricsDisplay
+        song={song}
         lyrics={displayLyrics}
         duration={duration}
         isPlaying={isPlaying}
         syncAnchorRef={syncAnchorRef}
+        accentColor={accentColor}
         showTranslit={showTranslit}
         showTranslat={showTranslat}
         showKaraokeSlide={showKaraokeSlide}
+        showWaveform={showWaveform}
         onSeek={handleSeek}
       />
 

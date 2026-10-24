@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, memo } from 'react';
 import socket from '../../services/socket';
+import VisualizerCanvas from './VisualizerCanvas';
 import {
   isRtlText,
   isInstrumentalText,
@@ -10,13 +11,16 @@ import {
 } from '../../utils/lyricsWrapping';
 
 function LyricsDisplay({
+  song = null,
   lyrics = [],
   duration = 0,
   isPlaying = false,
   syncAnchorRef,
+  accentColor = { r: 99, g: 102, b: 241 },
   showTranslit = false,
   showTranslat = false,
   showKaraokeSlide = true,
+  showWaveform = true,
   onSeek
 }) {
   const containerRef = useRef(null);
@@ -235,6 +239,15 @@ function LyricsDisplay({
 
   return (
     <main className="lyrics-main-content">
+      {showWaveform && (
+        <VisualizerCanvas
+          song={song}
+          duration={duration}
+          isPlaying={isPlaying}
+          syncAnchorRef={syncAnchorRef}
+          accentColor={accentColor}
+        />
+      )}
       <div className="lyrics-container" id="lyricsContainer" ref={containerRef} dir="auto">
         {lyrics.length === 0 ? (
           <div className="lyrics-empty-state" style={{ textAlign: 'center', opacity: 0.5, marginTop: '20vh' }}>
