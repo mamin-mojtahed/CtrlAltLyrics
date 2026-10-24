@@ -221,6 +221,10 @@ def main():
             result = fetch_syncedlyrics_provider(search_term, 'NetEase')
         elif p == "megalobiz":
             result = fetch_syncedlyrics_provider(search_term, 'Megalobiz')
+        elif p == "deezer":
+            result = fetch_syncedlyrics_provider(search_term, 'Deezer')
+        elif p == "lyricsify":
+            result = fetch_syncedlyrics_provider(search_term, 'Lyricsify')
         elif p == "spotify":
             result = fetch_spotify_session(title, artist, query, sp_dc, spotify_track_id)
         elif p == "genius":
@@ -229,9 +233,11 @@ def main():
         if result:
             attempts.append({'provider': args.provider, 'status': 'success', 'detail': f"Loaded via {result['provider']}"})
         else:
-            attempts.append({'provider': args.provider, 'status': 'failed', 'detail': 'No match found'})
-
-    if not result:
+            detail = 'No match found'
+            if p == "spotify" and not sp_dc:
+                detail = 'No sp_dc session cookie configured (SPOTIFY_COOKIE_SP_DC)'
+            attempts.append({'provider': args.provider, 'status': 'failed', 'detail': detail})
+    else:
         # Full sequential fallback chain with attempts tracking
         # 1. LRCLIB
         res_lrclib = fetch_lrclib(title, artist, query)

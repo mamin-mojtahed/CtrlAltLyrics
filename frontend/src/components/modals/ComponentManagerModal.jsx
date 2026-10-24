@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useModalStore } from '../../stores/useModalStore';
 import { usePlaybackStore } from '../../stores/usePlaybackStore';
 import * as api from '../../services/api';
@@ -33,6 +33,7 @@ export default function ComponentManagerModal() {
   const [dlSource, setDlSource] = useState('auto');
   const [dlLoading, setDlLoading] = useState(false);
   const [dlStatusMsg, setDlStatusMsg] = useState(null);
+  const reuploadInputRef = useRef(null);
 
   // Splitting options
   const [customSep, setCustomSep] = useState(false);
@@ -80,6 +81,10 @@ export default function ComponentManagerModal() {
   if (!songId) return null;
 
   const handleRetryDl = async () => {
+    if (dlSource === 'reupload') {
+      if (reuploadInputRef.current) reuploadInputRef.current.click();
+      return;
+    }
     setDlLoading(true);
     const sourceDesc = dlSource === 'spotdl' ? 'SpotDL Studio' : (dlSource === 'ytdlp' ? 'yt-dlp backup' : 'SpotDL priority');
     setDlStatusMsg(`Downloading audio track (${sourceDesc})... please wait...`);
@@ -91,6 +96,32 @@ export default function ComponentManagerModal() {
       setDlStatusMsg(`Download failed: ${err.message}`);
     } finally {
       setDlLoading(false);
+    }
+  };
+
+  const handleOpenSourceFile = async () => {
+    try {
+      await api.openAudioFile(songId);
+    } catch (err) {
+      console.warn('Could not locate audio file in file explorer:', err);
+    }
+  };
+
+  const handleFileReuploadChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setDlLoading(true);
+    setDlStatusMsg(`Reuploading audio file "${file.name}"... please wait...`);
+    try {
+      await api.reuploadAudio(songId, file);
+      await loadDetails();
+      setDlStatusMsg(null);
+    } catch (err) {
+      setDlStatusMsg(`Reupload failed: ${err.message}`);
+    } finally {
+      setDlLoading(false);
+      if (reuploadInputRef.current) reuploadInputRef.current.value = '';
     }
   };
 
@@ -113,9 +144,30 @@ export default function ComponentManagerModal() {
     }
   };
 
-  const handleRetryLyrics = async () => {
+  const handleRefetchSubtitles = async (mode = 'both') => {
     setLyLoading(true);
-    setLyStatusMsg('Fetching synced lyrics from providers... please wait...');
+    const modeDesc = mode === 'translation'
+      ? 'English translation'
+      : (mode === 'transliteration' ? 'romanized transliteration' : 'translation & transliteration');
+    setLyStatusMsg(`Re-fetching ${modeDesc}... please wait...`);
+    try {
+      await api.refetchLyricsSubtitles(songId, mode);
+      await loadDetails();
+      setLyStatusMsg(null);
+    } catch (err) {
+      setLyStatusMsg(`Subtitles re-fetch failed: ${err.message}`);
+    } finally {
+      setLyLoading(false);
+    }
+  };
+
+  const handleRetryLyrics = async () => {
+    if (lyricsProvider.startsWith('refetch_')) {
+      const mode = lyricsProvider.replace('refetch_', '');
+      return handleRefetchSubtitles(mode);
+    }
+    setLyLoading(true);
+    setLyStatusMsg(`Fetching lyrics via ${lyricsProvider === 'auto' ? 'Auto providers' : lyricsProvider}... please wait...`);
     try {
       await api.retryLyrics(songId, lyricsProvider);
       await loadDetails();
@@ -187,31 +239,31 @@ export default function ComponentManagerModal() {
             </div>
           ) : (
             <>
-              {/* Top Menu: Meta-data & Lyrics Sync buttons */}
-              <div className="component-manager-top-menu" style={{ display: 'flex', gap: '0.5rem' }}>
+              {/* Column 1 Top Editor Button: Edit Meta-data */}
+              <div className="component-editor-slot component-editor-slot-meta">
                 <button
                   type="button"
-                  className="btn btn-primary"
-                  style={{ flex: 1, background: 'rgba(147, 51, 234, 0.2)', border: '1px solid #9333ea', color: '#d8b4fe' }}
+                  className="btn btn-primary component-editor-btn component-editor-btn-meta"
                   onClick={() => { close(); openMetadataModal(song); }}
                 >
                   <i className="icon-pencil" style={{ marginRight: '0.35rem' }}></i> Edit Meta-data
                 </button>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  style={{ flex: 1, background: 'rgba(59, 130, 246, 0.2)', border: '1px solid #3b82f6', color: '#93c5fd' }}
-                  onClick={() => { close(); openLyricsSyncModal(song); }}
-                >
-                  <i className="icon-music" style={{ marginRight: '0.35rem' }}></i> Lyrics &amp; Sync Editor
-                </button>
               </div>
 
-              {/* 1. Audio Download Card */}
+              {/* Hidden file input for audio reupload */}
+              <input
+                type="file"
+                ref={reuploadInputRef}
+                style={{ display: 'none' }}
+                accept="audio/*,.mp3,.m4a,.wav,.flac,.aac,.ogg,.opus"
+                onChange={handleFileReuploadChange}
+              />
+
+              {/* 1. Audio Source Card */}
               <div className="component-card component-card-download">
                 <div className="component-card-header">
                   <div className="component-title">
-                    <i className="icon-download"></i> 1. Audio Download
+                    <i className="icon-music"></i> 1. Audio Source
                   </div>
                   {dl.status === 'success' || dl.status === 'ready' || song?.status === 'ready' ? (
                     <span className="status-badge success"><i className="icon-check"></i> Ready</span>
@@ -224,13 +276,17 @@ export default function ComponentManagerModal() {
 
                 <div className="component-details">
                   <div className="component-meta-list">
-                    <div>
-                      Downloaded via: <strong>{dl.method || song?.downloadMethod || 'SpotDL'}</strong>
-                      {' '}
-                      <span className="mono-tag" style={{ marginLeft: '0.3rem' }}>
-                        <i className="icon-link" style={{ marginRight: '0.2rem' }}></i> Open Source
-                      </span>
-                      {' • File: '}
+                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.35rem' }}>
+                      <span>Source: <strong>{dl.method || song?.downloadMethod || 'SpotDL'}</strong></span>
+                      <button
+                        type="button"
+                        className="mono-tag clickable open-source-btn"
+                        onClick={handleOpenSourceFile}
+                        title="Locate audio source file in Finder / File Explorer"
+                      >
+                        <i className="icon-folder"></i> Open Source
+                      </button>
+                      <span>• File:</span>
                       <code className="mono-tag">{dl.audioFile || 'audio.mp3'}</code>
                     </div>
                   </div>
@@ -240,12 +296,19 @@ export default function ComponentManagerModal() {
                   <select
                     className="select-input"
                     value={dlSource}
-                    onChange={(e) => setDlSource(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setDlSource(val);
+                      if (val === 'reupload' && reuploadInputRef.current) {
+                        reuploadInputRef.current.click();
+                      }
+                    }}
                     style={{ fontSize: '0.8rem', padding: '0.35rem 0.6rem' }}
                   >
                     <option value="auto">Auto (SpotDL Preferred)</option>
                     <option value="spotdl">SpotDL Only (Spotify Studio)</option>
                     <option value="ytdlp">yt-dlp (YouTube Backup)</option>
+                    <option value="reupload">📁 Reupload Audio File...</option>
                   </select>
                   <button
                     type="button"
@@ -254,8 +317,21 @@ export default function ComponentManagerModal() {
                     onClick={handleRetryDl}
                     disabled={dlLoading}
                   >
-                    <i className={dlLoading ? "icon-loader-2 icon-spin" : "icon-rotate-cw"}></i>
-                    {dlLoading ? 'Downloading...' : 'Retry Audio Download'}
+                    <i className={dlLoading ? "icon-loader-2 icon-spin" : (dlSource === 'reupload' ? "icon-upload" : "icon-rotate-cw")}></i>
+                    {dlLoading ? 'Processing...' : (dlSource === 'reupload' ? 'Choose File...' : 'Retry Download')}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-reupload-quick"
+                    style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                    onClick={() => {
+                      if (reuploadInputRef.current) reuploadInputRef.current.click();
+                    }}
+                    disabled={dlLoading}
+                    title="Upload a local audio file to replace current audio source"
+                  >
+                    <i className="icon-upload"></i>
+                    <span>Reupload</span>
                   </button>
                 </div>
 
@@ -263,9 +339,9 @@ export default function ComponentManagerModal() {
                 {dlLoading ? (
                   <div className="component-report-box loading">
                     <i className="icon-loader-2 icon-spin" style={{ marginRight: '0.4rem' }}></i>
-                    {dlStatusMsg || 'Downloading audio track... please wait...'}
+                    {dlStatusMsg || 'Processing audio source... please wait...'}
                   </div>
-                ) : dlStatusMsg && dlStatusMsg.startsWith('Download failed') ? (
+                ) : dlStatusMsg && (dlStatusMsg.startsWith('Download failed') || dlStatusMsg.startsWith('Reupload failed')) ? (
                   <div className="component-report-box" style={{ color: '#f87171' }}>
                     <i className="icon-alert-triangle" style={{ marginRight: '0.3rem' }}></i>
                     {dlStatusMsg}
@@ -294,6 +370,11 @@ export default function ComponentManagerModal() {
                     })}
                   </div>
                 ) : null}
+              </div>
+
+              {/* Column 2 Top Editor Button Slot: Future Stems Editor Button */}
+              <div className="component-editor-slot component-editor-slot-stems">
+                {/* A new editor button related to stems will later be added here */}
               </div>
 
               {/* 2. Stem Separation Card */}
@@ -419,6 +500,17 @@ export default function ComponentManagerModal() {
                 ) : null}
               </div>
 
+              {/* Column 3 Top Editor Button: Lyrics & Sync Editor */}
+              <div className="component-editor-slot component-editor-slot-lyrics">
+                <button
+                  type="button"
+                  className="btn btn-primary component-editor-btn component-editor-btn-lyrics"
+                  onClick={() => { close(); openLyricsSyncModal(song); }}
+                >
+                  <i className="icon-music" style={{ marginRight: '0.35rem' }}></i> Lyrics &amp; Sync Editor
+                </button>
+              </div>
+
               {/* 3. Lyrics Fetching Card */}
               <div className="component-card component-card-lyrics">
                 <div className="component-card-header">
@@ -455,13 +547,23 @@ export default function ComponentManagerModal() {
                     onChange={(e) => setLyricsProvider(e.target.value)}
                     style={{ fontSize: '0.8rem', padding: '0.35rem 0.6rem' }}
                   >
-                    <option value="auto">Auto (All Providers)</option>
-                    <option value="LRCLIB">LRCLIB</option>
-                    <option value="Musixmatch">Musixmatch</option>
-                    <option value="NetEase">NetEase</option>
-                    <option value="Genius">Genius</option>
-                    <option value="Megalobiz">Megalobiz</option>
-                    <option value="manual">Manual Import</option>
+                    <optgroup label="Fetch Lyrics Providers">
+                      <option value="auto">Auto (All Providers)</option>
+                      <option value="Spotify">Spotify</option>
+                      <option value="LRCLIB">LRCLIB</option>
+                      <option value="Musixmatch">Musixmatch</option>
+                      <option value="NetEase">NetEase</option>
+                      <option value="Deezer">Deezer</option>
+                      <option value="Lyricsify">Lyricsify</option>
+                      <option value="Genius">Genius</option>
+                      <option value="Megalobiz">Megalobiz</option>
+                      <option value="manual">Manual Import</option>
+                    </optgroup>
+                    <optgroup label="Subtitles / Enhancements">
+                      <option value="refetch_translation">Re-fetch Translation</option>
+                      <option value="refetch_transliteration">Re-fetch Transliteration</option>
+                      <option value="refetch_both">Re-fetch Both</option>
+                    </optgroup>
                   </select>
                   {lyricsProvider !== 'manual' && (
                     <button
@@ -469,12 +571,57 @@ export default function ComponentManagerModal() {
                       className="btn btn-retry-component"
                       style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
                       onClick={handleRetryLyrics}
-                      disabled={lyLoading}
+                      disabled={lyLoading || (lyricsProvider.startsWith('refetch_') && !lyLineCount)}
                     >
-                      <i className={lyLoading ? "icon-loader-2 icon-spin" : "icon-file-text"}></i>
-                      {lyLoading ? 'Fetching...' : 'Retry Lyrics'}
+                      <i className={lyLoading ? "icon-loader-2 icon-spin" : (lyricsProvider.startsWith('refetch_') ? "icon-rotate-cw" : "icon-file-text")}></i>
+                      {lyLoading
+                        ? 'Processing...'
+                        : lyricsProvider === 'refetch_translation'
+                          ? 'Re-fetch Translation'
+                          : lyricsProvider === 'refetch_transliteration'
+                            ? 'Re-fetch Transliteration'
+                            : lyricsProvider === 'refetch_both'
+                              ? 'Re-fetch Both'
+                              : 'Retry Lyrics'}
                     </button>
                   )}
+                </div>
+
+                {/* Subtitle Re-fetch Actions Row */}
+                <div className="component-sub-actions-row">
+                  <span className="sub-actions-label">Subtitles:</span>
+                  <div className="sub-actions-buttons">
+                    <button
+                      type="button"
+                      className="btn btn-sub-action"
+                      onClick={() => handleRefetchSubtitles('translation')}
+                      disabled={lyLoading || !lyLineCount}
+                      title="Re-fetch English translation for current lyrics lines"
+                    >
+                      <i className="icon-languages"></i>
+                      <span>Translation</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sub-action"
+                      onClick={() => handleRefetchSubtitles('transliteration')}
+                      disabled={lyLoading || !lyLineCount}
+                      title="Re-fetch romanized pronunciation / transliteration for current lyrics lines"
+                    >
+                      <i className="icon-ear"></i>
+                      <span>Transliteration</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sub-action"
+                      onClick={() => handleRefetchSubtitles('both')}
+                      disabled={lyLoading || !lyLineCount}
+                      title="Re-fetch both translation and transliteration"
+                    >
+                      <i className="icon-refresh-cw"></i>
+                      <span>Both</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Manual Lyrics Paste Area */}
@@ -508,7 +655,7 @@ export default function ComponentManagerModal() {
                     <i className="icon-loader-2 icon-spin" style={{ marginRight: '0.4rem' }}></i>
                     {lyStatusMsg || 'Fetching synced lyrics from providers... please wait...'}
                   </div>
-                ) : lyStatusMsg && lyStatusMsg.startsWith('Lyrics retry failed') ? (
+                ) : lyStatusMsg && (lyStatusMsg.startsWith('Lyrics retry failed') || lyStatusMsg.startsWith('Subtitles re-fetch failed')) ? (
                   <div className="component-report-box" style={{ color: '#f87171' }}>
                     <i className="icon-alert-triangle" style={{ marginRight: '0.3rem' }}></i>
                     {lyStatusMsg}

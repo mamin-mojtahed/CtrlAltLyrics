@@ -83,6 +83,31 @@ export async function openFolder(id) {
   return fetch(`/api/open_folder/${id}`, { method: 'POST' });
 }
 
+export async function openAudioFile(id) {
+  const res = await fetch(`/api/open_file/${id}`, { method: 'POST' });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to locate file');
+  }
+  return res.json();
+}
+
+export async function reuploadAudio(id, file) {
+  const formData = new FormData();
+  formData.append('audioFile', file);
+
+  const res = await fetch(`/api/reupload/${id}`, {
+    method: 'POST',
+    body: formData
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Reupload failed: ${res.statusText}`);
+  }
+  return res.json();
+}
+
 export async function retryDownload(id, source = 'auto') {
   const res = await fetch(`/api/retry_download/${id}`, {
     method: 'POST',
@@ -110,6 +135,19 @@ export async function retryLyrics(id, provider = 'auto') {
     body: JSON.stringify({ provider })
   });
   if (!res.ok) throw new Error(`Retry lyrics failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function refetchLyricsSubtitles(id, mode = 'both') {
+  const res = await fetch(`/api/refetch_lyrics_subtitles/${id}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode })
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Re-fetch failed: ${res.statusText}`);
+  }
   return res.json();
 }
 

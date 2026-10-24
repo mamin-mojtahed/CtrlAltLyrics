@@ -383,6 +383,122 @@ router.post('/open_folder/:id', (req, res) => {
   }
 });
 
+router.post('/open_file/:id', (req, res) => {
+  const songDir = path.join(DOWNLOADS_DIR, req.params.id);
+  const possibleFiles = ['audio.mp3', 'audio.m4a', 'audio.wav', 'original.mp3'];
+  let targetFile = null;
+  for (const f of possibleFiles) {
+    const fullPath = path.join(songDir, f);
+    if (fs.existsSync(fullPath)) {
+      targetFile = fullPath;
+      break;
+    }
+  }
+
+  const isMac = process.platform === 'darwin';
+  const isWin = process.platform === 'win32';
+
+  if (targetFile) {
+    if (isMac) {
+      exec(`open -R "${targetFile}"`);
+    } else if (isWin) {
+      exec(`explorer.exe /select,"${targetFile}"`);
+    } else {
+      exec(`xdg-open "${songDir}"`);
+    }
+    res.json({ success: true, file: path.basename(targetFile), located: true });
+  } else if (fs.existsSync(songDir)) {
+    if (isMac) {
+      exec(`open "${songDir}"`);
+    } else if (isWin) {
+      exec(`explorer.exe "${songDir}"`);
+    } else {
+      exec(`xdg-open "${songDir}"`);
+    }
+    res.json({ success: true, folder: true, located: true });
+  } else {
+    res.status(404).json({ error: 'Audio file not found' });
+  }
+});
+
+router.post('/reupload/:id', upload.single('audioFile'), async (req, res) => {
+  try {
+    const songId = req.params.id;
+    if (!req.file) {
+      return res.status(400).json({ error: 'No audio file uploaded.' });
+    }
+
+    let song = queue.find(s => s.id === songId);
+    const history = readHistory();
+    if (!song) {
+      song = history.find(s => s.id === songId);
+    }
+
+    if (!song) {
+      return res.status(404).json({ error: 'Song not found' });
+    }
+
+    const songDir = path.join(DOWNLOADS_DIR, songId);
+    if (!fs.existsSync(songDir)) {
+      fs.mkdirSync(songDir, { recursive: true });
+    }
+
+    const mainAudioPath = path.join(songDir, 'audio.mp3');
+    fs.copyFileSync(req.file.path, mainAudioPath);
+
+    const originalName = req.file.originalname || 'reuploaded.mp3';
+    const origExt = path.extname(originalName).toLowerCase();
+    if (origExt && origExt !== '.mp3') {
+      fs.copyFileSync(req.file.path, path.join(songDir, `audio${origExt}`));
+    }
+
+    try {
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+    } catch (e) {}
+
+    const fileSizeMB = (req.file.size / (1024 * 1024)).toFixed(1);
+
+    song.downloadMethod = 'Uploaded';
+    song.isUploaded = true;
+    song.downloadError = null;
+    song.status = song.status === 'error' ? 'ready' : song.status;
+    song.stems = song.stems || {};
+    song.stems.full = `/audio/${songId}/audio.mp3`;
+
+    if (!Array.isArray(song.downloadAttempts)) {
+      song.downloadAttempts = [];
+    }
+    song.downloadAttempts.unshift({
+      provider: 'Local File Reupload',
+      status: 'success',
+      detail: `Reuploaded "${originalName}" (${fileSizeMB} MB)`
+    });
+
+    saveLightweightHistoryItem(song);
+    syncSongAcrossQueue(song);
+
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('queue_updated', queue);
+      io.emit('library_updated', readHistory());
+      io.emit('sync_state', { songData: song });
+    }
+
+    res.json({
+      success: true,
+      song,
+      attempts: song.downloadAttempts,
+      audioFile: 'audio.mp3',
+      method: 'Uploaded'
+    });
+  } catch (err) {
+    console.error('Reupload error:', err);
+    res.status(500).json({ error: err.message || 'Failed to reupload audio file' });
+  }
+});
+
 async function resolveSpotifyLink(query) {
   if (!query || typeof query !== 'string') return null;
   const trimmed = query.trim();
@@ -1148,7 +1264,8 @@ async function processSong(song, io) {
   }
 }
 
-async function fetchLyricsTranslationAndPronunciation(parsedLines) {
+async function fetchLyricsTranslationAndPronunciation(parsedLines, options = {}) {
+  const { refreshTranslation = true, refreshTransliteration = true } = options;
   if (!Array.isArray(parsedLines) || parsedLines.length === 0) {
     return parsedLines || [];
   }
@@ -1161,8 +1278,8 @@ async function fetchLyricsTranslationAndPronunciation(parsedLines) {
   if (!hasNonAscii) {
     return parsedLines.map(l => ({
       ...l,
-      translation: l.translation || '',
-      transliteration: l.transliteration || ''
+      translation: refreshTranslation ? '' : (l.translation || ''),
+      transliteration: refreshTransliteration ? '' : (l.transliteration || '')
     }));
   }
 
@@ -1176,54 +1293,65 @@ async function fetchLyricsTranslationAndPronunciation(parsedLines) {
     const chunkResults = await Promise.all(chunk.map(async (line, indexInChunk) => {
       const globalIndex = i + indexInChunk;
       if (!line.text || !line.text.trim()) {
-        return { ...line, translation: '', transliteration: '' };
+        return {
+          ...line,
+          translation: refreshTranslation ? '' : (line.translation || ''),
+          transliteration: refreshTransliteration ? '' : (line.transliteration || '')
+        };
       }
 
       // Skip pure ASCII lines
       if (!/[^\x00-\x7F]/.test(line.text)) {
         return {
           ...line,
-          translation: line.translation || '',
-          transliteration: line.transliteration || ''
+          translation: refreshTranslation ? '' : (line.translation || ''),
+          transliteration: refreshTransliteration ? '' : (line.transliteration || '')
         };
       }
 
-      let translation = line.translation || '';
-      let transliteration = line.transliteration || '';
+      let translation = refreshTranslation ? '' : (line.translation || '');
+      let transliteration = refreshTransliteration ? '' : (line.transliteration || '');
 
       try {
         const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&dt=rm&q=${encodeURIComponent(line.text)}`;
         const res = await axios.get(url, { timeout: 4000 });
         if (res.data && res.data[0]) {
           if (Array.isArray(res.data[0])) {
-            const transChunks = res.data[0]
-              .filter(item => Array.isArray(item) && item[0])
-              .map(item => item[0]);
-            if (transChunks.length > 0) {
-              translation = transChunks.join('').trim();
+            if (refreshTranslation) {
+              const transChunks = res.data[0]
+                .filter(item => Array.isArray(item) && item[0])
+                .map(item => item[0]);
+              if (transChunks.length > 0) {
+                translation = transChunks.join('').trim();
+              }
             }
 
-            for (const item of res.data[0]) {
-              if (Array.isArray(item) && item.length >= 4 && item[3]) {
-                transliteration = item[3].trim();
-                break;
-              } else if (Array.isArray(item) && item.length >= 3 && item[2] && typeof item[2] === 'string' && !transChunks.includes(item[2])) {
-                transliteration = item[2].trim();
-                break;
+            if (refreshTransliteration) {
+              for (const item of res.data[0]) {
+                if (Array.isArray(item) && item.length >= 4 && item[3]) {
+                  transliteration = item[3].trim();
+                  break;
+                } else if (Array.isArray(item) && item.length >= 3 && item[2] && typeof item[2] === 'string') {
+                  transliteration = item[2].trim();
+                  break;
+                }
               }
             }
           }
         }
-      } catch (e) { }
+      } catch (e) {
+        if (!translation && line.translation) translation = line.translation;
+        if (!transliteration && line.transliteration) transliteration = line.transliteration;
+      }
 
-      if (!transliteration && /[^\x00-\x7F]/.test(line.text)) {
+      if (refreshTransliteration && !transliteration && /[^\x00-\x7F]/.test(line.text)) {
         missingTranslitIndices.push(globalIndex);
       }
 
       return {
         ...line,
-        translation,
-        transliteration
+        translation: translation || (refreshTranslation ? '' : (line.translation || '')),
+        transliteration: transliteration || (refreshTransliteration ? '' : (line.transliteration || ''))
       };
     }));
 
@@ -1285,7 +1413,12 @@ async function fetchAndProcessLyrics(song, requestedProvider = 'auto', io = null
     const safeArtist = (song.artist || "").replace(/["\\]/g, " ");
     const safeQuery = (song.query || `${song.title} ${song.artist}`).replace(/["\\]/g, " ");
 
-    const spotifyTrackArg = song.spotifyTrackId ? ` --spotify_track_id "${song.spotifyTrackId}"` : '';
+    let spotifyTrackId = song.spotifyTrackId || '';
+    if (!spotifyTrackId && song.spotifyUrl) {
+      const m = song.spotifyUrl.match(/(?:track\/|spotify:track:)([a-zA-Z0-9]{22})/i);
+      if (m) spotifyTrackId = m[1];
+    }
+    const spotifyTrackArg = spotifyTrackId ? ` --spotify_track_id "${spotifyTrackId}"` : '';
     const cmd = `${activatePrefix}python "${scriptPath}" --title "${safeTitle}" --artist "${safeArtist}" --query "${safeQuery}" --provider "${requestedProvider}"${spotifyTrackArg}`;
     
     const child = spawn('/bin/bash', ['-c', cmd]);
@@ -1358,6 +1491,90 @@ async function fetchAndProcessLyrics(song, requestedProvider = 'auto', io = null
   return song;
 }
 
+router.post('/refetch_lyrics_subtitles/:id', async (req, res) => {
+  const songId = req.params.id;
+  const { mode = 'both' } = req.body || {}; // 'translation', 'transliteration', or 'both'
+
+  let song = queue.find(s => s.id === songId);
+  const history = readHistory();
+  if (!song) {
+    song = history.find(s => s.id === songId);
+    if (song) {
+      const lyricsData = readSongLyrics(songId);
+      song = { ...song, ...lyricsData };
+    }
+  }
+
+  if (!song) {
+    return res.status(404).json({ error: 'Song not found' });
+  }
+
+  if (!Array.isArray(song.lyrics) || song.lyrics.length === 0) {
+    const existing = readSongLyrics(songId);
+    if (Array.isArray(existing.lyrics) && existing.lyrics.length > 0) {
+      song.lyrics = existing.lyrics;
+    }
+  }
+
+  if (!Array.isArray(song.lyrics) || song.lyrics.length === 0) {
+    return res.status(400).json({ error: 'No lyrics available to re-fetch translation/transliteration for. Please fetch or import lyrics first.' });
+  }
+
+  const refreshTranslation = mode === 'translation' || mode === 'both';
+  const refreshTransliteration = mode === 'transliteration' || mode === 'both';
+
+  try {
+    song.lyrics = await fetchLyricsTranslationAndPronunciation(song.lyrics, {
+      refreshTranslation,
+      refreshTransliteration
+    });
+
+    const targetDesc = mode === 'translation'
+      ? 'English Translation'
+      : (mode === 'transliteration' ? 'Romanized Transliteration' : 'Translation & Transliteration');
+
+    const newAttempt = {
+      provider: `Refetch: ${targetDesc}`,
+      status: 'success',
+      detail: `Updated ${song.lyrics.length} lines (${targetDesc})`
+    };
+
+    if (!Array.isArray(song.lyricsAttempts)) {
+      song.lyricsAttempts = [];
+    }
+    song.lyricsAttempts.unshift(newAttempt);
+
+    writeSongLyrics(song.id, song);
+    saveLightweightHistoryItem(song);
+
+    const io = req.app.get('io');
+    if (io) {
+      syncSongAcrossQueue(song);
+      io.emit('queue_updated', queue);
+      io.emit('library_updated', readHistory());
+      io.emit('lyrics_report', {
+        songId: song.id,
+        songTitle: song.title,
+        attempts: song.lyricsAttempts || [],
+        provider: song.lyricsProvider,
+        lyricsCount: song.lyrics.length,
+        lyricsError: null
+      });
+      io.emit('sync_state', { songData: song });
+    }
+
+    res.json({
+      success: true,
+      song,
+      attempts: song.lyricsAttempts,
+      lyricsCount: song.lyrics.length
+    });
+  } catch (err) {
+    console.error('Error refetching subtitles:', err);
+    res.status(500).json({ error: err.message || 'Failed to re-fetch subtitles' });
+  }
+});
+
 router.post('/retry_lyrics/:id', async (req, res) => {
   const songId = req.params.id;
   const { provider = 'auto' } = req.body || {};
@@ -1377,9 +1594,14 @@ router.post('/retry_lyrics/:id', async (req, res) => {
   }
 
   const io = req.app.get('io');
-  if (provider === 'current' && Array.isArray(song.lyrics) && song.lyrics.length > 0) {
-    song.lyrics = await fetchLyricsTranslationAndPronunciation(song.lyrics);
-    saveLightweightHistoryItem(song);
+  if (provider === 'current' || provider === 'translation' || provider === 'transliteration' || provider === 'both') {
+    if (Array.isArray(song.lyrics) && song.lyrics.length > 0) {
+      const refreshTranslation = provider === 'translation' || provider === 'both' || provider === 'current';
+      const refreshTransliteration = provider === 'transliteration' || provider === 'both' || provider === 'current';
+      song.lyrics = await fetchLyricsTranslationAndPronunciation(song.lyrics, { refreshTranslation, refreshTransliteration });
+      writeSongLyrics(song.id, song);
+      saveLightweightHistoryItem(song);
+    }
   } else {
     await fetchAndProcessLyrics(song, provider, io);
   }
@@ -1387,6 +1609,7 @@ router.post('/retry_lyrics/:id', async (req, res) => {
   if (io) {
     syncSongAcrossQueue(song);
     io.emit('queue_updated', queue);
+    io.emit('library_updated', readHistory());
     io.emit('lyrics_report', {
       songId: song.id,
       songTitle: song.title,
@@ -1395,6 +1618,7 @@ router.post('/retry_lyrics/:id', async (req, res) => {
       lyricsCount: (song.lyrics || []).length,
       lyricsError: song.lyricsError
     });
+    io.emit('sync_state', { songData: song });
   }
 
   res.json({
