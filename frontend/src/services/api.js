@@ -180,3 +180,22 @@ export async function editMetadata(id, title, artist, albumArt) {
   if (!res.ok) throw new Error(`Save metadata failed: ${res.statusText}`);
   return res.json();
 }
+
+export async function saveStemCorrections(id, { inst, lead, back }) {
+  const formData = new FormData();
+  if (inst) formData.append('inst', inst, 'instrumental.wav');
+  if (lead) formData.append('lead', lead, 'lead_vocal.wav');
+  if (back) formData.append('back', back, 'back_vocal.wav');
+
+  const res = await fetch(`/api/save_stems/${id}`, {
+    method: 'POST',
+    body: formData
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Failed to save stems: ${res.statusText}`);
+  }
+  return res.json();
+}
+

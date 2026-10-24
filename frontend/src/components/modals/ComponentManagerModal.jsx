@@ -22,6 +22,7 @@ export default function ComponentManagerModal() {
   const close = useModalStore((state) => state.closeComponentManager);
   const openMetadataModal = useModalStore((state) => state.openMetadataModal);
   const openLyricsSyncModal = useModalStore((state) => state.openLyricsSyncModal);
+  const openStemEditorModal = useModalStore((state) => state.openStemEditorModal);
   const currentSong = usePlaybackStore((state) => state.currentSong);
 
   const [song, setSong] = useState(null);
@@ -372,9 +373,19 @@ export default function ComponentManagerModal() {
                 ) : null}
               </div>
 
-              {/* Column 2 Top Editor Button Slot: Future Stems Editor Button */}
+              {/* Column 2 Top Editor Button Slot: Stem Editor Button */}
               <div className="component-editor-slot component-editor-slot-stems">
-                {/* A new editor button related to stems will later be added here */}
+                <button
+                  type="button"
+                  className="btn btn-primary component-editor-btn component-editor-btn-stems"
+                  onClick={() => {
+                    close();
+                    openStemEditorModal(song);
+                  }}
+                  title="Open Stem Editor to visualize waveforms and correct stem separation"
+                >
+                  <i className="icon-sliders" style={{ marginRight: '0.35rem' }}></i> Stem Editor
+                </button>
               </div>
 
               {/* 2. Stem Separation Card */}

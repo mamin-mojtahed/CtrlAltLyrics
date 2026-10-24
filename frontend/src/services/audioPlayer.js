@@ -318,3 +318,10 @@ export function getStemBuffers() {
 export function isPlayingLocally() {
   return !!(sources.inst || sources.leadVoc || sources.backVoc);
 }
+
+export function updateLoadedStemBuffers({ instBuf, leadBuf, backBuf }) {
+  if (instBuf) buffers.instBuf = instBuf;
+  if (leadBuf) buffers.leadBuf = leadBuf;
+  if (backBuf) buffers.backBuf = backBuf;
+}
+

@@ -1907,6 +1907,94 @@ router.post('/retry_splitting/:id', async (req, res) => {
   });
 });
 
+// Save edited stems from Stem Editor
+router.post('/save_stems/:id', upload.fields([
+  { name: 'inst', maxCount: 1 },
+  { name: 'lead', maxCount: 1 },
+  { name: 'back', maxCount: 1 }
+]), async (req, res) => {
+  try {
+    const songId = req.params.id;
+    let song = queue.find(s => s.id === songId);
+    const history = readHistory();
+    if (!song) {
+      song = history.find(s => s.id === songId);
+    }
+    if (!song) {
+      return res.status(404).json({ error: 'Song not found' });
+    }
+
+    const songDir = path.join(DOWNLOADS_DIR, songId);
+    if (!fs.existsSync(songDir)) {
+      fs.mkdirSync(songDir, { recursive: true });
+    }
+
+    const files = req.files || {};
+    const stemMapping = {
+      inst: 'instrumental',
+      lead: 'lead_vocal',
+      back: 'back_vocal'
+    };
+
+    const ffmpegPath = fs.existsSync('/opt/homebrew/bin/ffmpeg')
+      ? '/opt/homebrew/bin/ffmpeg'
+      : (fs.existsSync('/usr/local/bin/ffmpeg') ? '/usr/local/bin/ffmpeg' : 'ffmpeg');
+
+    for (const [key, stemBase] of Object.entries(stemMapping)) {
+      const fileArr = files[key];
+      if (fileArr && fileArr[0]) {
+        const uploadedFile = fileArr[0];
+        const targetMp3 = path.join(songDir, `${stemBase}.mp3`);
+        const targetWav = path.join(songDir, `${stemBase}.wav`);
+
+        try {
+          fs.copyFileSync(uploadedFile.path, targetWav);
+          // Convert WAV to high-bitrate MP3
+          await execPromise(`"${ffmpegPath}" -y -i "${uploadedFile.path}" -b:a 320k "${targetMp3}"`);
+        } catch (convErr) {
+          console.warn(`ffmpeg conversion fallback for ${stemBase}:`, convErr.message);
+          fs.copyFileSync(uploadedFile.path, targetMp3);
+        }
+
+        try {
+          if (fs.existsSync(uploadedFile.path)) {
+            fs.unlinkSync(uploadedFile.path);
+          }
+        } catch (e) {}
+      }
+    }
+
+    const timestamp = Date.now();
+    song.stems = {
+      inst: `/audio/${song.id}/instrumental.mp3?t=${timestamp}`,
+      lead: `/audio/${song.id}/lead_vocal.mp3?t=${timestamp}`,
+      back: `/audio/${song.id}/back_vocal.mp3?t=${timestamp}`,
+      full: `/audio/${song.id}/audio.mp3`
+    };
+    song.stemCorrectionsApplied = (song.stemCorrectionsApplied || 0) + 1;
+    song.lastStemEditedAt = new Date().toISOString();
+
+    saveLightweightHistoryItem(song);
+    syncSongAcrossQueue(song);
+
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('queue_updated', queue);
+      io.emit('library_updated', readHistory());
+    }
+
+    res.json({
+      success: true,
+      song,
+      stems: song.stems,
+      message: 'Stem corrections saved and applied successfully'
+    });
+  } catch (err) {
+    console.error('Error saving stem corrections:', err);
+    res.status(500).json({ error: err.message || 'Failed to save stem corrections' });
+  }
+});
+
 function parseLrc(lrcString) {
   if (!lrcString) return [];
   const lines = lrcString.split('\n');

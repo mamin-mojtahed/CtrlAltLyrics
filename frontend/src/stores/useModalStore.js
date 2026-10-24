@@ -5,6 +5,7 @@ export const useModalStore = create((set) => ({
   metadataModalSong: null,
   lyricsSyncModalSong: null,
   componentManagerSongId: null,
+  stemEditorModalSong: null,
 
   openUploadModal: () => set({ uploadModalOpen: true }),
   closeUploadModal: () => set({ uploadModalOpen: false }),
@@ -18,10 +19,15 @@ export const useModalStore = create((set) => ({
   openComponentManager: (songId) => set({ componentManagerSongId: songId }),
   closeComponentManager: () => set({ componentManagerSongId: null }),
 
+  openStemEditorModal: (song) => set({ stemEditorModalSong: song }),
+  closeStemEditorModal: () => set({ stemEditorModalSong: null }),
+
   closeAllModals: () => set({
     uploadModalOpen: false,
     metadataModalSong: null,
     lyricsSyncModalSong: null,
-    componentManagerSongId: null
+    componentManagerSongId: null,
+    stemEditorModalSong: null
   })
 }));
+

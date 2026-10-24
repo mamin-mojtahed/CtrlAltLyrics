@@ -18,6 +18,7 @@ import UploadSongModal from './components/modals/UploadSongModal';
 import ComponentManagerModal from './components/modals/ComponentManagerModal';
 import MetadataModal from './components/modals/MetadataModal';
 import LyricsSyncModal from './components/modals/LyricsSyncModal';
+import StemEditorModal from './components/modals/StemEditorModal';
 
 export default function DashboardApp() {
   const syncFromSocket = usePlaybackStore((state) => state.syncFromSocket);
@@ -320,6 +321,7 @@ export default function DashboardApp() {
       <ComponentManagerModal />
       <MetadataModal />
       <LyricsSyncModal />
+      <StemEditorModal />
     </div>
   );
 }
