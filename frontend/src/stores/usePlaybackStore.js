@@ -126,7 +126,7 @@ export const usePlaybackStore = create((set, get) => ({
     emitUpdateState({ showKaraokeSlide: show });
   },
 
-  selectSong: async (songOrId, forcePlay = null, queueId = null) => {
+  selectSong: async (songOrId, forcePlay = null, queueId = null, remoteAudioMaster = null) => {
     let song = songOrId;
     const targetQueueId = queueId || (typeof songOrId === 'object' && songOrId ? songOrId.queueId : null) || null;
 
@@ -143,7 +143,24 @@ export const usePlaybackStore = create((set, get) => ({
 
     const fullSong = { ...song, queueId: targetQueueId };
     const { volumes, isPlaying } = get();
-    set({ currentSong: fullSong, currentQueueId: targetQueueId, currentTime: 0 });
+
+    if (remoteAudioMaster === 'display') {
+      audioPlayer.stopAllSources();
+      const colorSrc = fullSong.id ? `/api/cover/${fullSong.id}` : getHighResAlbumArt(fullSong.albumArt);
+      extractColorsFromSongCover(colorSrc);
+
+      set({
+        currentSong: fullSong,
+        currentQueueId: targetQueueId,
+        currentTime: 0,
+        duration: fullSong.duration || 0,
+        isPlaying: forcePlay !== null ? forcePlay : true,
+        audioMaster: 'display'
+      });
+      return;
+    }
+
+    set({ currentSong: fullSong, currentQueueId: targetQueueId, currentTime: 0, audioMaster: 'dashboard' });
 
     const colorSrc = fullSong.id ? `/api/cover/${fullSong.id}` : getHighResAlbumArt(fullSong.albumArt);
     extractColorsFromSongCover(colorSrc);
@@ -151,13 +168,14 @@ export const usePlaybackStore = create((set, get) => ({
     const dur = await audioPlayer.setupAudio(fullSong, volumes);
     set({ duration: dur });
 
-    emitPlayerCommand({ command: 'select_song', id: fullSong.id, queueId: targetQueueId });
+    emitPlayerCommand({ command: 'select_song', id: fullSong.id, queueId: targetQueueId, audioMaster: 'dashboard' });
     emitUpdateState({
       songId: fullSong.id,
       songData: fullSong,
       queueId: targetQueueId,
       currentTime: 0,
-      duration: dur
+      duration: dur,
+      audioMaster: 'dashboard'
     });
 
     const shouldPlay = forcePlay !== null ? forcePlay : isPlaying;
@@ -425,7 +443,19 @@ export const usePlaybackStore = create((set, get) => ({
 
     if (isNewTrack) {
       const trackWithQueue = { ...state.songData, queueId: incomingQueueId };
-      current.selectSong(trackWithQueue, state.isPlaying, incomingQueueId);
+      if (state.audioMaster === 'display' || current.audioMaster === 'display') {
+        audioPlayer.stopAllSources();
+        updates.currentSong = trackWithQueue;
+        updates.currentQueueId = incomingQueueId;
+        updates.currentTime = state.currentTime || 0;
+        updates.duration = state.duration || 0;
+        updates.isPlaying = state.isPlaying ?? true;
+        updates.audioMaster = 'display';
+        const colorSrc = trackWithQueue.id ? `/api/cover/${trackWithQueue.id}` : getHighResAlbumArt(trackWithQueue.albumArt);
+        extractColorsFromSongCover(colorSrc);
+      } else {
+        current.selectSong(trackWithQueue, state.isPlaying, incomingQueueId);
+      }
     } else if (('songId' in state && state.songId === null) || ('songData' in state && state.songData === null)) {
       audioPlayer.resetAudio();
       updates.currentSong = null;

@@ -270,7 +270,7 @@ export default function DisplayApp() {
     const queueId = (itemOrId && typeof itemOrId === 'object') ? (itemOrId.queueId || null) : (maybeQueueId || null);
 
     try {
-      emitPlayerCommand({ command: 'select_song', id, queueId });
+      emitPlayerCommand({ command: 'select_song', id, queueId, audioMaster: 'display' });
       const fullSong = await fetchSong(id);
       fullSong.queueId = queueId;
       setSong(fullSong);
@@ -378,7 +378,6 @@ export default function DisplayApp() {
       curIdx = readySongs.findIndex(s => String(s.id) === String(songRef.current.id));
     }
     if (curIdx !== -1 && curIdx + 1 < readySongs.length) {
-      emitPlayerCommand({ command: 'play_next' });
       const nextSong = readySongs[curIdx + 1];
       handleSelectSong(nextSong.id, nextSong.queueId);
     } else {
@@ -399,7 +398,6 @@ export default function DisplayApp() {
       curIdx = readySongs.findIndex(s => String(s.id) === String(songRef.current.id));
     }
     if (curIdx > 0) {
-      emitPlayerCommand({ command: 'play_prev' });
       const prevSong = readySongs[curIdx - 1];
       handleSelectSong(prevSong.id, prevSong.queueId);
     } else {

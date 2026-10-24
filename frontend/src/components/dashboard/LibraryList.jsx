@@ -169,6 +169,7 @@ export default function LibraryList() {
             return (
               <div
                 key={song.id}
+                id={`library-song-${song.id}`}
                 className={`song-card library-card ${isActive ? 'active-playing' : ''} ${isDragging ? 'library-card-dragging' : ''}`}
                 draggable
                 onDragStart={(e) => handleDragStart(e, song)}

@@ -108,13 +108,22 @@ export default function DashboardApp() {
           audioPlayer.seekAudio(target, state.isPlaying);
         }
       } else if (cmd.command === 'play_prev') {
-        playPrev();
+        if (cmd.audioMaster !== 'display') {
+          playPrev();
+        }
       } else if (cmd.command === 'play_next') {
-        playNext();
+        if (cmd.audioMaster !== 'display') {
+          playNext();
+        }
       } else if (cmd.command === 'end_queue') {
         usePlaybackStore.getState().endQueue(true);
       } else if (cmd.command === 'select_song' && cmd.id) {
-        selectSong(cmd.id, true, cmd.queueId);
+        if (cmd.audioMaster === 'display') {
+          audioPlayer.stopAllSources();
+          usePlaybackStore.getState().selectSong(cmd.id, false, cmd.queueId, 'display');
+        } else {
+          selectSong(cmd.id, true, cmd.queueId);
+        }
       } else if (cmd.command === 'set_volumes' && cmd.volumes) {
         const v = {
           inst: cmd.volumes.inst ?? cmd.volumes.instrumentals,

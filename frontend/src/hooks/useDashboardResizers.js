@@ -49,13 +49,24 @@ export function useDashboardResizers() {
       }
 
       const savedLowerSplit = localStorage.getItem('ctrlaltlyrics_resizer_lower_split');
-      if (savedLowerSplit) {
+      if (savedLowerSplit && !['50', '50.00', '55', '55.00', '52', '52.00'].includes(savedLowerSplit)) {
         const p = parseFloat(savedLowerSplit);
         if (!isNaN(p) && p >= 20 && p <= 80) {
           app.style.setProperty('--audio-controls-flex', `${p} 1 0px`);
           app.style.setProperty('--mixer-card-flex', `${100 - p} 1 0px`);
           app.style.setProperty('--mixer-card-width', 'auto');
           app.style.setProperty('--mixer-card-max-width', 'none');
+        }
+      } else {
+        // Clear cached default/legacy values so CSS 50% / 50% takes effect
+        app.style.removeProperty('--audio-controls-flex');
+        app.style.removeProperty('--mixer-card-flex');
+        app.style.removeProperty('--mixer-card-width');
+        app.style.removeProperty('--mixer-card-max-width');
+        if (['50', '50.00', '55', '55.00', '52', '52.00'].includes(savedLowerSplit)) {
+          try {
+            localStorage.removeItem('ctrlaltlyrics_resizer_lower_split');
+          } catch (_) {}
         }
       }
     } catch (err) {
@@ -224,6 +235,9 @@ export function useDashboardResizers() {
         controlsWidth = Math.max(minControlsPx, Math.min(containerRect.width - minMixerPx, controlsWidth));
         let controlsPercent = (controlsWidth / containerRect.width) * 100;
         controlsPercent = Math.max(20, Math.min(80, controlsPercent));
+        if (Math.abs(controlsPercent - 50) < 1.5) {
+          controlsPercent = 50;
+        }
         const mixerPercent = 100 - controlsPercent;
         app.style.setProperty('--audio-controls-flex', `${controlsPercent} 1 0px`);
         app.style.setProperty('--mixer-card-flex', `${mixerPercent} 1 0px`);
