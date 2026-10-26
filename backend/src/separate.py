@@ -112,10 +112,9 @@ def separate_audio(input_file, output_dir, mode="balanced", output_format="MP3",
         if os.path.exists(temp_vocals_file) and temp_vocals_file not in [canonical_lead, canonical_back]:
             os.remove(temp_vocals_file)
 
-        # Final cleanup: Ensure only audio.mp3/ext, instrumental.mp3/ext, lead_vocal.mp3/ext, back_vocal.mp3/ext, lyrics.json remain
         allowed_stems = {f"audio.{ext}", f"instrumental.{ext}", f"lead_vocal.{ext}", f"back_vocal.{ext}", "lyrics.json"}
         for f in os.listdir(output_dir):
-            if f not in allowed_stems:
+            if f not in allowed_stems and not f.startswith("cover."):
                 try:
                     fpath = os.path.join(output_dir, f)
                     if os.path.isfile(fpath):

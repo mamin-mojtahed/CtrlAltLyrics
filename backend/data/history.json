@@ -987,5 +987,58 @@
     "spotifyTrackId": null,
     "isSpotify": false,
     "isUploaded": false
+  },
+  {
+    "id": "6781024437",
+    "title": "Bohemian Rhapsody",
+    "artist": "Queen",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/8b/0a/ea/8b0aea60-6f4a-195b-5958-cdf459c2333b/602527644271.jpg/100x100bb.jpg",
+    "query": "Bohemian Rhapsody Queen",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/6781024437/instrumental.mp3",
+      "lead": "/audio/6781024437/lead_vocal.mp3",
+      "back": "/audio/6781024437/back_vocal.mp3",
+      "full": "/audio/6781024437/audio.mp3"
+    },
+    "downloadMethod": "yt-dlp Direct (Title + Artist)",
+    "downloadAttempts": [
+      {
+        "provider": "SpotDL",
+        "status": "failed",
+        "detail": "SpotDL verified search failed on Spotify catalog for \"Bohemian Rhapsody Queen\""
+      },
+      {
+        "provider": "yt-dlp Direct (Title + Artist)",
+        "status": "success",
+        "detail": "Audio extracted via YouTube audio search for \"Bohemian Rhapsody Queen\""
+      },
+      {
+        "provider": "yt-dlp Title Fallback",
+        "status": "skipped",
+        "detail": "Not needed (acquired via yt-dlp Direct)"
+      }
+    ],
+    "engineSettings": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "isCustom": false
+    },
+    "separationInfo": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "primaryModel": "UVR-MDX-NET-Inst_HQ_3.onnx",
+      "karaokeModel": "5_HP-Karaoke-UVR.pth",
+      "isCustom": false
+    },
+    "lyricsProvider": "LRCLIB (Synced)",
+    "isSynced": true,
+    "hasLyrics": true,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false
   }
 ]

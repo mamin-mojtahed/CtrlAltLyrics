@@ -1,5 +1,8 @@
 spotdl
 audio-separator
+onnxruntime
+audioread
+filetype
 requests
 pykakasi
 unidecode
