@@ -9,15 +9,18 @@ function VisualizerCanvas({
   syncAnchorRef,
   getPlaybackTime,
   accentColor = null,
-  mode = 'mirror', // 'mirror' (Display tab) | 'bottom' (Dashboard tab current lyric preview)
+  mode = 'bottom', // 'bottom' (aligned at bottom border, extending up to roof of parent box) | 'mirror'
   id = 'visualizer',
-  className = ''
+  className = '',
+  fadeOpacity = null // Customizable fade value (e.g. 0.30 for display tab, 1.0 for dashboard)
 }) {
   const canvasRef = useRef(null);
   const isBottomMode = mode === 'bottom';
   const smoothBarsRef = useRef(null);
 
   // Maintain stable refs for high-frequency dynamic props to prevent effect thrashing
+  const fadeOpacityRef = useRef(fadeOpacity);
+  fadeOpacityRef.current = fadeOpacity;
   const getPlaybackTimeRef = useRef(getPlaybackTime);
   getPlaybackTimeRef.current = getPlaybackTime;
 
@@ -153,7 +156,8 @@ function VisualizerCanvas({
       ) {
         return cachedRibbonGrad;
       }
-      const grad = ctx.createLinearGradient(0, height - 28, 0, height);
+      const ribbonH = Math.min(height * 0.40, height < 100 ? 28 : 160);
+      const grad = ctx.createLinearGradient(0, height - ribbonH, 0, height);
       grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.16)`);
       grad.addColorStop(0.65, `rgba(${r}, ${g}, ${b}, 0.07)`);
       grad.addColorStop(1, 'transparent');
@@ -238,7 +242,7 @@ function VisualizerCanvas({
 
       // 2. Bar geometry adaptation
       const barCount = isBottomMode
-        ? Math.min(90, Math.max(36, Math.floor(width / 7.0)))
+        ? Math.min(height < 100 ? 90 : 96, Math.max(36, Math.floor(width / (height < 100 ? 7.0 : 14.0))))
         : Math.min(110, Math.max(48, Math.floor(width / 15.0)));
 
       // Initialize or resize smoothed bars buffer
@@ -265,27 +269,34 @@ function VisualizerCanvas({
       }
 
       // Vertical placement:
-      // Display tab: Exactly in the middle of screen vertically (50% height) where current lyric sits
-      // Dashboard tab: Anchored at lower border
+      // Bottom mode (Dashboard & Display tabs): Aligned at bottom border, extending upwards
       const centerY = isBottomMode ? height : Math.floor(height * 0.5);
 
       // 4. Uniform Faded Colourful Theme Gradient (cached)
       const colorfulGrad = getColorfulGrad(width, r, g, b);
 
-      // 5. LAYER 1: Subtle Ambient Underglow (no line animations, cached gradients)
+      // 5. Calculate fade value for maximum lyrics readability
+      // Display tab (height >= 100) fades to 0.30 by default so past/present/future lyrics pop with full clarity.
+      // Dashboard tab (height < 100) stays at 1.0 (full intensity) in its small card.
+      const isDisplayTab = height >= 100;
+      const currentFade = fadeOpacityRef.current !== null ? fadeOpacityRef.current : (isDisplayTab ? 0.30 : 1.0);
+
+      // LAYER 1: Subtle Ambient Underglow (no line animations, cached gradients)
       const ribbonEnergy = isPlayingCurrent ? Math.min(1.0, 0.20 + amplitude * 0.80) : 0;
 
       if (ribbonEnergy > 0.01) {
         ctx.save();
-        ctx.globalAlpha = ribbonEnergy;
+        ctx.globalAlpha = ribbonEnergy * currentFade;
 
         if (isBottomMode) {
           // Lower border ambient glow shaped by real audio amplitude & wave
+          const waveAmp = height < 100 ? 12 : 36;
+          const baselineOffset = height < 100 ? 3.5 : 8.0;
           ctx.beginPath();
           for (let i = 0; i < wavePoints; i++) {
             const wx = (i / (wavePoints - 1)) * width;
             const waveVal = waveSamples ? Math.abs(waveSamples[i] || 0) : 0;
-            const wy = height - 1 - (waveVal * 12 * ribbonEnergy + ribbonEnergy * 3.5);
+            const wy = height - 1 - (waveVal * waveAmp * ribbonEnergy + ribbonEnergy * baselineOffset);
             if (i === 0) ctx.moveTo(wx, wy);
             else ctx.lineTo(wx, wy);
           }
@@ -296,7 +307,7 @@ function VisualizerCanvas({
           ctx.fillStyle = getRibbonGrad(height, r, g, b);
           ctx.fill();
         } else {
-          // Display tab: Subtle soft atmospheric center glow behind lyrics
+          // Subtle soft atmospheric center glow behind lyrics
           const glowH = Math.min(height * 0.16, 90);
           ctx.fillStyle = getCenterGrad(centerY, glowH, r, g, b);
           ctx.fillRect(0, centerY - glowH / 2, width, glowH);
@@ -309,13 +320,14 @@ function VisualizerCanvas({
       const stepX = width / barCount;
       const barWidth = Math.max(2.0, stepX * (isBottomMode ? 0.60 : 0.54));
       const maxH = isBottomMode
-        ? Math.min(height * 0.72, 40)
+        ? Math.min(height * 0.88, height - (height < 100 ? 6 : 24))
         : Math.min(height * 0.15, 85);
 
-      const rad = isBottomMode ? Math.min(barWidth / 2, 3) : Math.min(barWidth / 2, 3.5);
-      const minH = isBottomMode ? 3.0 : 2.5;
+      const rad = isBottomMode ? (height < 100 ? Math.min(barWidth / 2, 3) : Math.min(barWidth / 2, 4)) : Math.min(barWidth / 2, 3.5);
+      const minH = isBottomMode ? (height < 100 ? 3.0 : 4.0) : 2.5;
 
       ctx.save();
+      ctx.globalAlpha = currentFade;
       ctx.fillStyle = colorfulGrad;
       ctx.beginPath();
 

@@ -246,6 +246,9 @@ function LyricsDisplay({
           isPlaying={isPlaying}
           syncAnchorRef={syncAnchorRef}
           accentColor={accentColor}
+          mode="bottom"
+          id="displayLyricVisualizer"
+          fadeOpacity={0.40}
         />
       )}
       <div className="lyrics-container" id="lyricsContainer" ref={containerRef} dir="auto">

@@ -3068,6 +3068,9 @@ input[type="search"]::-webkit-search-cancel-button:hover {
   color: var(--text-secondary);
   margin-bottom: 0.35rem;
   display: block;
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: center;
 }
 
 .lyric-translation {
@@ -3076,6 +3079,9 @@ input[type="search"]::-webkit-search-cancel-button:hover {
   color: var(--text-secondary);
   margin-top: 0.4rem;
   display: block;
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: center;
 }
 
 /* Bottom-Left Floating Control Buttons Stack */
@@ -5875,6 +5881,14 @@ input.sync-shift-input,
   border-radius: 5px;
   color: #fff;
   transition: border-color 0.15s ease;
+}
+
+.sync-editor-row input.sync-tl,
+.sync-editor-row .sync-tl,
+.sync-editor-row input.sync-tr,
+.sync-editor-row .sync-tr {
+  direction: ltr;
+  text-align: left;
 }
 
 .sync-editor-row input.sync-time:focus,
