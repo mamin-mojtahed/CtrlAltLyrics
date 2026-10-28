@@ -389,9 +389,9 @@ export default function QueueList() {
                         </div>
 
                         <img
-                          src={song.albumArt || '/ctrlaltlyrics-logo.webp'}
+                          src={song.albumArt || '/CtrlAltLyrics-logo.svg'}
                           alt="art"
-                          onError={(e) => { e.target.onerror = null; e.target.src = '/ctrlaltlyrics-logo.webp'; }}
+                          onError={(e) => { e.target.onerror = null; e.target.src = '/CtrlAltLyrics-logo.svg'; }}
                         />
                         <div className="song-info">
                           <div className="song-title">{song.title}</div>

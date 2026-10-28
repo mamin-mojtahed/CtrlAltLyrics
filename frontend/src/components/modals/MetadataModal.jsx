@@ -83,10 +83,10 @@ export default function MetadataModal() {
         <div className="modal-body">
           <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', alignItems: 'center' }}>
             <img
-              src={coverUrl || '/ctrlaltlyrics-logo.webp'}
+              src={coverUrl || '/CtrlAltLyrics-logo.svg'}
               alt="cover preview"
               style={{ width: '80px', height: '80px', borderRadius: '8px', objectFit: 'cover', border: '1px solid var(--border)' }}
-              onError={(e) => { e.target.onerror = null; e.target.src = '/ctrlaltlyrics-logo.webp'; }}
+              onError={(e) => { e.target.onerror = null; e.target.src = '/CtrlAltLyrics-logo.svg'; }}
             />
             <div style={{ flex: 1 }}>
               <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.2rem' }}>Cover Art URL:</label>

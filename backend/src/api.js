@@ -318,7 +318,7 @@ router.get('/history', (req, res) => {
     if (fs.existsSync(songDir)) {
       const files = fs.readdirSync(songDir);
       const coverFile = files.find(f => f.startsWith('cover.'));
-      if (coverFile && (!cleanSong.albumArt || cleanSong.albumArt === '/ctrlaltlyrics-logo.webp')) {
+      if (coverFile && (!cleanSong.albumArt || cleanSong.albumArt === '/CtrlAltLyrics-logo.svg')) {
         const localCoverUrl = `/audio/${song.id}/${coverFile}`;
         if (cleanSong.albumArt !== localCoverUrl) {
           cleanSong.albumArt = localCoverUrl;
@@ -352,7 +352,7 @@ router.get('/song/:id', (req, res) => {
   }
   const songDir = path.join(DOWNLOADS_DIR, songId);
   let albumArt = song.albumArt;
-  if (!albumArt || albumArt === '/ctrlaltlyrics-logo.webp') {
+  if (!albumArt || albumArt === '/CtrlAltLyrics-logo.svg') {
     if (fs.existsSync(songDir)) {
       const files = fs.readdirSync(songDir);
       const coverFile = files.find(f => f.startsWith('cover.'));
@@ -364,7 +364,7 @@ router.get('/song/:id', (req, res) => {
   const lyricsData = readSongLyrics(songId);
   res.json({
     ...song,
-    albumArt: albumArt || song.albumArt || '/ctrlaltlyrics-logo.webp',
+    albumArt: albumArt || song.albumArt || '/CtrlAltLyrics-logo.svg',
     lyrics: lyricsData.lyrics || song.lyrics || [],
     lyricsProvider: lyricsData.lyricsProvider || song.lyricsProvider || null,
     isSynced: lyricsData.isSynced !== undefined ? lyricsData.isSynced : song.isSynced,
@@ -793,7 +793,7 @@ router.post('/upload', upload.single('audioFile'), async (req, res) => {
     }
 
     if (!albumArt) {
-      albumArt = '/ctrlaltlyrics-logo.webp';
+      albumArt = '/CtrlAltLyrics-logo.svg';
     }
 
     const fileSizeMB = (req.file.size / (1024 * 1024)).toFixed(2);
@@ -841,7 +841,7 @@ router.get('/cover/:id', async (req, res) => {
   const songDir = path.join(DOWNLOADS_DIR, songId);
 
   // If song has an explicit albumArt URL or custom local path
-  if (song && song.albumArt && song.albumArt !== '/ctrlaltlyrics-logo.webp') {
+  if (song && song.albumArt && song.albumArt !== '/CtrlAltLyrics-logo.svg') {
     if (song.albumArt.startsWith('http')) {
       try {
         const imgRes = await axios.get(song.albumArt, { responseType: 'stream', timeout: 6000 });
@@ -872,7 +872,7 @@ router.get('/cover/:id', async (req, res) => {
     }
   }
 
-  res.redirect('/ctrlaltlyrics-logo.webp');
+  res.redirect('/CtrlAltLyrics-logo.svg');
 });
 
 async function downloadSongAudio(song, requestedSource = 'auto') {

@@ -83,7 +83,7 @@ export default function UploadSongModal() {
         try {
           const errData = JSON.parse(xhr.responseText);
           if (errData.error) errText = errData.error;
-        } catch (e) {}
+        } catch (e) { }
         setErrorMessage(errText);
         setIsUploading(false);
       }
@@ -142,7 +142,7 @@ export default function UploadSongModal() {
           ) : (
             <div className="upload-file-info" style={{ display: 'block' }}>
               <div className="upload-file-preview-row">
-                <img className="upload-cover-preview" src="/ctrlaltlyrics-logo.webp" alt="cover" />
+                <img className="upload-cover-preview" src="/CtrlAltLyrics-logo.svg" alt="cover" />
                 <div className="upload-file-details">
                   <div className="file-name-badge">
                     <span>{selectedFile.name}</span>

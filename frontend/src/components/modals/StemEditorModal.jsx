@@ -228,7 +228,7 @@ export default function StemEditorModal() {
       isCancelled = true;
       stopSources();
       if (ctx.state !== 'closed') {
-        ctx.close().catch(() => {});
+        ctx.close().catch(() => { });
       }
     };
   }, [song]);
@@ -303,7 +303,7 @@ export default function StemEditorModal() {
         try {
           activeSourcesRef.current[key].onended = null;
           activeSourcesRef.current[key].stop();
-        } catch (e) {}
+        } catch (e) { }
         activeSourcesRef.current[key] = null;
       }
     }
@@ -339,7 +339,7 @@ export default function StemEditorModal() {
     const ctx = audioCtxRef.current;
     if (!ctx) return;
     if (ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
+      ctx.resume().catch(() => { });
     }
 
     stopSources();
@@ -1499,10 +1499,10 @@ export default function StemEditorModal() {
         <div className="stem-editor-header">
           <div className="stem-editor-track-info">
             <img
-              src={song.albumArt || '/ctrlaltlyrics-logo.webp'}
+              src={song.albumArt || '/CtrlAltLyrics-logo.svg'}
               alt="Album cover"
               className="stem-editor-art"
-              onError={(e) => { e.target.src = '/ctrlaltlyrics-logo.webp'; }}
+              onError={(e) => { e.target.src = '/CtrlAltLyrics-logo.svg'; }}
             />
             <div className="stem-editor-title-group">
               <div className="stem-editor-title">

@@ -364,12 +364,12 @@ export default function PlaybackControls() {
       <div className="player-track-info-card">
         <div className="player-track-art-wrapper">
           <img
-            src={currentSong?.albumArt || '/ctrlaltlyrics-logo.webp'}
+            src={currentSong?.albumArt || '/CtrlAltLyrics-logo.svg'}
             alt={currentSong?.title ? `${currentSong.title} cover` : 'Album Art'}
             className="player-cover-art"
             onError={(e) => {
               e.target.onerror = null;
-              e.target.src = '/ctrlaltlyrics-logo.webp';
+              e.target.src = '/CtrlAltLyrics-logo.svg';
             }}
           />
         </div>

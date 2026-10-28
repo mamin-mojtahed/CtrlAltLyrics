@@ -59,9 +59,9 @@ export default function SongSidebar({ song, queue = [], currentTime = 0, duratio
       <div className="cover-wrapper">
         <img
           id="displaySongCover"
-          src={song?.albumArt || '/ctrlaltlyrics-logo.webp'}
+          src={song?.albumArt || '/CtrlAltLyrics-logo.svg'}
           alt="Album Cover"
-          onError={(e) => { e.target.onerror = null; e.target.src = '/ctrlaltlyrics-logo.webp'; }}
+          onError={(e) => { e.target.onerror = null; e.target.src = '/CtrlAltLyrics-logo.svg'; }}
         />
       </div>
 
@@ -135,9 +135,9 @@ export default function SongSidebar({ song, queue = [], currentTime = 0, duratio
                     <div className="queue-expanded-body">
                       <img
                         className="queue-expanded-art"
-                        src={item.albumArt || '/ctrlaltlyrics-logo.webp'}
+                        src={item.albumArt || '/CtrlAltLyrics-logo.svg'}
                         alt="art"
-                        onError={(e) => { e.target.onerror = null; e.target.src = '/ctrlaltlyrics-logo.webp'; }}
+                        onError={(e) => { e.target.onerror = null; e.target.src = '/CtrlAltLyrics-logo.svg'; }}
                       />
                       <div className="queue-expanded-info">
                         <div className="queue-expanded-title">{item.title}</div>
