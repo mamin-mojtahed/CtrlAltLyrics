@@ -3166,8 +3166,58 @@ canvas#visualizer,
   left: 0;
   width: 100%;
   height: 100%;
-  z-index: 1;
+  z-index: 2;
   pointer-events: none;
+}
+
+/* YouTube Music Video Background behind lyrics */
+.youtube-video-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  z-index: 0;
+  pointer-events: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  background-color: transparent;
+}
+
+.youtube-video-iframe-wrap {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none !important;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.4s ease-in-out;
+}
+
+.youtube-video-iframe-wrap iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  pointer-events: none !important;
+}
+
+.youtube-video-dark-filter {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(8, 12, 22, 0.55) 0%, rgba(6, 9, 18, 0.86) 100%);
+  pointer-events: none !important;
+  z-index: 1;
+  transition: background 0.35s ease, backdrop-filter 0.35s ease;
+}
+
+.youtube-video-dark-filter.is-paused {
+  background: radial-gradient(circle at center, rgba(6, 9, 18, 0.94) 0%, rgba(6, 9, 18, 0.72) 42%, rgba(6, 9, 18, 0.88) 100%);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
 }
 
 .status-badge {

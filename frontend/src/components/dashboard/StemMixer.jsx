@@ -19,6 +19,8 @@ export default function StemMixer() {
   const setShowKaraokeSlide = usePlaybackStore((state) => state.setShowKaraokeSlide);
   const showWaveform = usePlaybackStore((state) => state.showWaveform);
   const setShowWaveform = usePlaybackStore((state) => state.setShowWaveform);
+  const showMusicVideo = usePlaybackStore((state) => state.showMusicVideo);
+  const setShowMusicVideo = usePlaybackStore((state) => state.setShowMusicVideo);
 
   const [showShortcuts, setShowShortcuts] = useState(() => (typeof window !== 'undefined' ? window.innerWidth > 768 : true));
 
@@ -127,6 +129,14 @@ export default function StemMixer() {
               onChange={(e) => setShowWaveform(e.target.checked)}
             />
             <span className="toggle-content"><i className="icon-audio-waveform"></i></span>
+          </label>
+          <label className="subtitle-toggle-btn" title="YouTube Music Video Background">
+            <input
+              type="checkbox"
+              checked={showMusicVideo}
+              onChange={(e) => setShowMusicVideo(e.target.checked)}
+            />
+            <span className="toggle-content"><i className="icon-video"></i></span>
           </label>
         </div>
       </div>

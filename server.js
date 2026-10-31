@@ -69,7 +69,8 @@ let currentState = {
     back: 1
   },
   showKaraokeSlide: true,
-  showWaveform: true
+  showWaveform: true,
+  showMusicVideo: true
 };
 
 io.on('connection', (socket) => {

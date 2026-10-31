@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, memo } from 'react';
 import socket from '../../services/socket';
 import VisualizerCanvas from './VisualizerCanvas';
+import YouTubeBackgroundPlayer from './YouTubeBackgroundPlayer';
 import { useScrollShadows } from '../../hooks/useScrollShadows';
 import {
   isRtlText,
@@ -22,6 +23,7 @@ function LyricsDisplay({
   showTranslat = false,
   showKaraokeSlide = true,
   showWaveform = true,
+  showMusicVideo = true,
   onSeek
 }) {
   const containerRef = useRef(null);
@@ -247,7 +249,18 @@ function LyricsDisplay({
 
   return (
     <main className="lyrics-main-content" ref={mainRef}>
-      <div className="scroll-shadow-overlay scroll-shadow-top scroll-shadow-lyrics" aria-hidden="true" />
+      {/* Background YouTube Music Video (centered & cover 16:9, non-interactive, obeys timeline) */}
+      {song?.youtubeId && (
+        <YouTubeBackgroundPlayer
+          key={song.youtubeId}
+          youtubeId={song.youtubeId}
+          isPlaying={isPlaying}
+          isVisible={showMusicVideo}
+          syncAnchorRef={syncAnchorRef}
+        />
+      )}
+
+      {/* Karaoke Spectrum Waveform (rendered on top of music video if enabled) */}
       {showWaveform && (
         <VisualizerCanvas
           song={song}
@@ -260,6 +273,8 @@ function LyricsDisplay({
           fadeOpacity={0.40}
         />
       )}
+
+      <div className="scroll-shadow-overlay scroll-shadow-top scroll-shadow-lyrics" aria-hidden="true" />
       <div className="lyrics-container" id="lyricsContainer" ref={containerRef} dir="auto">
         {lyrics.length === 0 ? (
           <div className="lyrics-empty-state" style={{ textAlign: 'center', opacity: 0.5, marginTop: '20vh' }}>

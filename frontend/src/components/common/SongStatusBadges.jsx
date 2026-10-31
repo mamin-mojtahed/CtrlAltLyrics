@@ -14,13 +14,17 @@ export default function SongStatusBadges({ song }) {
 
   const hasLyricsLoaded = (song.lyrics && song.lyrics.length > 0) || song.hasLyrics === true;
 
-  // 1. Download Status
+  // 1. Download Status (Audio & YouTube Music Video)
   let downloadTitle = 'Waiting to download audio...';
   let downloadPhaseClass = 'icon-x';
   let downloadPhaseColor = '#ef4444';
 
+  const hasVideo = !!(song.youtubeId || song.videoStatus === 'ready');
+
   if (song.status === 'downloading') {
-    downloadTitle = 'Downloading audio...';
+    downloadTitle = song.videoStatus === 'fetching'
+      ? 'Downloading audio & finding YouTube music video...'
+      : 'Downloading audio...';
     downloadPhaseClass = 'icon-loader-2 icon-spin';
     downloadPhaseColor = undefined;
   } else if (song.downloadError || (song.status === 'error' && !hasAudio)) {
@@ -28,7 +32,11 @@ export default function SongStatusBadges({ song }) {
     downloadPhaseClass = 'icon-x';
     downloadPhaseColor = '#ef4444';
   } else if (hasAudio || song.status === 'ready') {
-    downloadTitle = 'Audio Downloaded';
+    downloadTitle = song.videoStatus === 'fetching'
+      ? 'Audio Downloaded • Searching for YouTube Music Video...'
+      : (hasVideo
+        ? 'Audio Downloaded • YouTube Music Video Linked'
+        : 'Audio Downloaded (No Music Video)');
     downloadPhaseClass = 'icon-check';
     downloadPhaseColor = '#10b981';
   }

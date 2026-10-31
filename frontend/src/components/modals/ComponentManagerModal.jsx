@@ -262,11 +262,11 @@ export default function ComponentManagerModal() {
                 onChange={handleFileReuploadChange}
               />
 
-              {/* 1. Audio Source Card */}
+              {/* 1. Audio & Video Source Card */}
               <div className="component-card component-card-download">
                 <div className="component-card-header">
                   <div className="component-title">
-                    <i className="icon-music"></i> 1. Audio Source
+                    <i className="icon-music"></i> 1. Audio & Music Video Source
                   </div>
                   {dl.status === 'success' || dl.status === 'ready' || song?.status === 'ready' ? (
                     <span className="status-badge success"><i className="icon-check"></i> Ready</span>
@@ -280,7 +280,7 @@ export default function ComponentManagerModal() {
                 <div className="component-details">
                   <div className="component-meta-list">
                     <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.35rem' }}>
-                      <span>Source: <strong>{dl.method || song?.downloadMethod || 'SpotDL'}</strong></span>
+                      <span>Audio Source: <strong>{dl.method || song?.downloadMethod || 'SpotDL'}</strong></span>
                       <button
                         type="button"
                         className="mono-tag clickable open-source-btn"
@@ -291,6 +291,24 @@ export default function ComponentManagerModal() {
                       </button>
                       <span>• File:</span>
                       <code className="mono-tag">{dl.audioFile || 'audio.mp3'}</code>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.4rem', paddingTop: '0.4rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                      <span>Music Video (Online YouTube):</span>
+                      {song?.youtubeId ? (
+                        <a
+                          href={song.youtubeUrl || `https://www.youtube.com/watch?v=${song.youtubeId}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mono-tag clickable"
+                          style={{ color: 'var(--accent)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                          title="Open video on YouTube"
+                        >
+                          <i className="icon-video"></i> Linked ({song.youtubeId})
+                        </a>
+                      ) : (
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>None</span>
+                      )}
                     </div>
                   </div>
                 </div>

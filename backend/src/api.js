@@ -71,6 +71,20 @@ function getPythonExecutablePath() {
   return fs.existsSync(dotPython) ? dotPython : 'python3';
 }
 
+// Resolve yt-dlp executable (.venv, fallback to system yt-dlp)
+function getYtDlpExecutablePath() {
+  const dotYtDlp = path.resolve(__dirname, '../../.venv/bin/yt-dlp');
+  return fs.existsSync(dotYtDlp) ? dotYtDlp : 'yt-dlp';
+}
+
+function extractYoutubeId(urlOrId) {
+  if (!urlOrId || typeof urlOrId !== 'string') return null;
+  const str = urlOrId.trim();
+  if (/^[a-zA-Z0-9_-]{11}$/.test(str)) return str;
+  const match = str.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/i);
+  return match ? match[1] : null;
+}
+
 function syncSongAcrossQueue(updatedSong) {
   if (!updatedSong || !updatedSong.id) return;
   for (let i = 0; i < queue.length; i++) {
@@ -192,7 +206,11 @@ function saveLightweightHistoryItem(song) {
     spotifyUrl: song.spotifyUrl || null,
     spotifyTrackId: song.spotifyTrackId || null,
     isSpotify: !!song.spotifyUrl,
-    isUploaded: !!(song.isUploaded || song.downloadMethod === 'Uploaded')
+    isUploaded: !!(song.isUploaded || song.downloadMethod === 'Uploaded'),
+    youtubeId: song.youtubeId || extractYoutubeId(song.youtubeUrl) || null,
+    youtubeUrl: song.youtubeUrl || (song.youtubeId ? `https://www.youtube.com/watch?v=${song.youtubeId}` : null),
+    videoStatus: song.videoStatus || (song.youtubeId ? 'ready' : null),
+    videoError: song.videoError || null
   };
 
   if (song.downloadError && !hasAudio) lightItem.downloadError = song.downloadError;
@@ -362,9 +380,13 @@ router.get('/song/:id', (req, res) => {
     }
   }
   const lyricsData = readSongLyrics(songId);
+  const ytId = song.youtubeId || extractYoutubeId(song.youtubeUrl) || null;
   res.json({
     ...song,
     albumArt: albumArt || song.albumArt || '/CtrlAltLyrics-logo.svg',
+    youtubeId: ytId,
+    youtubeUrl: song.youtubeUrl || (ytId ? `https://www.youtube.com/watch?v=${ytId}` : null),
+    videoStatus: song.videoStatus || (ytId ? 'ready' : null),
     lyrics: lyricsData.lyrics || song.lyrics || [],
     lyricsProvider: lyricsData.lyricsProvider || song.lyricsProvider || null,
     isSynced: lyricsData.isSynced !== undefined ? lyricsData.isSynced : song.isSynced,
@@ -653,6 +675,10 @@ router.post('/enqueue', async (req, res) => {
         ...lyricsData,
         queueId: generateQueueId()
       };
+      // If existing song lacks YouTube video ID, resolve it in background
+      if (!existing.youtubeId) {
+        resolveYoutubeMusicVideo(existing, req.app.get('io')).catch(err => console.error("Error resolving video for existing song:", err));
+      }
       const idx = getInsertIndex(queue);
       queue.splice(idx, 0, fullSong);
       res.json(fullSong);
@@ -667,6 +693,7 @@ router.post('/enqueue', async (req, res) => {
     queueId: generateQueueId(),
     engineSettings: engineSettings || currentEngineSettings,
     status: 'pending',
+    videoStatus: 'fetching',
     stems: {},
     lyrics: []
   };
@@ -679,6 +706,9 @@ router.post('/enqueue', async (req, res) => {
     io.emit('library_updated', readHistory());
   }
   res.json(newSong);
+
+  // Background YouTube Music Video resolution - initiated AS SOON AS SEARCH RESULT IS SELECTED!
+  resolveYoutubeMusicVideo(newSong, io).catch(err => console.error("Error resolving music video:", err));
 
   // Background processing
   processSong(newSong, io).catch(err => console.error("Error processing song", err));
@@ -825,6 +855,9 @@ router.post('/upload', upload.single('audioFile'), async (req, res) => {
 
     res.json(newSong);
 
+    // Background online YouTube Music Video resolution for uploaded track
+    resolveYoutubeMusicVideo(newSong, io).catch(err => console.error("Error resolving video for uploaded song:", err));
+
     // Background processing through stem separation and lyrics retrieval
     processSong(newSong, io).catch(err => console.error("Error processing uploaded song:", err));
 
@@ -874,6 +907,179 @@ router.get('/cover/:id', async (req, res) => {
 
   res.redirect('/CtrlAltLyrics-logo.svg');
 });
+
+// Active YouTube Music Video resolutions tracked per songId
+// Allows fully parallel searches across different songs while preventing past in-flight queries
+// from overwriting new searches, edits, or unlinks for the same song.
+// Map: songId -> { token: number, controller: AbortController, startTime: number }
+const activeVideoResolutions = new Map();
+
+// Purely resolve YouTube Music Video ID online (NO VIDEO DOWNLOAD)
+async function resolveYoutubeMusicVideo(song, io = null, customUrlOrQuery = null) {
+  if (!song || !song.id) return { success: false, error: 'Invalid song' };
+
+  // 1. If a search is already active for this song, abort it so it cannot overwrite future changes
+  if (activeVideoResolutions.has(song.id)) {
+    const active = activeVideoResolutions.get(song.id);
+    try {
+      active.controller.abort();
+    } catch (e) {}
+    activeVideoResolutions.delete(song.id);
+  }
+
+  // 2. If a direct YouTube link or 11-char ID is passed, resolve immediately
+  if (customUrlOrQuery) {
+    const directId = extractYoutubeId(customUrlOrQuery);
+    if (directId) {
+      song.youtubeId = directId;
+      song.youtubeUrl = `https://www.youtube.com/watch?v=${directId}`;
+      song.videoStatus = 'ready';
+      delete song.videoError;
+      saveLightweightHistoryItem(song);
+      syncSongAcrossQueue(song);
+      if (io) {
+        io.emit('queue_updated', queue);
+        io.emit('library_updated', readHistory());
+        io.emit('sync_state', { songId: song.id, songData: { ...song } });
+      }
+      return { success: true, youtubeId: directId, youtubeUrl: song.youtubeUrl };
+    }
+  }
+
+  // 3. Setup new cancellable execution with unique token
+  const searchToken = Date.now() + Math.random();
+  const controller = new AbortController();
+  activeVideoResolutions.set(song.id, {
+    token: searchToken,
+    controller,
+    startTime: Date.now()
+  });
+
+  song.videoStatus = 'fetching';
+  delete song.videoError;
+  saveLightweightHistoryItem(song);
+  syncSongAcrossQueue(song);
+  if (io) {
+    io.emit('queue_updated', queue);
+    io.emit('library_updated', readHistory());
+    io.emit('sync_state', { songId: song.id, songData: { ...song } });
+  }
+
+  const venvActivate = getVenvActivatePath();
+  const activatePrefix = venvActivate ? `source "${venvActivate}" && ` : '';
+  const ytdlpPath = getYtDlpExecutablePath();
+
+  const cleanTitle = (song.title || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/["\\]/g, ' ')
+    .trim();
+
+  const mainArtist = (song.artist || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .split(/&|,|feat\.?|ft\.?/i)[0]
+    .replace(/["\\]/g, ' ')
+    .trim();
+
+  const cleanQuery = `${cleanTitle} ${mainArtist}`.trim();
+  
+  // Fast, targeted queries:
+  // If custom query provided: use it directly with sensible music video fallbacks.
+  // Otherwise: try official music video first, then official video, then title + artist.
+  const queriesToTry = customUrlOrQuery
+    ? [
+        customUrlOrQuery.trim(),
+        `${customUrlOrQuery.trim()} official music video`,
+        `${cleanTitle} ${mainArtist} official music video`.trim(),
+        cleanQuery
+      ].filter(Boolean)
+    : [
+        `${cleanTitle} ${mainArtist} official music video`.trim(),
+        `${cleanTitle} ${mainArtist} official video`.trim(),
+        cleanQuery
+      ].filter(Boolean);
+
+  const ytFilter = `!is_live & duration < 900 & title !~= '(?i)(karaoke|instrumental|backing track|off vocal|minus one|piano cover|audio only|8d audio|hour loop|reaction|tutorial|bass boosted)'`;
+
+  let resolvedId = null;
+
+  try {
+    for (const q of queriesToTry) {
+      if (controller.signal.aborted) break;
+
+      let rawOutput = '';
+      try {
+        console.log(`[MusicVideo][${song.id}] Resolving YouTube video ID for "${song.title}": ${q}`);
+        // --no-cache-dir eliminates sqlite cache lock contention across parallel yt-dlp instances!
+        // ytsearch3 checks top 3 candidates without throwing exit code 101
+        const searchTarget = q.startsWith('ytsearch') ? `"${q}"` : `"ytsearch3:${q}"`;
+        const cmd = `${activatePrefix}"${ytdlpPath}" --no-cache-dir --js-runtimes node --no-warnings --match-filter "${ytFilter}" --print "%(id)s" ${searchTarget}`;
+
+        const result = await execPromise(cmd, {
+          signal: controller.signal,
+          timeout: 20000
+        });
+        rawOutput = (result && result.stdout) || '';
+      } catch (err) {
+        if (err.name === 'AbortError' || controller.signal.aborted) {
+          console.log(`[MusicVideo][${song.id}] Search cancelled for "${song.title}"`);
+          return { success: false, cancelled: true };
+        }
+        // Even on non-zero exit codes (like code 101), extract stdout if available
+        if (err.stdout) {
+          rawOutput = err.stdout;
+        } else {
+          console.warn(`[MusicVideo][${song.id}] Query attempt failed for "${q}":`, err.message);
+        }
+      }
+
+      if (rawOutput) {
+        const lines = rawOutput.trim().split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        for (const line of lines) {
+          const extracted = extractYoutubeId(line);
+          if (extracted) {
+            resolvedId = extracted;
+            break;
+          }
+        }
+        if (resolvedId) break;
+      }
+    }
+  } finally {
+    // If this search was superseded while running, do not modify song or state!
+    const activeEntry = activeVideoResolutions.get(song.id);
+    if (!activeEntry || activeEntry.token !== searchToken) {
+      console.log(`[MusicVideo][${song.id}] Result discarded (superseded by newer search or edit) for "${song.title}"`);
+      return { success: false, cancelled: true };
+    }
+    activeVideoResolutions.delete(song.id);
+  }
+
+  // Double check that user hasn't changed or unlinked the video in the meantime
+  if (resolvedId) {
+    song.youtubeId = resolvedId;
+    song.youtubeUrl = `https://www.youtube.com/watch?v=${resolvedId}`;
+    song.videoStatus = 'ready';
+    delete song.videoError;
+    console.log(`[MusicVideo][${song.id}] Resolved online video for "${song.title}": https://www.youtube.com/watch?v=${resolvedId}`);
+  } else {
+    song.videoStatus = 'error';
+    song.videoError = 'No matching YouTube music video found';
+    console.log(`[MusicVideo][${song.id}] No YouTube video found for "${song.title}"`);
+  }
+
+  saveLightweightHistoryItem(song);
+  syncSongAcrossQueue(song);
+
+  if (io) {
+    io.emit('queue_updated', queue);
+    io.emit('library_updated', readHistory());
+    io.emit('sync_state', { songId: song.id, songData: { ...song } });
+  }
+
+  return { success: !!resolvedId, youtubeId: song.youtubeId, youtubeUrl: song.youtubeUrl, error: song.videoError };
+}
 
 async function downloadSongAudio(song, requestedSource = 'auto') {
   const songDir = path.join(DOWNLOADS_DIR, song.id);
@@ -1783,7 +1989,13 @@ router.get('/song_details/:id', (req, res) => {
         audioFile: audioFile || null,
         method: dlMethod,
         error: song.downloadError || null,
-        attempts: (song.downloadAttempts && song.downloadAttempts.length > 0) ? song.downloadAttempts : defaultDlAttempts
+        attempts: (song.downloadAttempts && song.downloadAttempts.length > 0) ? song.downloadAttempts : defaultDlAttempts,
+        musicVideo: {
+          youtubeId: song.youtubeId || null,
+          youtubeUrl: song.youtubeUrl || null,
+          status: song.youtubeId ? 'ready' : (song.videoStatus || null),
+          error: song.videoError || null
+        }
       },
       splitting: {
         status: (instFile && leadFile && backFile) ? 'separated' : (audioFile ? 'fallback' : 'pending'),
@@ -2059,8 +2271,8 @@ router.post('/edit_lyrics', (req, res) => {
 });
 
 // Metadata editing endpoint
-router.post('/edit_metadata', upload.single('coverImage'), (req, res) => {
-  const { songId, title, artist, coverUrl } = req.body;
+router.post('/edit_metadata', upload.single('coverImage'), async (req, res) => {
+  const { songId, title, artist, coverUrl, youtubeUrl, triggerVideoSearch } = req.body;
   const history = readHistory();
   const idx = history.findIndex(s => s.id === songId);
 
@@ -2103,10 +2315,27 @@ router.post('/edit_metadata', upload.single('coverImage'), (req, res) => {
 
   let updatedSong = null;
 
+  const resolvedYtId = youtubeUrl !== undefined ? extractYoutubeId(youtubeUrl) : undefined;
+  const resolvedYtUrl = youtubeUrl !== undefined ? (resolvedYtId ? `https://www.youtube.com/watch?v=${resolvedYtId}` : (youtubeUrl || null)) : undefined;
+
   if (idx !== -1) {
     if (title !== undefined) history[idx].title = title;
     if (artist !== undefined) history[idx].artist = artist;
     if (newAlbumArt !== undefined && newAlbumArt.trim() !== '') history[idx].albumArt = newAlbumArt;
+    if (youtubeUrl !== undefined) {
+      // Abort any in-flight background search so it cannot overwrite manual video edit
+      if (activeVideoResolutions.has(songId)) {
+        const active = activeVideoResolutions.get(songId);
+        try {
+          active.controller.abort();
+        } catch (e) {}
+        activeVideoResolutions.delete(songId);
+      }
+      history[idx].youtubeId = resolvedYtId || null;
+      history[idx].youtubeUrl = resolvedYtUrl;
+      history[idx].videoStatus = resolvedYtId ? 'ready' : null;
+      delete history[idx].videoError;
+    }
     updatedSong = history[idx];
     writeHistory(history);
   }
@@ -2116,15 +2345,84 @@ router.post('/edit_metadata', upload.single('coverImage'), (req, res) => {
       if (title !== undefined) item.title = title;
       if (artist !== undefined) item.artist = artist;
       if (newAlbumArt !== undefined && newAlbumArt.trim() !== '') item.albumArt = newAlbumArt;
+      if (youtubeUrl !== undefined) {
+        item.youtubeId = resolvedYtId || null;
+        item.youtubeUrl = resolvedYtUrl;
+        item.videoStatus = resolvedYtId ? 'ready' : null;
+        delete item.videoError;
+      }
       if (!updatedSong) updatedSong = item;
     }
+  }
+
+  // If user requested online video search
+  if ((triggerVideoSearch === 'true' || triggerVideoSearch === true) && updatedSong) {
+    const io = req.app.get('io');
+    resolveYoutubeMusicVideo(updatedSong, io, youtubeUrl).catch(err =>
+      console.error('Error resolving video from edit_metadata:', err)
+    );
   }
 
   // Notify all clients to refresh queue and library
   req.app.get('io').emit('queue_updated', queue);
   req.app.get('io').emit('library_updated');
+  if (updatedSong) {
+    req.app.get('io').emit('sync_state', { songId: songId, songData: updatedSong });
+  }
 
   res.json({ success: true, updatedSong });
+});
+
+// Explicit YouTube Video ID resolver endpoint (pure online lookup, no video download)
+router.post('/fetch_video/:id', async (req, res) => {
+  const songId = req.params.id;
+  const { youtubeUrl, query, title, artist } = req.body || {};
+  const history = readHistory();
+  let song = queue.find(s => s.id === songId) || history.find(s => s.id === songId);
+  if (!song) {
+    return res.status(404).json({ error: 'Song not found' });
+  }
+  if (title) song.title = title;
+  if (artist) song.artist = artist;
+  const io = req.app.get('io');
+  const result = await resolveYoutubeMusicVideo(song, io, youtubeUrl || query);
+  res.json(result);
+});
+
+// Remove YouTube Video link endpoint
+router.delete('/video/:id', (req, res) => {
+  const songId = req.params.id;
+
+  // Abort any active search so it cannot finish later and re-link the video
+  if (activeVideoResolutions.has(songId)) {
+    const active = activeVideoResolutions.get(songId);
+    try {
+      active.controller.abort();
+    } catch (e) {}
+    activeVideoResolutions.delete(songId);
+  }
+
+  const history = readHistory();
+  let song = queue.find(s => s.id === songId) || history.find(s => s.id === songId);
+  if (!song) {
+    return res.status(404).json({ error: 'Song not found' });
+  }
+
+  song.youtubeId = null;
+  song.youtubeUrl = null;
+  song.videoStatus = null;
+  delete song.videoError;
+
+  saveLightweightHistoryItem(song);
+  syncSongAcrossQueue(song);
+
+  const io = req.app.get('io');
+  if (io) {
+    io.emit('queue_updated', queue);
+    io.emit('library_updated', readHistory());
+    io.emit('sync_state', { songId: song.id, songData: { ...song } });
+  }
+  res.json({ success: true });
 });
 
 router.delete('/history/:id', (req, res) => {
@@ -2200,6 +2498,9 @@ router.post('/queue/reorder', (req, res) => {
   req.app.get('io').emit('queue_updated', queue);
   res.json({ success: true, queue });
 });
+
+router.extractYoutubeId = extractYoutubeId;
+router.resolveYoutubeMusicVideo = resolveYoutubeMusicVideo;
 
 module.exports = router;
 

@@ -171,13 +171,29 @@ export async function editLyrics(id, lyrics) {
   return res.json();
 }
 
-export async function editMetadata(id, title, artist, albumArt) {
+export async function editMetadata(id, title, artist, albumArt, youtubeUrl = null, triggerVideoSearch = false) {
   const res = await fetch('/api/edit_metadata', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id, title, artist, albumArt })
+    body: JSON.stringify({ songId: id, title, artist, coverUrl: albumArt, youtubeUrl, triggerVideoSearch })
   });
   if (!res.ok) throw new Error(`Save metadata failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function fetchMusicVideo(id, youtubeUrl = null) {
+  const res = await fetch(`/api/fetch_video/${id}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ youtubeUrl })
+  });
+  if (!res.ok) throw new Error(`Resolve video failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function deleteMusicVideo(id) {
+  const res = await fetch(`/api/video/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`Delete video failed: ${res.statusText}`);
   return res.json();
 }
 

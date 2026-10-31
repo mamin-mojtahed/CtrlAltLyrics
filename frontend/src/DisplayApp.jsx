@@ -20,6 +20,7 @@ export default function DisplayApp() {
   const [showTranslat, setShowTranslat] = useState(false);
   const [showKaraokeSlide, setShowKaraokeSlide] = useState(true);
   const [showWaveform, setShowWaveform] = useState(true);
+  const [showMusicVideo, setShowMusicVideo] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [accentColor, setAccentColor] = useState({ r: 99, g: 102, b: 241 });
 
@@ -145,6 +146,7 @@ export default function DisplayApp() {
       if (state.showTranslat !== undefined) setShowTranslat(state.showTranslat);
       if (state.showKaraokeSlide !== undefined) setShowKaraokeSlide(state.showKaraokeSlide);
       if (state.showWaveform !== undefined) setShowWaveform(state.showWaveform);
+      if (state.showMusicVideo !== undefined) setShowMusicVideo(state.showMusicVideo);
     });
 
     socket.on('player_command', (cmd) => {
@@ -558,6 +560,17 @@ export default function DisplayApp() {
         return;
       }
 
+      // 'v': Toggle YouTube music video background
+      if (key === 'v') {
+        e.preventDefault();
+        setShowMusicVideo(prev => {
+          const next = !prev;
+          emitUpdateState({ showMusicVideo: next });
+          return next;
+        });
+        return;
+      }
+
       // Stem Volume & Mute Shortcuts
       const key = e.key.toLowerCase();
       const step = e.shiftKey ? 0.15 : 0.05;
@@ -638,6 +651,7 @@ export default function DisplayApp() {
         showTranslat={showTranslat}
         showKaraokeSlide={showKaraokeSlide}
         showWaveform={showWaveform}
+        showMusicVideo={showMusicVideo}
         onSeek={handleSeek}
       />
 

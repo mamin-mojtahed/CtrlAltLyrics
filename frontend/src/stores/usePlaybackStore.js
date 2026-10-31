@@ -18,6 +18,7 @@ export const usePlaybackStore = create((set, get) => ({
   showTranslat: false,
   showKaraokeSlide: true,
   showWaveform: true,
+  showMusicVideo: true,
   audioBlocked: false,
   isDraggingSlider: false,
   audioMaster: 'dashboard',
@@ -130,6 +131,11 @@ export const usePlaybackStore = create((set, get) => ({
   setShowWaveform: (show) => {
     set({ showWaveform: show });
     emitUpdateState({ showWaveform: show });
+  },
+
+  setShowMusicVideo: (show) => {
+    set({ showMusicVideo: show });
+    emitUpdateState({ showMusicVideo: show });
   },
 
   selectSong: async (songOrId, forcePlay = null, queueId = null, remoteAudioMaster = null) => {
@@ -432,6 +438,7 @@ export const usePlaybackStore = create((set, get) => ({
     if (state.showTranslat !== undefined) updates.showTranslat = !!state.showTranslat;
     if (state.showKaraokeSlide !== undefined) updates.showKaraokeSlide = !!state.showKaraokeSlide;
     if (state.showWaveform !== undefined) updates.showWaveform = !!state.showWaveform;
+    if (state.showMusicVideo !== undefined) updates.showMusicVideo = !!state.showMusicVideo;
     if (state.audioBlocked !== undefined) updates.audioBlocked = !!state.audioBlocked;
 
     if (state.volumes) {
@@ -480,6 +487,8 @@ export const usePlaybackStore = create((set, get) => ({
       } else {
         current.selectSong(trackWithQueue, state.isPlaying, incomingQueueId);
       }
+    } else if (state.songData && current.currentSong && current.currentSong.id === state.songData.id) {
+      updates.currentSong = { ...current.currentSong, ...state.songData };
     } else if (('songId' in state && state.songId === null) || ('songData' in state && state.songData === null)) {
       audioPlayer.resetAudio();
       updates.currentSong = null;

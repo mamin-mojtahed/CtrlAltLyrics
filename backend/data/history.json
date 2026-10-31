@@ -22,7 +22,10 @@
     "spotifyUrl": null,
     "spotifyTrackId": null,
     "isSpotify": false,
-    "isUploaded": false
+    "isUploaded": false,
+    "youtubeId": "HJuqVdJH73A",
+    "youtubeUrl": "https://www.youtube.com/watch?v=HJuqVdJH73A",
+    "videoStatus": "ready"
   },
   {
     "id": "1440053120",
@@ -72,7 +75,11 @@
     "spotifyUrl": null,
     "spotifyTrackId": null,
     "isSpotify": false,
-    "isUploaded": false
+    "isUploaded": false,
+    "youtubeId": null,
+    "youtubeUrl": null,
+    "videoStatus": "error",
+    "videoError": "No matching YouTube music video found"
   },
   {
     "id": "1573439068",
@@ -148,7 +155,11 @@
     "spotifyUrl": null,
     "spotifyTrackId": null,
     "isSpotify": false,
-    "isUploaded": false
+    "isUploaded": false,
+    "youtubeId": "jDe1OKLHLsM",
+    "youtubeUrl": "https://www.youtube.com/watch?v=jDe1OKLHLsM",
+    "videoStatus": "ready",
+    "videoError": null
   },
   {
     "id": "538287781",
@@ -173,7 +184,11 @@
     "spotifyUrl": null,
     "spotifyTrackId": null,
     "isSpotify": false,
-    "isUploaded": false
+    "isUploaded": false,
+    "youtubeId": "8CnpqLtzqQY",
+    "youtubeUrl": "https://www.youtube.com/watch?v=8CnpqLtzqQY",
+    "videoStatus": "ready",
+    "videoError": null
   },
   {
     "id": "1689473877",
@@ -260,7 +275,11 @@
     "spotifyUrl": null,
     "spotifyTrackId": null,
     "isSpotify": false,
-    "isUploaded": false
+    "isUploaded": false,
+    "youtubeId": "hLQl3WQQoQ0",
+    "youtubeUrl": "https://www.youtube.com/watch?v=hLQl3WQQoQ0",
+    "videoStatus": "ready",
+    "videoError": null
   },
   {
     "id": "1860037156",
@@ -472,7 +491,11 @@
     "spotifyUrl": null,
     "spotifyTrackId": null,
     "isSpotify": false,
-    "isUploaded": false
+    "isUploaded": false,
+    "youtubeId": "D_6WE3pHRdw",
+    "youtubeUrl": "https://www.youtube.com/watch?v=D_6WE3pHRdw",
+    "videoStatus": "ready",
+    "videoError": null
   },
   {
     "id": "spotify_5aTY5Mw6DnDuBQupkCgEiI",
@@ -530,7 +553,11 @@
     "spotifyUrl": "https://open.spotify.com/track/5aTY5Mw6DnDuBQupkCgEiI",
     "spotifyTrackId": "5aTY5Mw6DnDuBQupkCgEiI",
     "isSpotify": true,
-    "isUploaded": false
+    "isUploaded": false,
+    "videoUrl": "/audio/spotify_5aTY5Mw6DnDuBQupkCgEiI/video.mp4",
+    "youtubeUrl": null,
+    "videoStatus": "ready",
+    "videoError": null
   },
   {
     "id": "spotify_0yXKYYBPxOuakAOshy1cah",
@@ -625,7 +652,10 @@
     "spotifyUrl": null,
     "spotifyTrackId": null,
     "isSpotify": false,
-    "isUploaded": true
+    "isUploaded": true,
+    "youtubeId": "9Fz5jIJsTn8",
+    "youtubeUrl": "https://www.youtube.com/watch?v=9Fz5jIJsTn8",
+    "videoStatus": "ready"
   },
   {
     "id": "spotify_3FsqlxtjL2EJ5kxwgdj1Yl",
@@ -678,7 +708,11 @@
     "spotifyUrl": "https://open.spotify.com/track/3FsqlxtjL2EJ5kxwgdj1Yl",
     "spotifyTrackId": "3FsqlxtjL2EJ5kxwgdj1Yl",
     "isSpotify": true,
-    "isUploaded": false
+    "isUploaded": false,
+    "videoUrl": "/audio/spotify_3FsqlxtjL2EJ5kxwgdj1Yl/video.mp4",
+    "youtubeUrl": null,
+    "videoStatus": "ready",
+    "videoError": null
   },
   {
     "id": "1528780636",
@@ -731,7 +765,11 @@
     "spotifyUrl": null,
     "spotifyTrackId": null,
     "isSpotify": false,
-    "isUploaded": false
+    "isUploaded": false,
+    "youtubeId": "mPeuOi8G9Yg",
+    "youtubeUrl": "https://www.youtube.com/watch?v=mPeuOi8G9Yg",
+    "videoStatus": "ready",
+    "videoError": null
   },
   {
     "id": "92286036",
@@ -837,7 +875,11 @@
     "spotifyUrl": null,
     "spotifyTrackId": null,
     "isSpotify": false,
-    "isUploaded": false
+    "isUploaded": false,
+    "youtubeId": null,
+    "youtubeUrl": null,
+    "videoStatus": "error",
+    "videoError": "No matching YouTube music video found"
   },
   {
     "id": "upload_1787439244332",
@@ -986,7 +1028,11 @@
     "spotifyUrl": null,
     "spotifyTrackId": null,
     "isSpotify": false,
-    "isUploaded": false
+    "isUploaded": false,
+    "youtubeId": "JqfKLOxnbeE",
+    "youtubeUrl": "https://www.youtube.com/watch?v=JqfKLOxnbeE",
+    "videoStatus": "ready",
+    "videoError": null
   },
   {
     "id": "6781024437",
@@ -1039,6 +1085,9 @@
     "spotifyUrl": null,
     "spotifyTrackId": null,
     "isSpotify": false,
-    "isUploaded": false
+    "isUploaded": false,
+    "youtubeId": "fJ9rUzIMcZQ",
+    "youtubeUrl": "https://www.youtube.com/watch?v=fJ9rUzIMcZQ",
+    "videoStatus": "ready"
   }
 ]
