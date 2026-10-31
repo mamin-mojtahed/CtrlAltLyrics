@@ -5,6 +5,7 @@ import { usePlaybackStore } from '../../stores/usePlaybackStore';
 import { useModalStore } from '../../stores/useModalStore';
 import * as api from '../../services/api';
 import SongStatusBadges from '../common/SongStatusBadges';
+import ScrollShadowWrapper from '../common/ScrollShadowWrapper';
 
 export default function LibraryList() {
   const library = useLibraryStore((state) => state.library);
@@ -155,97 +156,99 @@ export default function LibraryList() {
         </div>
       </div>
 
-      <div id="libraryList" className="library-list">
-        {songs.length === 0 ? (
-          <div className="empty-state">
-            {filterQuery
-              ? `No library items match "${filterQuery}".`
-              : 'No songs in library yet. Use search or upload to add tracks!'}
-          </div>
-        ) : (
-          songs.map((song) => {
-            const isActive = currentSong && currentSong.id === song.id;
-            const isDragging = draggedSongId === song.id;
+      <ScrollShadowWrapper className="library-scroll-wrapper">
+        <div id="libraryList" className="library-list">
+          {songs.length === 0 ? (
+            <div className="empty-state">
+              {filterQuery
+                ? `No library items match "${filterQuery}".`
+                : 'No songs in library yet. Use search or upload to add tracks!'}
+            </div>
+          ) : (
+            songs.map((song) => {
+              const isActive = currentSong && currentSong.id === song.id;
+              const isDragging = draggedSongId === song.id;
 
-            return (
-              <div
-                key={song.id}
-                id={`library-song-${song.id}`}
-                className={`song-card library-card ${isActive ? (isPlaying ? 'active-playing' : 'active-playing is-paused') : ''} ${isDragging ? 'library-card-dragging' : ''}`}
-                draggable
-                onDragStart={(e) => handleDragStart(e, song)}
-                onDragEnd={handleDragEnd}
-              >
-                {/* Row 1: Song Info & Playing Badge */}
-                <div className="song-card-header">
-                  <div className="song-card-meta">
-                    <img
-                      src={song.albumArt || '/CtrlAltLyrics-logo.svg'}
-                      alt="art"
-                      onError={(e) => { e.target.onerror = null; e.target.src = '/CtrlAltLyrics-logo.svg'; }}
-                    />
-                    <div className="song-info">
-                      <div className="song-title">{song.title}</div>
-                      <div className="song-artist">{song.artist}</div>
+              return (
+                <div
+                  key={song.id}
+                  id={`library-song-${song.id}`}
+                  className={`song-card library-card ${isActive ? (isPlaying ? 'active-playing' : 'active-playing is-paused') : ''} ${isDragging ? 'library-card-dragging' : ''}`}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, song)}
+                  onDragEnd={handleDragEnd}
+                >
+                  {/* Row 1: Song Info & Playing Badge */}
+                  <div className="song-card-header">
+                    <div className="song-card-meta">
+                      <img
+                        src={song.albumArt || '/CtrlAltLyrics-logo.svg'}
+                        alt="art"
+                        onError={(e) => { e.target.onerror = null; e.target.src = '/CtrlAltLyrics-logo.svg'; }}
+                      />
+                      <div className="song-info">
+                        <div className="song-title">{song.title}</div>
+                        <div className="song-artist">{song.artist}</div>
+                      </div>
+                    </div>
+                    {isActive && (
+                      <div
+                        className={`currently-playing-badge ${isPlaying ? 'is-playing' : 'is-paused'}`}
+                        title={isPlaying ? "Currently Playing" : "Currently Paused"}
+                        aria-label={isPlaying ? "Currently Playing" : "Currently Paused"}
+                      >
+                        <i className={isPlaying ? "icon-play" : "icon-pause"}></i>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Row 2: Status Badges (Left) & Action Buttons (Right) */}
+                  <div className="song-card-actions-row">
+                    <SongStatusBadges song={song} />
+                    <div className="emoji-btn-group">
+                      <button
+                        className="emoji-btn emoji-btn-accent"
+                        onClick={() => enqueue(song)}
+                        title="Add to Queue"
+                      >
+                        <i className="icon-plus"></i>
+                      </button>
+                      <button
+                        className="emoji-btn"
+                        onClick={() => api.openFolder(song.id)}
+                        title="Open Folder"
+                      >
+                        <i className="icon-folder"></i>
+                      </button>
+                      <button
+                        className="emoji-btn"
+                        onClick={() => openComponentManager(song.id)}
+                        title="Component Status & Retry"
+                      >
+                        <i className="icon-bolt"></i>
+                      </button>
+                      <button
+                        className="emoji-btn"
+                        onClick={() => handleOpenSourceLink(song)}
+                        title="Open Song Source (Spotify / YouTube)"
+                      >
+                        <i className="icon-external-link"></i>
+                      </button>
+                      <button
+                        className="emoji-btn emoji-btn-danger"
+                        onClick={() => handleDelete(song.id, song.title)}
+                        title="Delete from Library"
+                      >
+                        <i className="icon-trash-2"></i>
+                      </button>
                     </div>
                   </div>
-                  {isActive && (
-                    <div
-                      className={`currently-playing-badge ${isPlaying ? 'is-playing' : 'is-paused'}`}
-                      title={isPlaying ? "Currently Playing" : "Currently Paused"}
-                      aria-label={isPlaying ? "Currently Playing" : "Currently Paused"}
-                    >
-                      <i className={isPlaying ? "icon-play" : "icon-pause"}></i>
-                    </div>
-                  )}
                 </div>
-
-                {/* Row 2: Status Badges (Left) & Action Buttons (Right) */}
-                <div className="song-card-actions-row">
-                  <SongStatusBadges song={song} />
-                  <div className="emoji-btn-group">
-                    <button
-                      className="emoji-btn emoji-btn-accent"
-                      onClick={() => enqueue(song)}
-                      title="Add to Queue"
-                    >
-                      <i className="icon-plus"></i>
-                    </button>
-                    <button
-                      className="emoji-btn"
-                      onClick={() => api.openFolder(song.id)}
-                      title="Open Folder"
-                    >
-                      <i className="icon-folder"></i>
-                    </button>
-                    <button
-                      className="emoji-btn"
-                      onClick={() => openComponentManager(song.id)}
-                      title="Component Status & Retry"
-                    >
-                      <i className="icon-bolt"></i>
-                    </button>
-                    <button
-                      className="emoji-btn"
-                      onClick={() => handleOpenSourceLink(song)}
-                      title="Open Song Source (Spotify / YouTube)"
-                    >
-                      <i className="icon-external-link"></i>
-                    </button>
-                    <button
-                      className="emoji-btn emoji-btn-danger"
-                      onClick={() => handleDelete(song.id, song.title)}
-                      title="Delete from Library"
-                    >
-                      <i className="icon-trash-2"></i>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
+              );
+            })
+          )}
+        </div>
+      </ScrollShadowWrapper>
     </>
   );
 }

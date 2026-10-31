@@ -6,6 +6,7 @@ import { isInstrumentalText } from '../../utils/lyricsWrapping';
 import * as audioPlayer from '../../services/audioPlayer';
 import { emitUpdateState } from '../../services/socket';
 import LyricsTimelineSpectrumEditor from './LyricsTimelineSpectrumEditor';
+import ScrollShadowWrapper from '../common/ScrollShadowWrapper';
 
 export default function LyricsSyncModal() {
   const rawModalSong = useModalStore((state) => state.lyricsSyncModalSong);
@@ -542,14 +543,14 @@ export default function LyricsSyncModal() {
           return;
         }
 
-        // Timeline Zoom & Navigation shortcuts
-        if (e.key === '+' || e.key === '=') {
+        // Timeline Zoom & Navigation shortcuts (preserve Cmd/Ctrl +/- for browser native zoom)
+        if ((e.key === '+' || e.key === '=') && !e.metaKey && !e.ctrlKey) {
           e.preventDefault();
           timelineRef.current?.zoomIn();
           return;
         }
 
-        if (e.key === '-' || e.key === '_') {
+        if ((e.key === '-' || e.key === '_') && !e.metaKey && !e.ctrlKey) {
           e.preventDefault();
           timelineRef.current?.zoomOut();
           return;
@@ -588,7 +589,6 @@ export default function LyricsSyncModal() {
     <div className="modal-backdrop" style={{ display: 'flex', zIndex: 3000 }} onClick={handleClose}>
       <div
         className="modal-box lyrics-sync-modal-box"
-        style={{ maxWidth: '1060px', width: '96vw', maxHeight: '94vh' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -600,7 +600,7 @@ export default function LyricsSyncModal() {
               <span className="sync-status-text">{isDirty ? 'Unsaved' : 'Saved'}</span>
             </span>
           </div>
-          <button className="btn-close" onClick={handleClose}><i className="icon-x"></i></button>
+          <button className="btn-close" onClick={handleClose} title="Close / Back (Esc)"><i className="icon-x"></i></button>
         </div>
 
         {loading ? (
@@ -749,27 +749,15 @@ export default function LyricsSyncModal() {
 
             {/* Tap-to-Sync Active Banner */}
             {isTapMode && (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '0.45rem 0.75rem',
-                  background: 'rgba(59, 130, 246, 0.16)',
-                  border: '1px solid rgba(59, 130, 246, 0.35)',
-                  borderRadius: '8px',
-                  marginBottom: '0.65rem'
-                }}
-              >
-                <span style={{ fontSize: '0.78rem', color: '#93c5fd' }}>
+              <div className="sync-tap-banner">
+                <span className="sync-tap-banner-text">
                   <strong>Tap-to-Sync Active:</strong> Row {activeTapIndex + 1} of {lines.length} |
                   Press <strong>ArrowDown</strong> to stamp &amp; advance, <strong>ArrowUp</strong> to seek back,
                   <strong>ArrowLeft / Right</strong> to nudge by ±{nudgeStep}s.
                 </span>
                 <button
                   type="button"
-                  className="btn btn-primary"
-                  style={{ fontSize: '0.75rem', padding: '0.25rem 0.65rem' }}
+                  className="btn btn-primary sync-tap-stamp-btn"
                   onClick={handleStampCurrentLine}
                 >
                   <i className="icon-check" style={{ marginRight: '0.25rem' }}></i>
@@ -780,10 +768,9 @@ export default function LyricsSyncModal() {
 
             {/* Column Headers */}
             <div className="sync-col-headers">
-              <div className="sync-col-hdr sync-col-play" style={{ width: '25px', flex: '0 0 25px' }}></div>
+              <div className="sync-col-hdr sync-col-play"></div>
               <div
                 className="sync-col-hdr sync-col-time"
-                style={{ width: '150px', flex: '0 0 150px', textAlign: 'center' }}
                 title="Minutes:Seconds.Centiseconds (mm:ss.cs)"
               >
                 Time (mm:ss.cs)
@@ -791,11 +778,12 @@ export default function LyricsSyncModal() {
               <div className="sync-col-hdr sync-col-text">Lyrics</div>
               {showTranslit && <div className="sync-col-hdr sync-col-tl">Transliteration</div>}
               {showTranslat && <div className="sync-col-hdr sync-col-tr">Translation</div>}
-              <div className="sync-col-hdr sync-col-actions" style={{ width: '26px', flex: '0 0 26px' }}></div>
+              <div className="sync-col-hdr sync-col-actions"></div>
             </div>
 
             {/* Rows List */}
-            <div className="sync-editor-list" style={{ maxHeight: '56vh', overflowY: 'auto' }}>
+            <ScrollShadowWrapper className="sync-editor-scroll-wrapper">
+              <div className="sync-editor-list">
               {lines.length === 0 ? (
                 <div className="sync-empty-state">
                   <p>No lyrics found for this song.</p>
@@ -952,7 +940,8 @@ export default function LyricsSyncModal() {
                   );
                 })
               )}
-            </div>
+              </div>
+            </ScrollShadowWrapper>
           </>
         )}
       </div>

@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useModalStore } from '../../stores/useModalStore';
 import { useQueueStore } from '../../stores/useQueueStore';
 import { useLibraryStore } from '../../stores/useLibraryStore';
+import ScrollShadowWrapper from '../common/ScrollShadowWrapper';
 
 export default function UploadSongModal() {
   const isOpen = useModalStore((state) => state.uploadModalOpen);
@@ -115,7 +116,8 @@ export default function UploadSongModal() {
           </button>
         </div>
 
-        <div className="modal-body">
+        <ScrollShadowWrapper className="modal-body-scroll-wrapper">
+          <div className="modal-body">
           {!selectedFile ? (
             <div
               className={`upload-dropzone ${isDragOver ? 'dragover' : ''}`}
@@ -221,13 +223,14 @@ export default function UploadSongModal() {
             </div>
           )}
 
-          {errorMessage && (
-            <div className="upload-error-msg" style={{ display: 'block', marginTop: '0.75rem' }}>
-              <i className="icon-alert-triangle" style={{ marginRight: '0.35rem' }}></i>
-              {errorMessage}
-            </div>
-          )}
-        </div>
+            {errorMessage && (
+              <div className="upload-error-msg" style={{ display: 'block', marginTop: '0.75rem' }}>
+                <i className="icon-alert-triangle" style={{ marginRight: '0.35rem' }}></i>
+                {errorMessage}
+              </div>
+            )}
+          </div>
+        </ScrollShadowWrapper>
 
         <div className="modal-footer" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
           <button className="btn btn-secondary" onClick={handleClose} disabled={isUploading}>

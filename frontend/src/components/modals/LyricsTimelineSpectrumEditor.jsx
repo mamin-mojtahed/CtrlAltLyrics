@@ -34,12 +34,32 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
   const [transientStatus, setTransientStatus] = useState(null);
+  const [hoveredMarkerIndex, setHoveredMarkerIndex] = useState(-1);
+
+  // Dismiss cheatsheet modal on Escape before parent modal receives the key event
+  useEffect(() => {
+    if (!showShortcutsModal) return;
+    const handleEsc = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === 'function') {
+          e.stopImmediatePropagation();
+        }
+        setShowShortcutsModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleEsc, true);
+    return () => window.removeEventListener('keydown', handleEsc, true);
+  }, [showShortcutsModal]);
 
   // Dragging states
   const isDraggingMinimapRef = useRef(null); // 'vp-left' | 'vp-right' | 'vp-move'
   const isDraggingMarkerRef = useRef(null); // line index
   const isScrubbingRulerRef = useRef(false);
   const dragAnchorRef = useRef({ startX: 0, initialViewStart: 0, initialViewDuration: 0, initialViewEnd: 0, startTime: 0 });
+  const hoveredMarkerIndexRef = useRef(-1);
+  const markerBoxesRef = useRef([]);
 
   // DOM Refs
   const containerRef = useRef(null);
@@ -564,17 +584,19 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
         }
       }
       // 2. Render Interactive Lyric Pins & Badges
+      const boxes = [];
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         const lx = ((line.time - viewStart) / viewDuration) * width;
 
-        if (lx >= -60 && lx <= width + 60) {
+        if (lx >= -80 && lx <= width + 80) {
           const isSel = selectedRowIndex === i;
+          const isHov = hoveredMarkerIndex === i;
 
           // Vertical Marker Line
-          ctx.strokeStyle = isSel ? '#fbbf24' : 'rgba(56, 189, 248, 0.55)';
-          ctx.lineWidth = isSel ? 2 : 1.5;
-          if (!isSel) ctx.setLineDash([4, 3]);
+          ctx.strokeStyle = isSel ? '#fbbf24' : (isHov ? '#38bdf8' : 'rgba(56, 189, 248, 0.55)');
+          ctx.lineWidth = isSel || isHov ? 2 : 1.5;
+          if (!isSel && !isHov) ctx.setLineDash([4, 3]);
           else ctx.setLineDash([]);
 
           ctx.beginPath();
@@ -584,9 +606,9 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
           ctx.setLineDash([]);
 
           // Draggable Knob / Handle
-          ctx.fillStyle = isSel ? '#f59e0b' : '#38bdf8';
+          ctx.fillStyle = isSel ? '#f59e0b' : (isHov ? '#38bdf8' : '#0284c7');
           ctx.beginPath();
-          ctx.arc(lx, trackH - 10, isSel ? 5 : 4, 0, Math.PI * 2);
+          ctx.arc(lx, trackH - 10, isSel || isHov ? 5 : 4, 0, Math.PI * 2);
           ctx.fill();
 
           // Lyric Header Pill Badge at Top of Pin
@@ -594,15 +616,27 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
           const label = `[#${i + 1}] ${previewText}`;
           ctx.font = isSel ? 'bold 10px sans-serif' : '10px sans-serif';
           const textW = ctx.measureText(label).width;
-          const badgeW = textW + 12;
-          const badgeH = 18;
+          const badgeW = textW + 14;
+          const badgeH = 20;
           const badgeX = Math.max(2, Math.min(width - badgeW - 2, lx - badgeW / 2));
-          const badgeY = 4;
+          const badgeY = 3;
+
+          boxes.push({ index: i, lx, badgeX, badgeY, badgeW, badgeH, time: line.time });
 
           // Badge Background
-          ctx.fillStyle = isSel ? 'rgba(245, 158, 11, 0.95)' : 'rgba(15, 23, 42, 0.85)';
-          ctx.strokeStyle = isSel ? '#fef08a' : 'rgba(56, 189, 248, 0.6)';
-          ctx.lineWidth = 1;
+          if (isSel) {
+            ctx.fillStyle = 'rgba(245, 158, 11, 0.95)';
+            ctx.strokeStyle = '#fef08a';
+            ctx.lineWidth = 1.5;
+          } else if (isHov) {
+            ctx.fillStyle = 'rgba(30, 58, 138, 0.92)';
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 1.5;
+          } else {
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.65)';
+            ctx.lineWidth = 1;
+          }
 
           // Rounded Badge rect
           ctx.beginPath();
@@ -611,12 +645,13 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
           ctx.stroke();
 
           // Badge Text
-          ctx.fillStyle = isSel ? '#000000' : '#e2e8f0';
+          ctx.fillStyle = isSel ? '#000000' : (isHov ? '#ffffff' : '#e2e8f0');
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText(label, badgeX + badgeW / 2, badgeY + badgeH / 2);
         }
       }
+      markerBoxesRef.current = boxes;
 
       // 4. Render Red Playhead Needle
       if (playbackTime >= viewStart && playbackTime <= viewStart + viewDuration) {
@@ -642,7 +677,7 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
         ctx.fillText(timeText, playX, trackH - 9);
       }
     }
-  }, [duration, viewStart, viewDuration, playbackTime, lines, selectedRowIndex, isPlaying]);
+  }, [duration, viewStart, viewDuration, playbackTime, lines, selectedRowIndex, isPlaying, hoveredMarkerIndex]);
 
   // Continuously request animation frame during playback for silky 60fps spectrum
   useEffect(() => {
@@ -663,7 +698,19 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
   useEffect(() => {
     const handleResize = () => renderAllCanvases();
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+
+    let ro = null;
+    if (typeof ResizeObserver !== 'undefined' && containerRef.current) {
+      ro = new ResizeObserver(() => {
+        renderAllCanvases();
+      });
+      ro.observe(containerRef.current);
+    }
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (ro) ro.disconnect();
+    };
   }, [renderAllCanvases]);
 
   // 6. Interactive Minimap Handlers (Resize/Stretch/Pan View Rectangle)
@@ -784,42 +831,108 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
     const wrap = canvasWrapRef.current;
     if (!wrap || durationRef.current <= 0) return 0;
     const rect = wrap.getBoundingClientRect();
-    const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    const clientX = e.clientX ?? e.touches?.[0]?.clientX ?? 0;
+    const x = Math.max(0, Math.min(rect.width, clientX - rect.left));
     const t = viewStartRef.current + (x / rect.width) * viewDurationRef.current;
     return Math.max(0, Math.min(durationRef.current, t));
   };
 
-  const handleMainCanvasMouseDown = (e) => {
-    if (e.button !== 0 || durationRef.current <= 0) return;
-    const wrap = canvasWrapRef.current;
-    if (!wrap) return;
-
-    const rect = wrap.getBoundingClientRect();
-    const width = rect.width;
-    const clickX = e.clientX - rect.left;
-    const clickTime = getTimeFromCanvasEvent(e);
+  const findHitLyricIndex = useCallback((canvasX, canvasY, width) => {
     const curLines = linesRef.current;
     const vStart = viewStartRef.current;
     const vDur = viewDurationRef.current;
+    if (!curLines || curLines.length === 0 || vDur <= 0) return -1;
 
-    // A. Detect if clicking a Lyric Pin or Badge (within 10px radius)
-    let hitIndex = -1;
-    let minDistance = 14;
+    // 1. First priority: Check if tapping/clicking any Lyric Text Box (Badge)
+    // Check in reverse order so newer / top-painted badges take precedence
+    const boxes = markerBoxesRef.current;
+    if (boxes && boxes.length > 0) {
+      let hitBadgeIndex = -1;
+      let minBadgeCenterDist = Infinity;
 
-    for (let i = 0; i < curLines.length; i++) {
-      const lx = ((curLines[i].time - vStart) / vDur) * width;
-      const dist = Math.abs(clickX - lx);
-      if (dist < minDistance) {
-        minDistance = dist;
-        hitIndex = i;
+      for (let k = boxes.length - 1; k >= 0; k--) {
+        const b = boxes[k];
+        if (!b) continue;
+        // Generous 6px hit box margin around the badge
+        const insideX = canvasX >= b.badgeX - 6 && canvasX <= b.badgeX + b.badgeW + 6;
+        const insideY = canvasY >= b.badgeY - 6 && canvasY <= b.badgeY + b.badgeH + 8;
+
+        if (insideX && insideY) {
+          const center = b.badgeX + b.badgeW / 2;
+          const dist = Math.abs(canvasX - center);
+          // Prioritize already selected row if overlapping
+          const priorityDist = selectedRowIndexRef.current === b.index ? dist - 14 : dist;
+          if (priorityDist < minBadgeCenterDist) {
+            minBadgeCenterDist = priorityDist;
+            hitBadgeIndex = b.index;
+          }
+        }
+      }
+
+      if (hitBadgeIndex >= 0) return hitBadgeIndex;
+    }
+
+    // Dynamic badge fallback if boxes weren't populated yet
+    for (let i = curLines.length - 1; i >= 0; i--) {
+      const line = curLines[i];
+      const lx = ((line.time - vStart) / vDur) * width;
+      const previewText = line.text ? (line.text.length > 16 ? line.text.slice(0, 15) + '…' : line.text) : '#INST';
+      const label = `[#${i + 1}] ${previewText}`;
+      const approxW = Math.max(48, label.length * 6.5 + 14);
+      const bX = Math.max(2, Math.min(width - approxW - 2, lx - approxW / 2));
+      const bY = 3;
+      const bH = 20;
+
+      if (canvasX >= bX - 6 && canvasX <= bX + approxW + 6 && canvasY >= bY - 6 && canvasY <= bY + bH + 8) {
+        return i;
       }
     }
 
+    // 2. Second priority: Check if near the vertical marker line or knob (within generous 18px radius)
+    let hitLineIndex = -1;
+    let minLineDist = 18;
+
+    for (let i = 0; i < curLines.length; i++) {
+      const lx = ((curLines[i].time - vStart) / vDur) * width;
+      const dist = Math.abs(canvasX - lx);
+      if (dist < minLineDist && canvasY >= 0 && canvasY <= 126) {
+        minLineDist = dist;
+        hitLineIndex = i;
+      }
+    }
+
+    return hitLineIndex;
+  }, []);
+
+  const handleMainCanvasPointerDown = (e) => {
+    if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
+    if (durationRef.current <= 0) return;
+    const wrap = canvasWrapRef.current;
+    const canvas = mainCanvasRef.current;
+    if (!wrap || !canvas) return;
+
+    const wrapRect = wrap.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+    const width = wrapRect.width;
+
+    const clientX = e.clientX ?? e.touches?.[0]?.clientX ?? 0;
+    const clientY = e.clientY ?? e.touches?.[0]?.clientY ?? 0;
+    const canvasX = clientX - canvasRect.left;
+    const canvasY = clientY - canvasRect.top;
+    const clickTime = getTimeFromCanvasEvent(e);
+    const curLines = linesRef.current;
+
+    // Check if clicking or tapping a Lyric Text Box Badge or Marker Pin
+    const hitIndex = findHitLyricIndex(canvasX, canvasY, width);
+
     if (hitIndex >= 0) {
-      // Select line and start dragging pin
+      // Immediately select the line
       onSelectRow(hitIndex);
+      const rowEl = document.getElementById(`sync-line-${hitIndex}`);
+      if (rowEl) rowEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+
       isDraggingMarkerRef.current = hitIndex;
-      dragAnchorRef.current = { startX: e.clientX, initialTime: curLines[hitIndex].time };
+      dragAnchorRef.current = { startX: clientX, initialTime: curLines[hitIndex].time };
       document.body.style.cursor = 'ew-resize';
 
       const onGlobalMarkerMove = (moveEvt) => {
@@ -832,16 +945,26 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
       const onGlobalMarkerUp = () => {
         isDraggingMarkerRef.current = null;
         document.body.style.cursor = '';
+        window.removeEventListener('pointermove', onGlobalMarkerMove);
+        window.removeEventListener('pointerup', onGlobalMarkerUp);
+        window.removeEventListener('pointercancel', onGlobalMarkerUp);
         window.removeEventListener('mousemove', onGlobalMarkerMove);
         window.removeEventListener('mouseup', onGlobalMarkerUp);
+        window.removeEventListener('touchmove', onGlobalMarkerMove);
+        window.removeEventListener('touchend', onGlobalMarkerUp);
       };
 
+      window.addEventListener('pointermove', onGlobalMarkerMove);
+      window.addEventListener('pointerup', onGlobalMarkerUp);
+      window.addEventListener('pointercancel', onGlobalMarkerUp);
       window.addEventListener('mousemove', onGlobalMarkerMove);
       window.addEventListener('mouseup', onGlobalMarkerUp);
+      window.addEventListener('touchmove', onGlobalMarkerMove);
+      window.addEventListener('touchend', onGlobalMarkerUp);
       return;
     }
 
-    // B. Otherwise, Scrub/Seek Playhead directly to clicked time
+    // Otherwise: Scrub / Seek Playhead directly to clicked timestamp
     onSeek(clickTime);
     isScrubbingRulerRef.current = true;
     document.body.style.cursor = 'col-resize';
@@ -855,41 +978,78 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
     const onGlobalScrubUp = () => {
       isScrubbingRulerRef.current = false;
       document.body.style.cursor = '';
+      window.removeEventListener('pointermove', onGlobalScrubMove);
+      window.removeEventListener('pointerup', onGlobalScrubUp);
+      window.removeEventListener('pointercancel', onGlobalScrubUp);
       window.removeEventListener('mousemove', onGlobalScrubMove);
       window.removeEventListener('mouseup', onGlobalScrubUp);
+      window.removeEventListener('touchmove', onGlobalScrubMove);
+      window.removeEventListener('touchend', onGlobalScrubUp);
     };
 
+    window.addEventListener('pointermove', onGlobalScrubMove);
+    window.addEventListener('pointerup', onGlobalScrubUp);
+    window.addEventListener('pointercancel', onGlobalScrubUp);
     window.addEventListener('mousemove', onGlobalScrubMove);
     window.addEventListener('mouseup', onGlobalScrubUp);
+    window.addEventListener('touchmove', onGlobalScrubMove);
+    window.addEventListener('touchend', onGlobalScrubUp);
   };
 
-  const handleMainCanvasMouseMove = (e) => {
+  const handleMainCanvasPointerMove = (e) => {
     const wrap = canvasWrapRef.current;
-    if (!wrap || durationRef.current <= 0) return;
+    const canvas = mainCanvasRef.current;
+    if (!wrap || !canvas || durationRef.current <= 0) return;
     if (isDraggingMarkerRef.current !== null || isScrubbingRulerRef.current) return;
 
-    const rect = wrap.getBoundingClientRect();
-    const width = rect.width;
-    const clickX = Math.max(0, Math.min(width, e.clientX - rect.left));
+    const wrapRect = wrap.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+    const width = wrapRect.width;
 
-    const curLines = linesRef.current;
-    const vStart = viewStartRef.current;
-    const vDur = viewDurationRef.current;
+    const clientX = e.clientX ?? e.touches?.[0]?.clientX ?? 0;
+    const clientY = e.clientY ?? e.touches?.[0]?.clientY ?? 0;
+    const canvasX = clientX - canvasRect.left;
+    const canvasY = clientY - canvasRect.top;
 
-    let isNearMarker = false;
-    for (let i = 0; i < curLines.length; i++) {
-      const lx = ((curLines[i].time - vStart) / vDur) * width;
-      if (Math.abs(clickX - lx) < 10) {
-        isNearMarker = true;
-        break;
-      }
+    const hitIndex = findHitLyricIndex(canvasX, canvasY, width);
+
+    if (hoveredMarkerIndexRef.current !== hitIndex) {
+      hoveredMarkerIndexRef.current = hitIndex;
+      setHoveredMarkerIndex(hitIndex);
     }
 
-    wrap.style.cursor = isNearMarker ? 'ew-resize' : 'crosshair';
+    if (hitIndex >= 0) {
+      wrap.style.cursor = 'pointer';
+      const line = linesRef.current[hitIndex];
+      const preview = line ? (line.text || '(empty line)') : '';
+      wrap.title = `Line #${hitIndex + 1}: "${preview}" (Click or tap to select, drag to adjust)`;
+    } else {
+      wrap.style.cursor = 'crosshair';
+      wrap.title = 'Double-click to insert line, click to seek playhead';
+    }
+  };
+
+  const handleMainCanvasPointerLeave = () => {
+    if (hoveredMarkerIndexRef.current !== -1) {
+      hoveredMarkerIndexRef.current = -1;
+      setHoveredMarkerIndex(-1);
+    }
   };
 
   // Double click canvas to insert a new line at clicked timestamp
   const handleMainCanvasDoubleClick = (e) => {
+    const wrap = canvasWrapRef.current;
+    const canvas = mainCanvasRef.current;
+    if (wrap && canvas) {
+      const wrapRect = wrap.getBoundingClientRect();
+      const canvasRect = canvas.getBoundingClientRect();
+      const canvasX = e.clientX - canvasRect.left;
+      const canvasY = e.clientY - canvasRect.top;
+      // Do not insert duplicate if double clicking an existing lyric text box or pin
+      const hitIdx = findHitLyricIndex(canvasX, canvasY, wrapRect.width);
+      if (hitIdx >= 0) return;
+    }
+
     const clickedTime = getTimeFromCanvasEvent(e);
     // Find index of last line before this timestamp
     let insertAfter = -1;
@@ -1058,15 +1218,16 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
           <div
             ref={canvasWrapRef}
             className="lyrics-timeline-workspace"
-            onMouseDown={handleMainCanvasMouseDown}
-            onMouseMove={handleMainCanvasMouseMove}
+            onPointerDown={handleMainCanvasPointerDown}
+            onPointerMove={handleMainCanvasPointerMove}
+            onPointerLeave={handleMainCanvasPointerLeave}
             onDoubleClick={handleMainCanvasDoubleClick}
             onWheel={handleWheel}
           >
             {/* Synchronized Time Ruler */}
             <div
               className="lyrics-ruler-wrap"
-              onMouseMove={handleMainCanvasMouseMove}
+              onPointerMove={handleMainCanvasPointerMove}
             >
               <canvas ref={rulerCanvasRef} className="lyrics-ruler-canvas" />
             </div>

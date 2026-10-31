@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useModalStore } from '../../stores/useModalStore';
 import { usePlaybackStore } from '../../stores/usePlaybackStore';
 import * as api from '../../services/api';
+import ScrollShadowWrapper from '../common/ScrollShadowWrapper';
 
 const modeLabels = {
   balanced: 'Balanced (~30s)',
@@ -227,7 +228,8 @@ export default function ComponentManagerModal() {
         </div>
 
         {/* Body Container (2-column layout in desktop via #componentManagerBody) */}
-        <div id="componentManagerBody">
+        <ScrollShadowWrapper className="component-manager-scroll-wrapper">
+          <div id="componentManagerBody">
           {isLoading ? (
             <div className="empty-state" style={{ gridColumn: '1 / -1', padding: '3rem 1rem' }}>
               <i className="icon-loader-2 icon-spin" style={{ marginRight: '0.5rem', fontSize: '1.5rem' }}></i>
@@ -245,7 +247,7 @@ export default function ComponentManagerModal() {
                 <button
                   type="button"
                   className="btn btn-primary component-editor-btn component-editor-btn-meta"
-                  onClick={() => { close(); openMetadataModal(song); }}
+                  onClick={() => openMetadataModal(song)}
                 >
                   <i className="icon-pencil" style={{ marginRight: '0.35rem' }}></i> Edit Meta-data
                 </button>
@@ -378,10 +380,7 @@ export default function ComponentManagerModal() {
                 <button
                   type="button"
                   className="btn btn-primary component-editor-btn component-editor-btn-stems"
-                  onClick={() => {
-                    close();
-                    openStemEditorModal(song);
-                  }}
+                  onClick={() => openStemEditorModal(song)}
                   title="Open Stem Editor to visualize waveforms and correct stem separation"
                 >
                   <i className="icon-sliders" style={{ marginRight: '0.35rem' }}></i> Stem Editor
@@ -516,7 +515,7 @@ export default function ComponentManagerModal() {
                 <button
                   type="button"
                   className="btn btn-primary component-editor-btn component-editor-btn-lyrics"
-                  onClick={() => { close(); openLyricsSyncModal(song); }}
+                  onClick={() => openLyricsSyncModal(song)}
                 >
                   <i className="icon-music" style={{ marginRight: '0.35rem' }}></i> Lyrics &amp; Sync Editor
                 </button>
@@ -698,7 +697,8 @@ export default function ComponentManagerModal() {
               </div>
             </>
           )}
-        </div>
+          </div>
+        </ScrollShadowWrapper>
 
         {/* Full-width red Close button at bottom */}
         <button type="button" className="btn btn-comp-close" onClick={close}>

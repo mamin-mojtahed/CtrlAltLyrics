@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as api from '../../services/api';
 import { useQueueStore } from '../../stores/useQueueStore';
+import ScrollShadowWrapper from '../common/ScrollShadowWrapper';
 
 export default function SearchPanel() {
   const [query, setQuery] = useState('');
@@ -263,58 +264,60 @@ export default function SearchPanel() {
 
         {/* Search Results Dropdown Popup */}
         {showResults && (
-          <div className="search-results-popup" style={{ display: 'flex' }}>
-            {isSearching ? (
-              <div style={{ padding: '0.75rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                <i className={isSpotifyLink ? 'icon-disc' : 'icon-loader-2 icon-spin'}></i>
-                <span>{isSpotifyLink ? 'Fetching Spotify Track...' : 'Searching songs...'}</span>
-              </div>
-            ) : searchError ? (
-              <div style={{ padding: '0.75rem', textAlign: 'center', color: '#f87171', fontSize: '0.85rem' }}>
-                <i className="icon-alert-triangle" style={{ marginRight: '0.35rem' }}></i>
-                Search failed: {searchError}
-              </div>
-            ) : results && results.length > 0 ? (
-              results.map((song, idx) => (
-                <div
-                  key={song.id || idx}
-                  className="song-card search-card"
-                  tabIndex={0}
-                  onKeyDown={(e) => e.key === 'Enter' && handleEnqueue(song)}
-                >
-                  <img
-                    src={song.albumArt || '/CtrlAltLyrics-logo.svg'}
-                    alt="art"
-                    onError={(e) => { e.target.onerror = null; e.target.src = '/CtrlAltLyrics-logo.svg'; }}
-                  />
-                  <div className="song-info">
-                    <div className="song-title">
-                      {song.title || 'Unknown Title'}
-                      {(song.isSpotify || song.spotifyUrl) && (
-                        <span className="spotify-badge" title="Spotify Direct Track">
-                          <i className="icon-disc" style={{ marginRight: '0.2rem' }}></i> Spotify
-                        </span>
-                      )}
-                    </div>
-                    <div className="song-artist">{song.artist || 'Unknown Artist'}</div>
-                  </div>
-                  <button
-                    className="btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEnqueue(song);
-                    }}
-                  >
-                    Queue
-                  </button>
+          <ScrollShadowWrapper className="search-results-scroll-wrapper">
+            <div className="search-results-popup" style={{ display: 'flex' }}>
+              {isSearching ? (
+                <div style={{ padding: '0.75rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                  <i className={isSpotifyLink ? 'icon-disc' : 'icon-loader-2 icon-spin'}></i>
+                  <span>{isSpotifyLink ? 'Fetching Spotify Track...' : 'Searching songs...'}</span>
                 </div>
-              ))
-            ) : (
-              <div style={{ padding: '0.75rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                No tracks found
-              </div>
-            )}
-          </div>
+              ) : searchError ? (
+                <div style={{ padding: '0.75rem', textAlign: 'center', color: '#f87171', fontSize: '0.85rem' }}>
+                  <i className="icon-alert-triangle" style={{ marginRight: '0.35rem' }}></i>
+                  Search failed: {searchError}
+                </div>
+              ) : results && results.length > 0 ? (
+                results.map((song, idx) => (
+                  <div
+                    key={song.id || idx}
+                    className="song-card search-card"
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === 'Enter' && handleEnqueue(song)}
+                  >
+                    <img
+                      src={song.albumArt || '/CtrlAltLyrics-logo.svg'}
+                      alt="art"
+                      onError={(e) => { e.target.onerror = null; e.target.src = '/CtrlAltLyrics-logo.svg'; }}
+                    />
+                    <div className="song-info">
+                      <div className="song-title">
+                        {song.title || 'Unknown Title'}
+                        {(song.isSpotify || song.spotifyUrl) && (
+                          <span className="spotify-badge" title="Spotify Direct Track">
+                            <i className="icon-disc" style={{ marginRight: '0.2rem' }}></i> Spotify
+                          </span>
+                        )}
+                      </div>
+                      <div className="song-artist">{song.artist || 'Unknown Artist'}</div>
+                    </div>
+                    <button
+                      className="btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEnqueue(song);
+                      }}
+                    >
+                      Queue
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <div style={{ padding: '0.75rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                  No tracks found
+                </div>
+              )}
+            </div>
+          </ScrollShadowWrapper>
         )}
       </div>
     </div>

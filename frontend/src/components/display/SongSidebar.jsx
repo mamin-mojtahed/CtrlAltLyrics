@@ -1,8 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import socket from '../../services/socket';
 import { formatTimeDisplay } from '../../utils/themeColors';
+import { useScrollShadows } from '../../hooks/useScrollShadows';
 
 export default function SongSidebar({ song, queue = [], currentTime = 0, duration = 0, isOpen = true, onSeek, onSelectSong }) {
+  const wrapperRef = useRef(null);
+  const scrollRef = useRef(null);
+  useScrollShadows(scrollRef, { wrapperRef });
+
   const [isDragging, setIsDragging] = useState(false);
   const [scrubTime, setScrubTime] = useState(0);
 
@@ -55,8 +60,10 @@ export default function SongSidebar({ song, queue = [], currentTime = 0, duratio
   };
 
   return (
-    <aside className={`song-info-sidebar glass ${!isOpen ? 'closed' : ''}`} id="songSidebar">
-      <div className="cover-wrapper">
+    <aside className={`song-info-sidebar glass ${!isOpen ? 'closed' : ''}`} id="songSidebar" ref={wrapperRef}>
+      <div className="scroll-shadow-overlay scroll-shadow-top scroll-shadow-sidebar" aria-hidden="true" />
+      <div className="song-sidebar-scroll" ref={scrollRef}>
+        <div className="cover-wrapper">
         <img
           id="displaySongCover"
           src={song?.albumArt || '/CtrlAltLyrics-logo.svg'}
@@ -157,6 +164,8 @@ export default function SongSidebar({ song, queue = [], currentTime = 0, duratio
           </div>
         )}
       </div>
+      </div>
+      <div className="scroll-shadow-overlay scroll-shadow-bottom scroll-shadow-sidebar" aria-hidden="true" />
     </aside>
   );
 }

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useQueueStore } from '../../stores/useQueueStore';
 import { usePlaybackStore } from '../../stores/usePlaybackStore';
 import { useLibraryStore } from '../../stores/useLibraryStore';
+import ScrollShadowWrapper from '../common/ScrollShadowWrapper';
 
 function QueueStatusBadge({ song }) {
   if (!song) return null;
@@ -310,14 +311,15 @@ export default function QueueList() {
         </div>
       </div>
 
-      <div
-        id="queueList"
-        ref={queueListRef}
-        className="queue-list"
-        onDragOver={handleListDragOver}
-        onDragLeave={handleListDragLeave}
-        onDrop={handleListDrop}
-      >
+      <ScrollShadowWrapper className="queue-scroll-wrapper" scrollRef={queueListRef}>
+        <div
+          id="queueList"
+          ref={queueListRef}
+          className="queue-list"
+          onDragOver={handleListDragOver}
+          onDragLeave={handleListDragLeave}
+          onDrop={handleListDrop}
+        >
         {queue.length === 0 && !isDraggingAny ? (
           <div className="empty-state">No songs in queue. Use the search bar above to add a track!</div>
         ) : (
@@ -449,7 +451,8 @@ export default function QueueList() {
             )}
           </>
         )}
-      </div>
+        </div>
+      </ScrollShadowWrapper>
 
       {/* Floating Drag Remove Toast */}
       {isDragOutside && draggedQueueId !== null && (

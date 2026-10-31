@@ -5,11 +5,11 @@ import { useLibraryStore } from '../../stores/useLibraryStore';
 import { useQueueStore } from '../../stores/useQueueStore';
 import { emitUpdateState } from '../../services/socket';
 import { extractColorsFromSongCover, getHighResAlbumArt } from '../../utils/themeColors';
+import ScrollShadowWrapper from '../common/ScrollShadowWrapper';
 
 export default function MetadataModal() {
   const song = useModalStore((state) => state.metadataModalSong);
   const close = useModalStore((state) => state.closeMetadataModal);
-  const openComponentManager = useModalStore((state) => state.openComponentManager);
 
   const currentSong = usePlaybackStore((state) => state.currentSong);
   const selectSong = usePlaybackStore((state) => state.selectSong);
@@ -61,7 +61,6 @@ export default function MetadataModal() {
         await loadLibrary();
         await loadQueue();
         close();
-        openComponentManager(song.id);
       } else {
         setErrorMsg('Failed to save metadata');
       }
@@ -77,57 +76,59 @@ export default function MetadataModal() {
       <div className="modal-box" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3><i className="icon-pencil" style={{ marginRight: '0.4rem' }}></i> Edit Meta-data</h3>
-          <button className="btn-close" onClick={close}><i className="icon-x"></i></button>
+          <button className="btn-close" onClick={close} title="Close (Esc)"><i className="icon-x"></i></button>
         </div>
 
-        <div className="modal-body">
-          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', alignItems: 'center' }}>
-            <img
-              src={coverUrl || '/CtrlAltLyrics-logo.svg'}
-              alt="cover preview"
-              style={{ width: '80px', height: '80px', borderRadius: '8px', objectFit: 'cover', border: '1px solid var(--border)' }}
-              onError={(e) => { e.target.onerror = null; e.target.src = '/CtrlAltLyrics-logo.svg'; }}
-            />
-            <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.2rem' }}>Cover Art URL:</label>
+        <ScrollShadowWrapper className="modal-body-scroll-wrapper">
+          <div className="modal-body">
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', alignItems: 'center' }}>
+              <img
+                src={coverUrl || '/CtrlAltLyrics-logo.svg'}
+                alt="cover preview"
+                style={{ width: '80px', height: '80px', borderRadius: '8px', objectFit: 'cover', border: '1px solid var(--border)' }}
+                onError={(e) => { e.target.onerror = null; e.target.src = '/CtrlAltLyrics-logo.svg'; }}
+              />
+              <div style={{ flex: 1 }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.2rem' }}>Cover Art URL:</label>
+                <input
+                  type="text"
+                  value={coverUrl}
+                  onChange={(e) => setCoverUrl(e.target.value)}
+                  placeholder="https://example.com/cover.jpg"
+                  style={{ width: '100%' }}
+                />
+              </div>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.2rem' }}>Song Title:</label>
               <input
                 type="text"
-                value={coverUrl}
-                onChange={(e) => setCoverUrl(e.target.value)}
-                placeholder="https://example.com/cover.jpg"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Song title"
                 style={{ width: '100%' }}
               />
             </div>
-          </div>
 
-          <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.2rem' }}>Song Title:</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Song title"
-              style={{ width: '100%' }}
-            />
-          </div>
-
-          <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.2rem' }}>Artist Name:</label>
-            <input
-              type="text"
-              value={artist}
-              onChange={(e) => setArtist(e.target.value)}
-              placeholder="Artist name"
-              style={{ width: '100%' }}
-            />
-          </div>
-
-          {errorMsg && (
-            <div className="error-state" style={{ marginTop: '0.5rem' }}>
-              <i className="icon-alert-triangle" style={{ marginRight: '0.35rem' }}></i> {errorMsg}
+            <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.2rem' }}>Artist Name:</label>
+              <input
+                type="text"
+                value={artist}
+                onChange={(e) => setArtist(e.target.value)}
+                placeholder="Artist name"
+                style={{ width: '100%' }}
+              />
             </div>
-          )}
-        </div>
+
+            {errorMsg && (
+              <div className="error-state" style={{ marginTop: '0.5rem' }}>
+                <i className="icon-alert-triangle" style={{ marginRight: '0.35rem' }}></i> {errorMsg}
+              </div>
+            )}
+          </div>
+        </ScrollShadowWrapper>
 
         <div className="modal-footer" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
           <button className="btn btn-secondary" onClick={close} disabled={isSaving}>Cancel</button>

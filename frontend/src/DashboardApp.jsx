@@ -43,7 +43,7 @@ export default function DashboardApp() {
   const loadLibrary = useLibraryStore((state) => state.loadLibrary);
   const setLibrary = useLibraryStore((state) => state.setLibrary);
 
-  const closeAllModals = useModalStore((state) => state.closeAllModals);
+  const stepBack = useModalStore((state) => state.stepBack);
   const lyricsSyncModalSong = useModalStore((state) => state.lyricsSyncModalSong);
   const stemEditorModalSong = useModalStore((state) => state.stemEditorModalSong);
 
@@ -175,7 +175,12 @@ export default function DashboardApp() {
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Escape closes modals
+      // If a modal with dedicated keyboard controls is open, let that modal handle shortcuts (including Escape)
+      if (lyricsSyncModalSong || stemEditorModalSong) {
+        return;
+      }
+
+      // Escape closes overlays by one step
       if (e.key === 'Escape') {
         const isTextInput = e.target && (
           (e.target.tagName === 'INPUT' && e.target.type !== 'range') ||
@@ -186,17 +191,12 @@ export default function DashboardApp() {
           e.target.blur();
           return;
         }
-        closeAllModals();
+        stepBack();
         return;
       }
 
       // Ignore other shortcuts when typing in inputs/textareas
       if ((e.target.tagName === 'INPUT' && e.target.type !== 'range') || e.target.tagName === 'TEXTAREA') {
-        return;
-      }
-
-      // If a modal with dedicated keyboard controls is open, let the modal handle shortcuts
-      if (lyricsSyncModalSong || stemEditorModalSong) {
         return;
       }
 
@@ -283,7 +283,7 @@ export default function DashboardApp() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [togglePlayPause, playNext, playPrev, jumpToNextLine, jumpToPrevLine, seek, currentTime, duration, volumes, setVolumes, toggleStemMute, closeAllModals, lyricsSyncModalSong, stemEditorModalSong]);
+  }, [togglePlayPause, playNext, playPrev, jumpToNextLine, jumpToPrevLine, seek, currentTime, duration, volumes, setVolumes, toggleStemMute, stepBack, lyricsSyncModalSong, stemEditorModalSong]);
 
   return (
     <div id="app" className="dashboard-vertical">

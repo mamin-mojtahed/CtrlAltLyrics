@@ -2207,13 +2207,9 @@ input[type="search"]::-webkit-search-cancel-button:hover {
   z-index: 10;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: safe center;
-  padding: 2rem 1.5rem 5.5rem 1.5rem;
-  overflow-y: auto;
-  overflow-x: hidden;
+  padding: 0;
+  overflow: hidden;
   box-sizing: border-box;
-  gap: 1.1rem;
   border-right: 1px solid var(--border);
   border-radius: 0;
   box-shadow: 10px 0 30px rgba(0, 0, 0, 0.3);
@@ -2223,11 +2219,25 @@ input[type="search"]::-webkit-search-cancel-button:hover {
   will-change: margin-left, opacity;
 }
 
-.song-info-sidebar::-webkit-scrollbar {
+.song-sidebar-scroll {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: safe center;
+  padding: 2rem 1.5rem 5.5rem 1.5rem;
+  gap: 1.1rem;
+}
+
+.song-sidebar-scroll::-webkit-scrollbar {
   width: 5px;
 }
 
-.song-info-sidebar::-webkit-scrollbar-thumb {
+.song-sidebar-scroll::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.15);
   border-radius: 4px;
 }
@@ -3308,6 +3318,20 @@ canvas#visualizer,
     background: #0f172a;
     box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.7), 0 0 35px var(--display-accent-glow, rgba(99, 102, 241, 0.25));
     z-index: 100;
+    padding: 0;
+    display: block;
+    overflow: hidden;
+    transform: translateY(0);
+    transition: transform 0.42s cubic-bezier(0.16, 1, 0.3, 1),
+                opacity 0.35s ease,
+                visibility 0.42s ease;
+    will-change: transform, opacity;
+  }
+
+  .song-sidebar-scroll {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
     padding: 0.65rem 0.85rem calc(0.65rem + env(safe-area-inset-bottom, 0px)) 0.85rem;
     display: grid;
     grid-template-columns: min(180px, 46vw) minmax(0, 1fr);
@@ -3320,17 +3344,13 @@ canvas#visualizer,
     row-gap: 0.45rem;
     align-content: start;
     align-items: start;
-    overflow: hidden !important;
-    overflow-y: hidden !important;
-    scrollbar-width: none !important;
-    -ms-overflow-style: none !important;
-    transform: translateY(0);
-    transition: transform 0.42s cubic-bezier(0.16, 1, 0.3, 1),
-                opacity 0.35s ease,
-                visibility 0.42s ease;
-    will-change: transform, opacity;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
 
+  .song-sidebar-scroll::-webkit-scrollbar,
   .song-info-sidebar::-webkit-scrollbar {
     display: none !important;
     width: 0 !important;
@@ -5076,14 +5096,34 @@ canvas#visualizer,
   transition: max-width 0.25s ease;
   display: flex;
   flex-direction: column;
+  height: 94vh;
   max-height: 94vh;
   box-sizing: border-box;
+  overflow: hidden;
+  container-type: inline-size;
+  container-name: lyricsSyncModal;
+}
+
+.lyrics-sync-modal-box .modal-header,
+.lyrics-sync-modal-box .sync-toolbar,
+.lyrics-sync-modal-box .sync-col-headers {
+  flex-shrink: 0 !important;
 }
 
 .sync-editor-title-wrap {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.5rem 0.75rem;
+  flex-wrap: wrap;
+  min-width: 0;
+  flex: 1;
+}
+
+.sync-editor-title-wrap h3 {
+  font-size: clamp(0.92rem, 2.4vw, 1.15rem);
+  font-weight: 700;
+  line-height: 1.25;
+  word-break: break-word;
 }
 
 .sync-status-badge {
@@ -5135,7 +5175,8 @@ canvas#visualizer,
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 0.5rem;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
   margin-bottom: 0.65rem;
   padding-bottom: 0.65rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -5144,13 +5185,16 @@ canvas#visualizer,
 .sync-toolbar-left {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.55rem;
+  min-width: 0;
 }
 
 .sync-toolbar-right {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.4rem;
   margin-left: auto;
 }
 
@@ -5496,19 +5540,19 @@ input.sync-shift-input,
 }
 
 .sync-col-hdr.sync-col-play {
-  width: 24px !important;
-  min-width: 24px !important;
-  max-width: 24px !important;
-  flex: 0 0 24px !important;
+  width: 25px !important;
+  min-width: 25px !important;
+  max-width: 25px !important;
+  flex: 0 0 25px !important;
   box-sizing: border-box;
 }
 
 .sync-col-hdr.sync-col-time {
-  width: 86px !important;
-  min-width: 86px !important;
-  max-width: 86px !important;
-  flex: 0 0 86px !important;
-  text-align: left;
+  width: 147px !important;
+  min-width: 147px !important;
+  max-width: 147px !important;
+  flex: 0 0 147px !important;
+  text-align: center;
   box-sizing: border-box;
 }
 
@@ -5538,7 +5582,6 @@ input.sync-shift-input,
 }
 
 .sync-editor-list {
-  max-height: min(34vh, 320px);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -5558,6 +5601,8 @@ input.sync-shift-input,
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
   display: flex;
   flex-direction: column;
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
 }
 
 .lyrics-timeline-toolbar {
@@ -5569,6 +5614,8 @@ input.sync-shift-input,
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   gap: 0.5rem;
   flex-wrap: wrap;
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
 }
 
 .lyrics-tl-btn-group {
@@ -5699,7 +5746,9 @@ input.sync-shift-input,
 
 /* Minimap Overview Bar */
 .lyrics-timeline-minimap-row {
-  height: 30px;
+  height: 30px !important;
+  min-height: 30px !important;
+  max-height: 30px !important;
   width: 100%;
   position: relative;
   background: #060a12;
@@ -5709,11 +5758,13 @@ input.sync-shift-input,
   -webkit-user-select: none;
   touch-action: none;
   overflow: hidden;
+  flex: 0 0 30px !important;
+  flex-shrink: 0 !important;
 }
 
 .lyrics-minimap-canvas {
   width: 100%;
-  height: 100%;
+  height: 30px !important;
   display: block;
 }
 
@@ -5726,30 +5777,40 @@ input.sync-shift-input,
   -webkit-user-select: none;
   touch-action: none;
   overflow: hidden;
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
 }
 
 .lyrics-ruler-wrap {
-  height: 24px;
+  height: 24px !important;
+  min-height: 24px !important;
+  max-height: 24px !important;
   width: 100%;
   position: relative;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex: 0 0 24px !important;
+  flex-shrink: 0 !important;
 }
 
 .lyrics-ruler-canvas {
   width: 100%;
-  height: 100%;
+  height: 24px !important;
   display: block;
 }
 
 .lyrics-canvas-wrap {
-  height: 120px;
+  height: 120px !important;
+  min-height: 120px !important;
+  max-height: 120px !important;
   width: 100%;
   position: relative;
+  flex: 0 0 120px !important;
+  flex-shrink: 0 !important;
 }
 
 .lyrics-main-canvas {
   width: 100%;
-  height: 100%;
+  height: 120px !important;
   display: block;
 }
 
@@ -6153,6 +6214,8 @@ body.is-resizing-row .lower-panel {
 }
 
 .stem-editor-box {
+  --stem-track-height: 110px;
+  --stem-ruler-height: 28px;
   width: 96vw;
   max-width: 1520px;
   height: 92vh;
@@ -6167,6 +6230,8 @@ body.is-resizing-row .lower-panel {
   padding: 0;
   position: relative;
   user-select: none;
+  container-type: inline-size;
+  container-name: stemEditorModal;
 }
 
 /* Top Studio Header */
@@ -6179,6 +6244,13 @@ body.is-resizing-row .lower-panel {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
   gap: 1.5rem;
+}
+
+.stem-editor-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
 }
 
 .stem-editor-track-info {
@@ -6202,6 +6274,7 @@ body.is-resizing-row .lower-panel {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .stem-editor-title {
@@ -6210,9 +6283,14 @@ body.is-resizing-row .lower-panel {
   color: var(--text-primary);
   display: flex;
   align-items: center;
+  min-width: 0;
+}
+
+.stem-editor-title-text {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .stem-editor-meta {
@@ -6222,6 +6300,7 @@ body.is-resizing-row .lower-panel {
   align-items: center;
   gap: 0.45rem;
   margin-top: 0.2rem;
+  min-width: 0;
 }
 
 .stem-editor-time-readout {
@@ -6230,9 +6309,13 @@ body.is-resizing-row .lower-panel {
   align-items: center;
   background: rgba(0, 0, 0, 0.4);
   border: 1px solid rgba(255, 255, 255, 0.09);
-  padding: 0.35rem 1.1rem;
+  padding: 0.35rem 0.85rem;
   border-radius: 8px;
   flex-shrink: 0;
+  width: 195px;
+  min-width: 195px;
+  max-width: 195px;
+  box-sizing: border-box;
 }
 
 .time-readout-main {
@@ -6242,12 +6325,34 @@ body.is-resizing-row .lower-panel {
   color: #38bdf8;
   letter-spacing: 0.05em;
   line-height: 1.1;
+  text-align: center;
 }
 
 .time-readout-sub {
   font-size: 0.72rem;
   margin-top: 0.15rem;
   font-family: monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+  width: 100%;
+}
+
+.time-readout-sel {
+  color: #a5b4fc;
+}
+
+.time-readout-bounds {
+  display: inline;
+}
+
+.time-readout-dur {
+  display: inline;
+}
+
+.time-readout-none {
+  color: #64748b;
 }
 
 /* Global Transport & Zoom Toolbar */
@@ -6327,6 +6432,12 @@ body.is-resizing-row .lower-panel {
   cursor: not-allowed;
 }
 
+.btn-tool-sel.has-selection {
+  background: rgba(99, 102, 241, 0.2) !important;
+  border-color: #818cf8 !important;
+  color: #c7d2fe !important;
+}
+
 .zoom-level-badge {
   font-size: 0.75rem;
   font-family: monospace;
@@ -6351,6 +6462,14 @@ body.is-resizing-row .lower-panel {
   cursor: pointer;
   transition: all 0.2s ease;
   box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+}
+
+.btn-save-full-label {
+  display: inline;
+}
+
+.btn-save-short-label {
+  display: none;
 }
 
 .btn-save-stems:hover:not(:disabled) {
@@ -6438,7 +6557,11 @@ body.is-resizing-row .lower-panel {
 }
 
 .ruler-header-spacer {
-  height: 28px;
+  height: var(--stem-ruler-height, 28px);
+  min-height: var(--stem-ruler-height, 28px);
+  max-height: var(--stem-ruler-height, 28px);
+  box-sizing: border-box;
+  flex-shrink: 0;
   background: #090d16;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
@@ -6455,7 +6578,9 @@ body.is-resizing-row .lower-panel {
 
 /* Track Control Header */
 .track-control-header {
-  height: 110px;
+  height: var(--stem-track-height, 110px);
+  min-height: var(--stem-track-height, 110px);
+  max-height: var(--stem-track-height, 110px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   border-left: 4px solid transparent;
   padding: 0.65rem 0.85rem;
@@ -6463,6 +6588,8 @@ body.is-resizing-row .lower-panel {
   flex-direction: column;
   justify-content: space-between;
   box-sizing: border-box;
+  flex-shrink: 0;
+  overflow: hidden;
 }
 
 /* Right Column: Waveforms & Timeline Canvas Pane (Zero-Offset) */
@@ -6476,13 +6603,18 @@ body.is-resizing-row .lower-panel {
   cursor: crosshair;
   user-select: none;
   -webkit-user-select: none;
+  touch-action: none;
 }
 
 .ruler-waveform-wrap {
-  height: 28px;
+  height: var(--stem-ruler-height, 28px);
+  min-height: var(--stem-ruler-height, 28px);
+  max-height: var(--stem-ruler-height, 28px);
   width: 100%;
   position: relative;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .time-ruler-canvas {
@@ -6492,10 +6624,15 @@ body.is-resizing-row .lower-panel {
 }
 
 .track-waveform-row {
-  height: 110px;
+  height: var(--stem-track-height, 110px);
+  min-height: var(--stem-track-height, 110px);
+  max-height: var(--stem-track-height, 110px);
   width: 100%;
   position: relative;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-sizing: border-box;
+  flex-shrink: 0;
+  overflow: hidden;
 }
 
 .track-waveform-canvas {
@@ -6625,7 +6762,7 @@ body.is-resizing-row .lower-panel {
 
 .transfer-controls-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.85rem;
   flex-wrap: wrap;
 }
@@ -6635,6 +6772,57 @@ body.is-resizing-row .lower-panel {
   flex-direction: column;
   gap: 0.25rem;
   min-width: 0;
+  box-sizing: border-box;
+}
+
+.transfer-group-source {
+  flex: 1 1 125px;
+  min-width: 120px;
+}
+
+.transfer-group-action {
+  flex: 1.4 1 175px;
+  min-width: 170px;
+}
+
+.transfer-group-dest {
+  flex: 1 1 125px;
+  min-width: 120px;
+  transition: opacity 0.2s ease;
+}
+
+.transfer-group-dest.is-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.transfer-group-crossfade {
+  width: 105px;
+  min-width: 105px;
+  max-width: 105px;
+  flex: 0 0 105px;
+}
+
+.transfer-group-bounds {
+  width: 175px;
+  min-width: 175px;
+  max-width: 175px;
+  flex: 0 0 175px;
+  box-sizing: border-box;
+}
+
+.transfer-group-apply {
+  align-self: flex-start;
+  min-width: 155px;
+  width: 155px;
+  flex: 0 0 155px;
+}
+
+.apply-label-spacer {
+  font-size: 0.72rem;
+  line-height: 1;
+  visibility: hidden;
+  user-select: none;
 }
 
 .transfer-input-group label {
@@ -6643,15 +6831,18 @@ body.is-resizing-row .lower-panel {
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 .transfer-select {
   font-size: 0.8rem;
-  padding: 0.42rem 0.65rem;
+  padding: 0 0.65rem;
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.35);
   border: 1px solid rgba(255, 255, 255, 0.14);
   color: var(--text-primary);
+  height: 34px;
+  box-sizing: border-box;
 }
 
 .selection-bounds-readout {
@@ -6659,20 +6850,36 @@ body.is-resizing-row .lower-panel {
   font-size: 0.78rem;
   color: #38bdf8;
   background: rgba(0, 0, 0, 0.4);
-  padding: 0.42rem 0.65rem;
+  padding: 0 0.65rem;
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   white-space: nowrap;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 34px;
+  width: 100%;
+}
+
+.bounds-none-text {
+  color: #64748b;
+}
+
+.bounds-active-text {
+  color: #38bdf8;
+  font-weight: 600;
 }
 
 .btn-apply-transfer {
   display: inline-flex;
   align-items: center;
-  background: linear-flex;
+  justify-content: center;
   background: linear-gradient(135deg, #0284c7, #0ea5e9) !important;
   border: 1px solid #38bdf8 !important;
   color: #ffffff !important;
-  padding: 0.48rem 1.15rem;
+  padding: 0 1.15rem;
   border-radius: 8px;
   font-size: 0.84rem;
   font-weight: 700;
@@ -6680,6 +6887,8 @@ body.is-resizing-row .lower-panel {
   transition: all 0.2s ease;
   box-shadow: 0 4px 14px rgba(14, 165, 233, 0.35);
   white-space: nowrap;
+  height: 34px;
+  box-sizing: border-box;
 }
 
 .btn-apply-transfer:hover:not(:disabled) {
@@ -6775,4 +6984,1700 @@ body.is-resizing-row .lower-panel {
   font-weight: 700;
   color: #f8fafc;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+/* ==========================================================================
+   Stem Editor Responsive Adaptations for Narrow Screens & Containers
+   ========================================================================== */
+@media (max-width: 900px) {
+  .stem-editor-box {
+    --stem-track-height: 95px;
+    --stem-ruler-height: 28px;
+    width: 98vw;
+    height: 96vh;
+    height: 96dvh;
+    max-height: none;
+    border-radius: 12px;
+  }
+
+  .stem-editor-header {
+    padding: 0.6rem 0.9rem;
+    gap: 0.65rem;
+  }
+
+  .stem-editor-art {
+    width: 36px;
+    height: 36px;
+  }
+
+  .stem-editor-title {
+    font-size: 0.95rem;
+  }
+
+  .stem-editor-meta {
+    font-size: 0.74rem;
+    gap: 0.35rem;
+  }
+
+  .stem-editor-time-readout {
+    width: 160px;
+    min-width: 160px;
+    max-width: 160px;
+    padding: 0.25rem 0.55rem;
+  }
+
+  .time-readout-main {
+    font-size: 1.15rem;
+  }
+
+  .time-readout-dur {
+    display: none;
+  }
+
+  .btn-shortcuts .btn-label-text {
+    display: none;
+  }
+
+  .stem-editor-toolbar {
+    padding: 0.45rem 0.75rem;
+    gap: 0.4rem 0.55rem;
+  }
+
+  .toolbar-group {
+    gap: 0.3rem;
+  }
+
+  .btn-transport .btn-label-text,
+  .btn-tool .btn-label-text {
+    display: none;
+  }
+
+  .btn-save-full-label {
+    display: none;
+  }
+
+  .btn-save-short-label {
+    display: inline;
+  }
+
+  .btn-transport {
+    padding: 0.38rem 0.65rem;
+    font-size: 0.76rem;
+  }
+
+  .btn-tool {
+    padding: 0.35rem 0.55rem;
+    font-size: 0.75rem;
+  }
+
+  .btn-save-stems {
+    padding: 0.42rem 0.75rem;
+    font-size: 0.8rem;
+  }
+
+  .track-headers-column {
+    width: 140px;
+  }
+
+  .track-control-header {
+    height: 95px;
+    padding: 0.45rem 0.6rem;
+  }
+
+  .track-waveform-row {
+    height: 95px;
+  }
+
+  .track-identity {
+    font-size: 0.8rem;
+    gap: 0.35rem;
+  }
+
+  .track-buttons-row {
+    gap: 0.3rem;
+    margin-top: 0.25rem;
+  }
+
+  .btn-track-badge {
+    width: 22px;
+    height: 22px;
+    font-size: 0.68rem;
+  }
+
+  .track-vol-slider {
+    height: 3px;
+  }
+
+  .stem-transfer-panel {
+    padding: 0.65rem 0.9rem;
+  }
+
+  .transfer-controls-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 1fr);
+    gap: 0.55rem 0.75rem;
+    align-items: end;
+  }
+
+  .transfer-input-group {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .transfer-group-source,
+  .transfer-group-action,
+  .transfer-group-dest,
+  .transfer-group-crossfade,
+  .transfer-group-bounds,
+  .transfer-group-apply {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: none;
+  }
+
+  .btn-apply-transfer {
+    width: 100%;
+    justify-content: center;
+    padding: 0 0.75rem;
+  }
+}
+
+@container stemEditorModal (max-width: 900px) {
+  .stem-editor-box {
+    --stem-track-height: 95px;
+    --stem-ruler-height: 28px;
+  }
+
+  .stem-editor-header {
+    padding: 0.6rem 0.9rem;
+    gap: 0.65rem;
+  }
+
+  .stem-editor-art {
+    width: 36px;
+    height: 36px;
+  }
+
+  .stem-editor-title {
+    font-size: 0.95rem;
+  }
+
+  .stem-editor-meta {
+    font-size: 0.74rem;
+    gap: 0.35rem;
+  }
+
+  .stem-editor-time-readout {
+    width: 160px;
+    min-width: 160px;
+    max-width: 160px;
+    padding: 0.25rem 0.55rem;
+  }
+
+  .time-readout-main {
+    font-size: 1.15rem;
+  }
+
+  .time-readout-dur {
+    display: none;
+  }
+
+  .btn-shortcuts .btn-label-text {
+    display: none;
+  }
+
+  .stem-editor-toolbar {
+    padding: 0.45rem 0.75rem;
+    gap: 0.4rem 0.55rem;
+  }
+
+  .toolbar-group {
+    gap: 0.3rem;
+  }
+
+  .btn-transport .btn-label-text,
+  .btn-tool .btn-label-text {
+    display: none;
+  }
+
+  .btn-save-full-label {
+    display: none;
+  }
+
+  .btn-save-short-label {
+    display: inline;
+  }
+
+  .btn-transport {
+    padding: 0.38rem 0.65rem;
+    font-size: 0.76rem;
+  }
+
+  .btn-tool {
+    padding: 0.35rem 0.55rem;
+    font-size: 0.75rem;
+  }
+
+  .btn-save-stems {
+    padding: 0.42rem 0.75rem;
+    font-size: 0.8rem;
+  }
+
+  .track-headers-column {
+    width: 140px;
+  }
+
+  .track-control-header {
+    height: 95px;
+    padding: 0.45rem 0.6rem;
+  }
+
+  .track-waveform-row {
+    height: 95px;
+  }
+
+  .track-identity {
+    font-size: 0.8rem;
+    gap: 0.35rem;
+  }
+
+  .track-buttons-row {
+    gap: 0.3rem;
+    margin-top: 0.25rem;
+  }
+
+  .btn-track-badge {
+    width: 22px;
+    height: 22px;
+    font-size: 0.68rem;
+  }
+
+  .track-vol-slider {
+    height: 3px;
+  }
+
+  .stem-transfer-panel {
+    padding: 0.65rem 0.9rem;
+  }
+
+  .transfer-controls-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 1fr);
+    gap: 0.55rem 0.75rem;
+    align-items: end;
+  }
+
+  .transfer-input-group {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .transfer-group-source,
+  .transfer-group-action,
+  .transfer-group-dest,
+  .transfer-group-crossfade,
+  .transfer-group-bounds,
+  .transfer-group-apply {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: none;
+  }
+
+  .btn-apply-transfer {
+    width: 100%;
+    justify-content: center;
+    padding: 0 0.75rem;
+  }
+}
+
+@media (max-width: 680px) {
+  .stem-editor-box {
+    --stem-track-height: 84px;
+    --stem-ruler-height: 26px;
+    width: 99vw;
+    height: 98vh;
+    height: 98dvh;
+    border-radius: 8px;
+  }
+
+  .stem-editor-header {
+    padding: 0.4rem 0.6rem;
+    gap: 0.4rem;
+  }
+
+  .stem-editor-art {
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+  }
+
+  .stem-editor-title {
+    font-size: 0.85rem;
+  }
+
+  .stem-editor-meta {
+    font-size: 0.68rem;
+    gap: 0.25rem;
+  }
+
+  .stem-editor-meta .mono-tag {
+    font-size: 0.65rem;
+  }
+
+  .stem-editor-time-readout {
+    width: 130px;
+    min-width: 130px;
+    max-width: 130px;
+    padding: 0.2rem 0.4rem;
+  }
+
+  .time-readout-main {
+    font-size: 0.95rem;
+  }
+
+  .time-readout-sub {
+    font-size: 0.64rem;
+  }
+
+  .time-readout-dur {
+    display: none;
+  }
+
+  .stem-editor-toolbar {
+    padding: 0.35rem 0.5rem;
+    gap: 0.3rem 0.4rem;
+  }
+
+  .toolbar-group {
+    gap: 0.25rem;
+  }
+
+  .btn-transport .btn-label-text,
+  .btn-tool .btn-label-text {
+    display: none;
+  }
+
+  .btn-save-full-label {
+    display: none;
+  }
+
+  .btn-save-short-label {
+    display: inline;
+  }
+
+  .btn-save-stems {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.74rem;
+  }
+
+  .zoom-level-badge {
+    font-size: 0.68rem;
+    padding: 0.25rem 0.4rem;
+  }
+
+  .track-headers-column {
+    width: 80px;
+  }
+
+  .ruler-header-spacer {
+    padding-left: 0.45rem;
+  }
+
+  .tracks-label {
+    font-size: 0.62rem;
+  }
+
+  .track-control-header {
+    height: 84px;
+    padding: 0.3rem 0.4rem;
+  }
+
+  .track-waveform-row {
+    height: 84px;
+  }
+
+  .track-identity {
+    font-size: 0.7rem;
+    gap: 0.25rem;
+  }
+
+  .track-name {
+    font-size: 0.68rem;
+    font-weight: 600;
+  }
+
+  .track-buttons-row {
+    gap: 0.2rem;
+    margin-top: 0.15rem;
+    flex-wrap: wrap;
+  }
+
+  .btn-track-badge {
+    width: 20px;
+    height: 20px;
+    font-size: 0.64rem;
+  }
+
+  .track-volume-wrap {
+    width: 100%;
+    flex: 1 1 100%;
+    margin-top: 0.1rem;
+  }
+
+  .track-vol-icon {
+    display: none;
+  }
+
+  .track-vol-slider {
+    height: 3px;
+    width: 100%;
+  }
+
+  .stem-editor-minimap-row {
+    height: 28px;
+  }
+
+  .stem-transfer-panel {
+    padding: 0.45rem 0.6rem;
+  }
+
+  .transfer-header {
+    margin-bottom: 0.25rem;
+  }
+
+  .transfer-desc {
+    display: none;
+  }
+
+  .transfer-title {
+    font-size: 0.82rem;
+  }
+
+  .transfer-controls-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem 0.55rem;
+    align-items: end;
+  }
+
+  .transfer-group-source {
+    grid-column: 1;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: none;
+  }
+
+  .transfer-group-dest {
+    grid-column: 2;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: none;
+  }
+
+  .transfer-group-action {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: none;
+  }
+
+  .transfer-group-crossfade {
+    grid-column: 1;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: none;
+  }
+
+  .transfer-group-bounds {
+    grid-column: 2;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: none;
+  }
+
+  .transfer-group-apply {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: none;
+    margin-top: 0.15rem;
+  }
+
+  .transfer-input-group label {
+    font-size: 0.64rem;
+  }
+
+  .transfer-select {
+    padding: 0.3rem 0.45rem;
+    font-size: 0.72rem;
+  }
+
+  .selection-bounds-readout {
+    padding: 0.3rem 0.45rem;
+    font-size: 0.7rem;
+  }
+
+  .btn-apply-transfer {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.76rem;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .shortcuts-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .stem-shortcuts-box {
+    max-height: 88vh;
+    overflow-y: auto;
+    padding: 1rem;
+  }
+}
+
+@container stemEditorModal (max-width: 680px) {
+  .stem-editor-box {
+    --stem-track-height: 84px;
+    --stem-ruler-height: 26px;
+  }
+
+  .stem-editor-header {
+    padding: 0.4rem 0.6rem;
+    gap: 0.4rem;
+  }
+
+  .stem-editor-art {
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+  }
+
+  .stem-editor-title {
+    font-size: 0.85rem;
+  }
+
+  .stem-editor-meta {
+    font-size: 0.68rem;
+    gap: 0.25rem;
+  }
+
+  .stem-editor-meta .mono-tag {
+    font-size: 0.65rem;
+  }
+
+  .stem-editor-time-readout {
+    width: 130px;
+    min-width: 130px;
+    max-width: 130px;
+    padding: 0.2rem 0.4rem;
+  }
+
+  .time-readout-main {
+    font-size: 0.95rem;
+  }
+
+  .time-readout-sub {
+    font-size: 0.64rem;
+  }
+
+  .time-readout-dur {
+    display: none;
+  }
+
+  .stem-editor-toolbar {
+    padding: 0.35rem 0.5rem;
+    gap: 0.3rem 0.4rem;
+  }
+
+  .toolbar-group {
+    gap: 0.25rem;
+  }
+
+  .btn-transport .btn-label-text,
+  .btn-tool .btn-label-text {
+    display: none;
+  }
+
+  .btn-save-full-label {
+    display: none;
+  }
+
+  .btn-save-short-label {
+    display: inline;
+  }
+
+  .btn-save-stems {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.74rem;
+  }
+
+  .zoom-level-badge {
+    font-size: 0.68rem;
+    padding: 0.25rem 0.4rem;
+  }
+
+  .track-headers-column {
+    width: 80px;
+  }
+
+  .ruler-header-spacer {
+    padding-left: 0.45rem;
+  }
+
+  .tracks-label {
+    font-size: 0.62rem;
+  }
+
+  .track-control-header {
+    height: 84px;
+    padding: 0.3rem 0.4rem;
+  }
+
+  .track-waveform-row {
+    height: 84px;
+  }
+
+  .track-identity {
+    font-size: 0.7rem;
+    gap: 0.25rem;
+  }
+
+  .track-name {
+    font-size: 0.68rem;
+    font-weight: 600;
+  }
+
+  .track-buttons-row {
+    gap: 0.2rem;
+    margin-top: 0.15rem;
+    flex-wrap: wrap;
+  }
+
+  .btn-track-badge {
+    width: 20px;
+    height: 20px;
+    font-size: 0.64rem;
+  }
+
+  .track-volume-wrap {
+    width: 100%;
+    flex: 1 1 100%;
+    margin-top: 0.1rem;
+  }
+
+  .track-vol-icon {
+    display: none;
+  }
+
+  .track-vol-slider {
+    height: 3px;
+    width: 100%;
+  }
+
+  .stem-editor-minimap-row {
+    height: 28px;
+  }
+
+  .stem-transfer-panel {
+    padding: 0.45rem 0.6rem;
+  }
+
+  .transfer-header {
+    margin-bottom: 0.25rem;
+  }
+
+  .transfer-desc {
+    display: none;
+  }
+
+  .transfer-title {
+    font-size: 0.82rem;
+  }
+
+  .transfer-controls-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem 0.55rem;
+    align-items: end;
+  }
+
+  .transfer-group-source {
+    grid-column: 1;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: none;
+  }
+
+  .transfer-group-dest {
+    grid-column: 2;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: none;
+  }
+
+  .transfer-group-action {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: none;
+  }
+
+  .transfer-group-crossfade {
+    grid-column: 1;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: none;
+  }
+
+  .transfer-group-bounds {
+    grid-column: 2;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: none;
+  }
+
+  .transfer-group-apply {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: none;
+    margin-top: 0.15rem;
+  }
+
+  .transfer-input-group label {
+    font-size: 0.64rem;
+  }
+
+  .transfer-select {
+    padding: 0.3rem 0.45rem;
+    font-size: 0.72rem;
+  }
+
+  .selection-bounds-readout {
+    padding: 0.3rem 0.45rem;
+    font-size: 0.7rem;
+  }
+
+  .btn-apply-transfer {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.76rem;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .shortcuts-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .stem-shortcuts-box {
+    max-height: 88vh;
+    overflow-y: auto;
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .zoom-level-badge {
+    display: none;
+  }
+
+  .btn-transport,
+  .btn-tool {
+    padding: 0.3rem 0.42rem;
+    font-size: 0.72rem;
+  }
+
+  .btn-save-stems {
+    padding: 0.32rem 0.55rem;
+    font-size: 0.72rem;
+  }
+
+  .stem-editor-toolbar {
+    padding: 0.3rem 0.45rem;
+    gap: 0.25rem 0.35rem;
+  }
+}
+
+@container stemEditorModal (max-width: 480px) {
+  .zoom-level-badge {
+    display: none;
+  }
+
+  .btn-transport,
+  .btn-tool {
+    padding: 0.3rem 0.42rem;
+    font-size: 0.72rem;
+  }
+
+  .btn-save-stems {
+    padding: 0.32rem 0.55rem;
+    font-size: 0.72rem;
+  }
+
+  .stem-editor-toolbar {
+    padding: 0.3rem 0.45rem;
+    gap: 0.25rem 0.35rem;
+  }
+}
+
+@media (max-width: 440px) {
+  .stem-editor-box {
+    --stem-track-height: 80px;
+    --stem-ruler-height: 24px;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    border-radius: 0;
+    border: none;
+  }
+
+  .stem-editor-header {
+    padding: 0.35rem 0.5rem;
+  }
+
+  .stem-editor-time-readout {
+    width: 78px;
+    min-width: 78px;
+    max-width: 78px;
+    padding: 0.2rem 0.3rem;
+  }
+
+  .time-readout-main {
+    font-size: 0.88rem;
+  }
+
+  .stem-editor-meta span:not(.mono-tag) {
+    display: none;
+  }
+
+  .time-readout-sub {
+    display: none;
+  }
+
+  .track-headers-column {
+    width: 66px;
+  }
+
+  .track-control-header {
+    height: 80px;
+    padding: 0.25rem 0.3rem;
+  }
+
+  .track-waveform-row {
+    height: 80px;
+  }
+
+  .track-name {
+    font-size: 0.64rem;
+  }
+
+  .btn-track-badge {
+    width: 18px;
+    height: 18px;
+    font-size: 0.6rem;
+  }
+
+  .transfer-controls-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.45rem;
+  }
+
+  .transfer-input-group,
+  .transfer-group-source,
+  .transfer-group-dest,
+  .transfer-group-action,
+  .transfer-group-crossfade,
+  .transfer-group-bounds,
+  .transfer-group-apply {
+    grid-column: 1;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: none;
+  }
+
+  .apply-label-spacer {
+    display: none;
+  }
+}
+
+@container stemEditorModal (max-width: 440px) {
+  .stem-editor-box {
+    --stem-track-height: 80px;
+    --stem-ruler-height: 24px;
+  }
+
+  .stem-editor-header {
+    padding: 0.35rem 0.5rem;
+  }
+
+  .stem-editor-time-readout {
+    width: 78px;
+    min-width: 78px;
+    max-width: 78px;
+    padding: 0.2rem 0.3rem;
+  }
+
+  .time-readout-main {
+    font-size: 0.88rem;
+  }
+
+  .stem-editor-meta span:not(.mono-tag) {
+    display: none;
+  }
+
+  .time-readout-sub {
+    display: none;
+  }
+
+  .track-headers-column {
+    width: 66px;
+  }
+
+  .track-control-header {
+    height: 80px;
+    padding: 0.25rem 0.3rem;
+  }
+
+  .track-waveform-row {
+    height: 80px;
+  }
+
+  .track-name {
+    font-size: 0.64rem;
+  }
+
+  .btn-track-badge {
+    width: 18px;
+    height: 18px;
+    font-size: 0.6rem;
+  }
+
+  .transfer-controls-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.45rem;
+  }
+
+  .transfer-input-group,
+  .transfer-group-source,
+  .transfer-group-dest,
+  .transfer-group-action,
+  .transfer-group-crossfade,
+  .transfer-group-bounds,
+  .transfer-group-apply {
+    grid-column: 1;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: none;
+  }
+
+  .apply-label-spacer {
+    display: none;
+  }
+}
+
+/* ==========================================================================
+   Scroll Edge Shadows (indicates content left to scroll to)
+   ========================================================================== */
+.scroll-shadow-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.scroll-shadow-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--scroll-shadow-size, 26px);
+  pointer-events: none !important;
+  opacity: 0;
+  transition: opacity 0.22s ease-in-out;
+  z-index: 15;
+}
+
+.scroll-shadow-top {
+  top: 0;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.75) 0%, rgba(0, 0, 0, 0.35) 50%, rgba(0, 0, 0, 0) 100%);
+  box-shadow: inset 0 4px 6px -2px rgba(0, 0, 0, 0.6);
+}
+
+.scroll-shadow-bottom {
+  bottom: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.75) 0%, rgba(0, 0, 0, 0.35) 50%, rgba(0, 0, 0, 0) 100%);
+  box-shadow: inset 0 -4px 6px -2px rgba(0, 0, 0, 0.6);
+}
+
+.scroll-shadow-wrapper.has-shadow-top > .scroll-shadow-top,
+.has-shadow-top > .scroll-shadow-top,
+.has-shadow-top .scroll-shadow-top {
+  opacity: 1;
+}
+
+.scroll-shadow-wrapper.has-shadow-bottom > .scroll-shadow-bottom,
+.has-shadow-bottom > .scroll-shadow-bottom,
+.has-shadow-bottom .scroll-shadow-bottom {
+  opacity: 1;
+}
+
+/* Queue List Scroll Wrapper */
+.queue-scroll-wrapper {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  border-radius: 8px;
+}
+
+.queue-scroll-wrapper .queue-list {
+  flex: 1 1 100%;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+/* Library List Scroll Wrapper */
+.library-scroll-wrapper {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  border-radius: 8px;
+}
+
+.library-scroll-wrapper .library-list {
+  flex: 1 1 100%;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+@media (max-width: 768px) {
+  .upper-left .queue-scroll-wrapper {
+    flex: 1 1 0px !important;
+    height: 100% !important;
+    min-height: 35px !important;
+  }
+
+  .upper-right .library-scroll-wrapper {
+    flex: 1 1 0px !important;
+    height: 100% !important;
+    min-height: 50px !important;
+  }
+}
+
+/* Display Lyrics Shadows */
+.lyrics-main-content .scroll-shadow-lyrics {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--scroll-shadow-lyrics-size, 92px);
+  pointer-events: none !important;
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+  z-index: 25;
+}
+
+.lyrics-main-content .scroll-shadow-lyrics.scroll-shadow-top {
+  top: 0;
+  background: linear-gradient(to bottom, rgba(8, 12, 22, 0.95) 0%, rgba(8, 12, 22, 0.6) 45%, rgba(8, 12, 22, 0) 100%);
+}
+
+.lyrics-main-content .scroll-shadow-lyrics.scroll-shadow-bottom {
+  bottom: 0;
+  background: linear-gradient(to top, rgba(8, 12, 22, 0.95) 0%, rgba(8, 12, 22, 0.6) 45%, rgba(8, 12, 22, 0) 100%);
+}
+
+.lyrics-main-content.has-shadow-top .scroll-shadow-lyrics.scroll-shadow-top {
+  opacity: 1;
+}
+
+.lyrics-main-content.has-shadow-bottom .scroll-shadow-lyrics.scroll-shadow-bottom {
+  opacity: 1;
+}
+
+/* Display Song Info Sidebar Overlaid Shadows */
+.song-info-sidebar .scroll-shadow-sidebar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 38px;
+  pointer-events: none;
+  z-index: 30;
+  opacity: 0;
+  transition: opacity 0.28s ease-in-out;
+}
+
+.song-info-sidebar .scroll-shadow-sidebar.scroll-shadow-top {
+  top: 0;
+  background: linear-gradient(to bottom, rgba(15, 17, 26, 0.96) 0%, rgba(15, 17, 26, 0.6) 45%, rgba(15, 17, 26, 0) 100%);
+  box-shadow: inset 0 4px 6px -2px rgba(0, 0, 0, 0.6);
+}
+
+.song-info-sidebar .scroll-shadow-sidebar.scroll-shadow-bottom {
+  bottom: 0;
+  background: linear-gradient(to top, rgba(15, 17, 26, 0.96) 0%, rgba(15, 17, 26, 0.6) 45%, rgba(15, 17, 26, 0) 100%);
+  box-shadow: inset 0 -4px 6px -2px rgba(0, 0, 0, 0.6);
+}
+
+.song-info-sidebar.has-shadow-top .scroll-shadow-sidebar.scroll-shadow-top {
+  opacity: 1;
+}
+
+.song-info-sidebar.has-shadow-bottom .scroll-shadow-sidebar.scroll-shadow-bottom {
+  opacity: 1;
+}
+
+/* Sync Editor Scroll Wrapper */
+.sync-editor-scroll-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0px !important;
+  min-height: 80px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.sync-editor-scroll-wrapper .sync-editor-list {
+  flex: 1 1 100%;
+  height: 100%;
+  max-height: none !important;
+  min-height: 0;
+  width: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.25rem 0.25rem 0.5rem 0.25rem;
+}
+
+@media (max-height: 620px) {
+  .lyrics-sync-modal-box {
+    padding: 0.65rem 0.9rem;
+    height: 98vh;
+    max-height: 98vh;
+  }
+  .lyrics-timeline-container {
+    margin-bottom: 0.4rem;
+  }
+  .sync-toolbar {
+    margin-bottom: 0.4rem;
+    padding-bottom: 0.4rem;
+  }
+  .sync-editor-scroll-wrapper {
+    min-height: 60px;
+  }
+}
+
+/* ==========================================================================
+   Lyrics & Sync Editor - Narrow Screen Responsiveness
+   ========================================================================== */
+
+/* Tap-to-Sync Active Banner */
+.sync-tap-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.45rem 0.75rem;
+  background: rgba(59, 130, 246, 0.16);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  border-radius: 8px;
+  margin-bottom: 0.65rem;
+}
+
+.sync-tap-banner-text {
+  font-size: 0.78rem;
+  color: #93c5fd;
+  flex: 1 1 240px;
+  line-height: 1.4;
+}
+
+.sync-tap-stamp-btn {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.65rem;
+  white-space: nowrap;
+}
+
+/* Intermediate narrow breakpoint (~768px): clean wrapping */
+@container lyricsSyncModal (max-width: 760px) {
+  .sync-toolbar {
+    gap: 0.45rem 0.6rem;
+  }
+  .sync-toolbar-left {
+    flex: 1 1 auto;
+    gap: 0.35rem 0.45rem;
+  }
+}
+@media (max-width: 768px) {
+  .sync-toolbar {
+    gap: 0.45rem 0.6rem;
+  }
+  .sync-toolbar-left {
+    flex: 1 1 auto;
+    gap: 0.35rem 0.45rem;
+  }
+}
+
+/* Compact breakpoint (~640px): 2-row organized toolbar & compact modal margins */
+@container lyricsSyncModal (max-width: 640px) {
+  .lyrics-sync-modal-box {
+    padding: 0.75rem 0.65rem !important;
+    width: 98vw !important;
+    height: 96vh !important;
+    max-height: 96vh !important;
+  }
+  .sync-editor-title-wrap {
+    gap: 0.35rem;
+  }
+  .sync-editor-title-wrap h3 {
+    font-size: 0.95rem;
+  }
+  .sync-toolbar {
+    gap: 0.45rem 0.5rem;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+  .sync-toolbar-left {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .sync-toolbar-right {
+    width: 100%;
+    justify-content: space-between;
+    margin-left: 0;
+    padding-top: 0.35rem;
+    border-top: 1px dashed rgba(255, 255, 255, 0.08);
+  }
+  .sync-btn-group {
+    gap: 0.2rem;
+  }
+  .sync-btn-icon {
+    width: 32px;
+    height: 32px;
+  }
+  .sync-btn-icon [class^="icon-"],
+  .sync-btn-icon [class*=" icon-"] {
+    font-size: 19px;
+  }
+  .sync-tap-banner {
+    padding: 0.35rem 0.5rem;
+    gap: 0.35rem;
+  }
+  .sync-tap-banner-text {
+    font-size: 0.72rem;
+  }
+  .sync-tap-stamp-btn {
+    width: 100%;
+    justify-content: center;
+    font-size: 0.72rem;
+  }
+  .lyrics-timeline-toolbar {
+    padding: 0.35rem 0.45rem;
+    gap: 0.35rem;
+  }
+  .lyrics-tl-btn-group {
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+  .btn-tl-ctrl {
+    padding: 0.2rem 0.4rem;
+    font-size: 0.7rem;
+    gap: 0.25rem;
+  }
+  .btn-tl-action {
+    padding: 0.2rem 0.45rem;
+    font-size: 0.7rem;
+  }
+  .btn-tl-icon-only {
+    width: 28px;
+    height: 28px;
+  }
+}
+@media (max-width: 640px) {
+  .lyrics-sync-modal-box {
+    padding: 0.75rem 0.65rem !important;
+    width: 98vw !important;
+    height: 96vh !important;
+    max-height: 96vh !important;
+  }
+  .sync-editor-title-wrap {
+    gap: 0.35rem;
+  }
+  .sync-editor-title-wrap h3 {
+    font-size: 0.95rem;
+  }
+  .sync-toolbar {
+    gap: 0.45rem 0.5rem;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+  .sync-toolbar-left {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .sync-toolbar-right {
+    width: 100%;
+    justify-content: space-between;
+    margin-left: 0;
+    padding-top: 0.35rem;
+    border-top: 1px dashed rgba(255, 255, 255, 0.08);
+  }
+  .sync-btn-group {
+    gap: 0.2rem;
+  }
+  .sync-btn-icon {
+    width: 32px;
+    height: 32px;
+  }
+  .sync-btn-icon [class^="icon-"],
+  .sync-btn-icon [class*=" icon-"] {
+    font-size: 19px;
+  }
+  .sync-tap-banner {
+    padding: 0.35rem 0.5rem;
+    gap: 0.35rem;
+  }
+  .sync-tap-banner-text {
+    font-size: 0.72rem;
+  }
+  .sync-tap-stamp-btn {
+    width: 100%;
+    justify-content: center;
+    font-size: 0.72rem;
+  }
+  .lyrics-timeline-toolbar {
+    padding: 0.35rem 0.45rem;
+    gap: 0.35rem;
+  }
+  .lyrics-tl-btn-group {
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+  .btn-tl-ctrl {
+    padding: 0.2rem 0.4rem;
+    font-size: 0.7rem;
+    gap: 0.25rem;
+  }
+  .btn-tl-action {
+    padding: 0.2rem 0.45rem;
+    font-size: 0.7rem;
+  }
+  .btn-tl-icon-only {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+/* Ultra-compact breakpoint (~480px): tightly fit time inputs & controls */
+@container lyricsSyncModal (max-width: 480px) {
+  .lyrics-sync-modal-box {
+    padding: 0.55rem 0.45rem !important;
+    width: 99vw !important;
+  }
+  .sync-shift-group {
+    padding: 0.12rem 0.25rem;
+    gap: 0.15rem;
+  }
+  .sync-shift-label {
+    font-size: 0.68rem;
+    margin-right: 0.05rem;
+  }
+  input.sync-shift-input,
+  .sync-shift-input {
+    width: 46px !important;
+    min-width: 46px !important;
+    max-width: 46px !important;
+    flex: 0 0 46px !important;
+    padding: 0.15rem 0.2rem !important;
+    font-size: 0.7rem;
+  }
+  .sync-shift-btn {
+    width: 22px;
+    height: 22px;
+  }
+  .sync-unit-label {
+    font-size: 0.65rem;
+    padding: 0 0.05rem;
+  }
+  .sync-playback-tracker {
+    font-size: 0.68rem;
+    padding: 0.15rem 0.35rem;
+    gap: 0.2rem;
+  }
+  #syncEditorCurTime,
+  #syncEditorDurTime {
+    min-width: 44px;
+  }
+  .sync-line-count-badge {
+    font-size: 0.66rem;
+    padding: 0.15rem 0.35rem;
+  }
+  .sync-btn-icon {
+    width: 30px;
+    height: 30px;
+  }
+  .sync-btn-icon [class^="icon-"],
+  .sync-btn-icon [class*=" icon-"] {
+    font-size: 17px;
+  }
+  .sync-toolbar-divider {
+    height: 16px;
+    margin: 0 0.1rem;
+  }
+  .sync-col-headers,
+  .sync-editor-row {
+    gap: 0.2rem;
+    padding: 0.2rem 0.3rem;
+  }
+  .sync-col-hdr.sync-col-play,
+  .sync-editor-row .sync-line-play-btn,
+  .sync-line-play-btn {
+    width: 22px !important;
+    min-width: 22px !important;
+    max-width: 22px !important;
+    height: 22px !important;
+    flex: 0 0 22px !important;
+  }
+  .sync-col-hdr.sync-col-time {
+    width: 114px !important;
+    min-width: 114px !important;
+    max-width: 114px !important;
+    flex: 0 0 114px !important;
+    font-size: 0.62rem;
+  }
+  .sync-editor-row .sync-shift-btn {
+    width: 20px !important;
+    height: 20px !important;
+    flex: 0 0 20px !important;
+  }
+  .sync-editor-row input.sync-time,
+  .sync-editor-row .sync-time {
+    width: 66px !important;
+    min-width: 66px !important;
+    max-width: 66px !important;
+    flex: 0 0 66px !important;
+    padding: 0.2rem 0.25rem !important;
+    font-size: 0.72rem;
+  }
+  .sync-editor-row input.sync-text,
+  .sync-editor-row .sync-text,
+  .sync-editor-row input.sync-tl,
+  .sync-editor-row .sync-tl,
+  .sync-editor-row input.sync-tr,
+  .sync-editor-row .sync-tr {
+    padding: 0.2rem 0.35rem !important;
+    font-size: 0.74rem;
+  }
+  .sync-col-hdr.sync-col-actions,
+  .sync-editor-row .sync-del-btn,
+  .sync-del-btn {
+    width: 22px !important;
+    min-width: 22px !important;
+    max-width: 22px !important;
+    height: 22px !important;
+    flex: 0 0 22px !important;
+  }
+}
+@media (max-width: 480px) {
+  .lyrics-sync-modal-box {
+    padding: 0.55rem 0.45rem !important;
+    width: 99vw !important;
+  }
+  .sync-shift-group {
+    padding: 0.12rem 0.25rem;
+    gap: 0.15rem;
+  }
+  .sync-shift-label {
+    font-size: 0.68rem;
+    margin-right: 0.05rem;
+  }
+  input.sync-shift-input,
+  .sync-shift-input {
+    width: 46px !important;
+    min-width: 46px !important;
+    max-width: 46px !important;
+    flex: 0 0 46px !important;
+    padding: 0.15rem 0.2rem !important;
+    font-size: 0.7rem;
+  }
+  .sync-shift-btn {
+    width: 22px;
+    height: 22px;
+  }
+  .sync-unit-label {
+    font-size: 0.65rem;
+    padding: 0 0.05rem;
+  }
+  .sync-playback-tracker {
+    font-size: 0.68rem;
+    padding: 0.15rem 0.35rem;
+    gap: 0.2rem;
+  }
+  #syncEditorCurTime,
+  #syncEditorDurTime {
+    min-width: 44px;
+  }
+  .sync-line-count-badge {
+    font-size: 0.66rem;
+    padding: 0.15rem 0.35rem;
+  }
+  .sync-btn-icon {
+    width: 30px;
+    height: 30px;
+  }
+  .sync-btn-icon [class^="icon-"],
+  .sync-btn-icon [class*=" icon-"] {
+    font-size: 17px;
+  }
+  .sync-toolbar-divider {
+    height: 16px;
+    margin: 0 0.1rem;
+  }
+  .sync-col-headers,
+  .sync-editor-row {
+    gap: 0.2rem;
+    padding: 0.2rem 0.3rem;
+  }
+  .sync-col-hdr.sync-col-play,
+  .sync-editor-row .sync-line-play-btn,
+  .sync-line-play-btn {
+    width: 22px !important;
+    min-width: 22px !important;
+    max-width: 22px !important;
+    height: 22px !important;
+    flex: 0 0 22px !important;
+  }
+  .sync-col-hdr.sync-col-time {
+    width: 114px !important;
+    min-width: 114px !important;
+    max-width: 114px !important;
+    flex: 0 0 114px !important;
+    font-size: 0.62rem;
+  }
+  .sync-editor-row .sync-shift-btn {
+    width: 20px !important;
+    height: 20px !important;
+    flex: 0 0 20px !important;
+  }
+  .sync-editor-row input.sync-time,
+  .sync-editor-row .sync-time {
+    width: 66px !important;
+    min-width: 66px !important;
+    max-width: 66px !important;
+    flex: 0 0 66px !important;
+    padding: 0.2rem 0.25rem !important;
+    font-size: 0.72rem;
+  }
+  .sync-editor-row input.sync-text,
+  .sync-editor-row .sync-text,
+  .sync-editor-row input.sync-tl,
+  .sync-editor-row .sync-tl,
+  .sync-editor-row input.sync-tr,
+  .sync-editor-row .sync-tr {
+    padding: 0.2rem 0.35rem !important;
+    font-size: 0.74rem;
+  }
+  .sync-col-hdr.sync-col-actions,
+  .sync-editor-row .sync-del-btn,
+  .sync-del-btn {
+    width: 22px !important;
+    min-width: 22px !important;
+    max-width: 22px !important;
+    height: 22px !important;
+    flex: 0 0 22px !important;
+  }
+}
+
+/* Search Results Popup Scroll Wrapper */
+.search-results-scroll-wrapper {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  margin-top: 0.4rem;
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+}
+
+.search-results-scroll-wrapper .search-results-popup {
+  position: static;
+  margin-top: 0;
+  box-shadow: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Modal Body Scroll Wrapper */
+.modal-body-scroll-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin-bottom: 1rem;
+  border-radius: 8px;
+}
+
+.modal-body-scroll-wrapper .modal-body {
+  margin-bottom: 0;
+  flex: 1 1 auto;
+  width: 100%;
+}
+
+/* Component Manager Scroll Wrapper */
+.component-manager-scroll-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  border-radius: 8px;
+}
+
+.component-manager-scroll-wrapper #componentManagerBody {
+  flex: 1 1 auto;
+  width: 100%;
+}
+
+/* Stem Editor Workspace Scroll Wrapper */
+.stem-editor-workspace-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.stem-editor-workspace-wrapper .stem-editor-workspace {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
 }

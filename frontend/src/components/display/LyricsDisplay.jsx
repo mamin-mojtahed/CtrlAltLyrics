@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, memo } from 'react';
 import socket from '../../services/socket';
 import VisualizerCanvas from './VisualizerCanvas';
+import { useScrollShadows } from '../../hooks/useScrollShadows';
 import {
   isRtlText,
   isInstrumentalText,
@@ -24,8 +25,15 @@ function LyricsDisplay({
   onSeek
 }) {
   const containerRef = useRef(null);
+  const mainRef = useRef(null);
   const currentActiveIndexRef = useRef(-1);
   const [linePartitions, setLinePartitions] = useState({});
+
+  useScrollShadows(containerRef, {
+    wrapperRef: mainRef,
+    threshold: 15,
+    bottomThreshold: 15
+  });
 
   const handleLineClick = (time) => {
     if (onSeek) {
@@ -238,7 +246,8 @@ function LyricsDisplay({
   }
 
   return (
-    <main className="lyrics-main-content">
+    <main className="lyrics-main-content" ref={mainRef}>
+      <div className="scroll-shadow-overlay scroll-shadow-top scroll-shadow-lyrics" aria-hidden="true" />
       {showWaveform && (
         <VisualizerCanvas
           song={song}
@@ -327,6 +336,7 @@ function LyricsDisplay({
           })
         )}
       </div>
+      <div className="scroll-shadow-overlay scroll-shadow-bottom scroll-shadow-lyrics" aria-hidden="true" />
     </main>
   );
 }

@@ -4,6 +4,7 @@ import { usePlaybackStore } from '../../stores/usePlaybackStore';
 import * as api from '../../services/api';
 import * as audioPlayer from '../../services/audioPlayer';
 import { audioBufferToWav } from '../../utils/wavEncoder';
+import ScrollShadowWrapper from '../common/ScrollShadowWrapper';
 
 const TRACK_CONFIGS = [
   {
@@ -45,6 +46,21 @@ function formatTimePrecise(seconds) {
   const wholeSecs = Math.floor(secs);
   const hundredths = Math.floor((secs - wholeSecs) * 100);
   return `${String(mins).padStart(2, '0')}:${String(wholeSecs).padStart(2, '0')}.${String(hundredths).padStart(2, '0')}`;
+}
+
+function formatBoundsTime(seconds, totalDur = 0) {
+  if (typeof seconds !== 'number' || isNaN(seconds) || seconds < 0) return '00:00.00';
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  const wholeSecs = Math.floor(secs);
+  const hundredths = Math.floor((secs - wholeSecs) * 100);
+  const strMins = String(mins).padStart(2, '0');
+  const strSecs = String(wholeSecs).padStart(2, '0');
+  const strHund = String(hundredths).padStart(2, '0');
+  if (totalDur < 60 && mins === 0) {
+    return `${strSecs}.${strHund}`;
+  }
+  return `${strMins}:${strSecs}.${strHund}`;
 }
 
 export default function StemEditorModal() {
@@ -459,18 +475,20 @@ export default function StemEditorModal() {
     // A. Render Time Ruler
     const ruler = timeRulerCanvasRef.current;
     if (ruler) {
+      const rulerWrap = ruler.parentElement;
+      const rulerHeight = rulerWrap?.clientHeight || ruler.clientHeight || 28;
       ruler.width = Math.floor(width * dpr);
-      ruler.height = Math.floor(28 * dpr);
+      ruler.height = Math.floor(rulerHeight * dpr);
       ruler.style.width = `${width}px`;
-      ruler.style.height = '28px';
+      ruler.style.height = `${rulerHeight}px`;
 
       const ctx = ruler.getContext('2d');
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.scale(dpr, dpr);
-      ctx.clearRect(0, 0, width, 28);
+      ctx.clearRect(0, 0, width, rulerHeight);
 
       ctx.fillStyle = '#090d16';
-      ctx.fillRect(0, 0, width, 28);
+      ctx.fillRect(0, 0, width, rulerHeight);
 
       let timeStep = 5;
       if (viewDuration <= 4) timeStep = 0.2;
@@ -491,12 +509,12 @@ export default function StemEditorModal() {
           ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
           ctx.lineWidth = 1;
           ctx.beginPath();
-          ctx.moveTo(x, 16);
-          ctx.lineTo(x, 28);
+          ctx.moveTo(x, Math.max(0, rulerHeight - 12));
+          ctx.lineTo(x, rulerHeight);
           ctx.stroke();
 
           const label = formatTimePrecise(t).slice(0, 5);
-          ctx.fillText(label, x, 12);
+          ctx.fillText(label, x, Math.max(10, rulerHeight - 16));
         }
       }
 
@@ -507,7 +525,7 @@ export default function StemEditorModal() {
         ctx.beginPath();
         ctx.moveTo(px - 5, 0);
         ctx.lineTo(px + 5, 0);
-        ctx.lineTo(px, 12);
+        ctx.lineTo(px, Math.min(12, rulerHeight));
         ctx.closePath();
         ctx.fill();
       }
@@ -518,7 +536,8 @@ export default function StemEditorModal() {
       const canvas = trackCanvasRefs.current[track.id];
       if (!canvas) continue;
 
-      const trackHeight = 110;
+      const trackRow = canvas.parentElement;
+      const trackHeight = trackRow?.clientHeight || canvas.clientHeight || 110;
       canvas.width = Math.floor(width * dpr);
       canvas.height = Math.floor(trackHeight * dpr);
       canvas.style.width = `${width}px`;
@@ -633,7 +652,7 @@ export default function StemEditorModal() {
     const minimap = minimapCanvasRef.current;
     if (minimap && duration > 0) {
       const mmW = minimap.clientWidth;
-      const mmH = 36;
+      const mmH = minimapWrapRef.current?.clientHeight || minimap.clientHeight || 36;
       minimap.width = Math.floor(mmW * dpr);
       minimap.height = Math.floor(mmH * dpr);
       minimap.style.width = `${mmW}px`;
@@ -738,9 +757,30 @@ export default function StemEditorModal() {
   }, [renderAllCanvases]);
 
   useEffect(() => {
-    const handleResize = () => renderAllCanvases();
+    let animFrame = null;
+    const handleResize = () => {
+      if (animFrame) cancelAnimationFrame(animFrame);
+      animFrame = requestAnimationFrame(() => {
+        renderAllCanvases();
+      });
+    };
+
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+
+    let ro = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => {
+        handleResize();
+      });
+      if (waveformsPaneRef.current) ro.observe(waveformsPaneRef.current);
+      if (minimapWrapRef.current) ro.observe(minimapWrapRef.current);
+    }
+
+    return () => {
+      if (animFrame) cancelAnimationFrame(animFrame);
+      window.removeEventListener('resize', handleResize);
+      if (ro) ro.disconnect();
+    };
   }, [renderAllCanvases]);
 
   // 6. ACCURATE WAVEFORM TIME CALCULATION (ZERO OFFSET)
@@ -748,14 +788,15 @@ export default function StemEditorModal() {
     const pane = waveformsPaneRef.current;
     if (!pane || duration <= 0) return 0;
     const rect = pane.getBoundingClientRect();
-    const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    const clientX = e.touches ? (e.touches[0] || e.changedTouches?.[0])?.clientX : e.clientX;
+    const x = Math.max(0, Math.min(rect.width, (clientX ?? e.clientX) - rect.left));
     const t = viewStart + (x / rect.width) * viewDuration;
     return Math.max(0, Math.min(duration, t));
   };
 
   // Waveform Mouse Down / Move / Up handlers
   const handleWaveformMouseDown = (e) => {
-    if (e.button !== 0 || durationRef.current <= 0) return;
+    if ((e.button !== undefined && e.button !== 0) || durationRef.current <= 0) return;
     const clickedTime = getWaveformTimeFromEvent(e);
 
     const pane = waveformsPaneRef.current;
@@ -763,28 +804,29 @@ export default function StemEditorModal() {
     const rect = pane.getBoundingClientRect();
     const handleThresholdTime = (10 / rect.width) * viewDurationRef.current;
     const currentSel = selectionRef.current;
+    const clientX = e.touches ? (e.touches[0] || e.changedTouches?.[0])?.clientX : e.clientX;
 
     if (currentSel) {
       if (Math.abs(clickedTime - currentSel.start) < handleThresholdTime) {
         isDraggingWaveformRef.current = 'left';
-        dragAnchorRef.current = { startX: e.clientX, initialStart: currentSel.start, initialEnd: currentSel.end };
+        dragAnchorRef.current = { startX: clientX, initialStart: currentSel.start, initialEnd: currentSel.end };
       } else if (Math.abs(clickedTime - currentSel.end) < handleThresholdTime) {
         isDraggingWaveformRef.current = 'right';
-        dragAnchorRef.current = { startX: e.clientX, initialStart: currentSel.start, initialEnd: currentSel.end };
+        dragAnchorRef.current = { startX: clientX, initialStart: currentSel.start, initialEnd: currentSel.end };
       } else if (clickedTime > currentSel.start && clickedTime < currentSel.end) {
         isDraggingWaveformRef.current = 'move';
-        dragAnchorRef.current = { startX: e.clientX, initialStart: currentSel.start, initialEnd: currentSel.end, startTime: clickedTime };
+        dragAnchorRef.current = { startX: clientX, initialStart: currentSel.start, initialEnd: currentSel.end, startTime: clickedTime };
       } else {
         // Create new selection range
         isDraggingWaveformRef.current = 'create';
-        dragAnchorRef.current = { startX: e.clientX, initialTime: clickedTime };
-        setSelection({ start: clickedTime, end: clickedTime });
+        dragAnchorRef.current = { startX: clientX, initialTime: clickedTime };
+        setSelection(null);
       }
     } else {
       // Create new selection range
       isDraggingWaveformRef.current = 'create';
-      dragAnchorRef.current = { startX: e.clientX, initialTime: clickedTime };
-      setSelection({ start: clickedTime, end: clickedTime });
+      dragAnchorRef.current = { startX: clientX, initialTime: clickedTime };
+      setSelection(null);
     }
 
     // Also update playhead immediately
@@ -795,6 +837,7 @@ export default function StemEditorModal() {
     }
 
     const onGlobalWaveformMove = (moveEvt) => {
+      if (moveEvt.touches && moveEvt.cancelable) moveEvt.preventDefault();
       handleWaveformMouseMove(moveEvt);
     };
 
@@ -802,10 +845,14 @@ export default function StemEditorModal() {
       handleWaveformMouseUp();
       window.removeEventListener('mousemove', onGlobalWaveformMove);
       window.removeEventListener('mouseup', onGlobalWaveformUp);
+      window.removeEventListener('touchmove', onGlobalWaveformMove);
+      window.removeEventListener('touchend', onGlobalWaveformUp);
     };
 
     window.addEventListener('mousemove', onGlobalWaveformMove);
     window.addEventListener('mouseup', onGlobalWaveformUp);
+    window.addEventListener('touchmove', onGlobalWaveformMove, { passive: false });
+    window.addEventListener('touchend', onGlobalWaveformUp);
   };
 
   const handleWaveformMouseMove = (e) => {
@@ -841,7 +888,11 @@ export default function StemEditorModal() {
     if (mode === 'create') {
       const t0 = Math.min(anchor.initialTime, curTime);
       const t1 = Math.max(anchor.initialTime, curTime);
-      setSelection({ start: t0, end: t1 });
+      if (t1 - t0 >= 0.05) {
+        setSelection({ start: t0, end: t1 });
+      } else {
+        setSelection(null);
+      }
     } else if (mode === 'left') {
       const newStart = Math.min(anchor.initialEnd - 0.05, Math.max(0, curTime));
       setSelection({ start: newStart, end: anchor.initialEnd });
@@ -867,7 +918,7 @@ export default function StemEditorModal() {
   const handleWaveformMouseUp = () => {
     if (isDraggingWaveformRef.current === 'create') {
       const curSel = selectionRef.current;
-      if (curSel && curSel.end - curSel.start < 0.05) {
+      if (!curSel || curSel.end - curSel.start < 0.05) {
         setSelection(null);
       }
     }
@@ -882,23 +933,27 @@ export default function StemEditorModal() {
     const wrap = minimapWrapRef.current;
     if (!wrap || durationRef.current <= 0) return 0;
     const rect = wrap.getBoundingClientRect();
-    const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    const clientX = e.touches ? (e.touches[0] || e.changedTouches?.[0])?.clientX : e.clientX;
+    const x = Math.max(0, Math.min(rect.width, (clientX ?? e.clientX) - rect.left));
     return (x / rect.width) * durationRef.current;
   };
 
   const handleMinimapMouseDown = (e) => {
-    if (e.button !== 0 || durationRef.current <= 0) return;
+    if ((e.button !== undefined && e.button !== 0) || durationRef.current <= 0) return;
     const wrap = minimapWrapRef.current;
     if (!wrap) return;
     const rect = wrap.getBoundingClientRect();
     const mmW = rect.width;
+    const mmH = rect.height;
     const dur = durationRef.current;
     const vStart = viewStartRef.current;
     const vDur = viewDurationRef.current;
     const sel = selectionRef.current;
 
-    const clickX = Math.max(0, Math.min(mmW, e.clientX - rect.left));
-    const clickY = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+    const clientX = e.touches ? (e.touches[0] || e.changedTouches?.[0])?.clientX : e.clientX;
+    const clientY = e.touches ? (e.touches[0] || e.changedTouches?.[0])?.clientY : e.clientY;
+    const clickX = Math.max(0, Math.min(mmW, (clientX ?? e.clientX) - rect.left));
+    const clickY = Math.max(0, Math.min(rect.height, (clientY ?? e.clientY) - rect.top));
     const clickedTime = (clickX / mmW) * dur;
 
     const vpX1 = (vStart / dur) * mmW;
@@ -921,7 +976,7 @@ export default function StemEditorModal() {
 
     candidates.sort((a, b) => {
       if (Math.abs(a.dist - b.dist) < 1.0) {
-        if (clickY < 8 || clickY > 28) {
+        if (clickY < mmH * 0.25 || clickY > mmH * 0.75) {
           if (a.mode.startsWith('vp') && !b.mode.startsWith('vp')) return -1;
           if (!a.mode.startsWith('vp') && b.mode.startsWith('vp')) return 1;
         } else {
@@ -953,7 +1008,7 @@ export default function StemEditorModal() {
       initialViewEnd: vStart + vDur,
       initialStart: sel ? sel.start : 0,
       initialEnd: sel ? sel.end : 0,
-      startX: e.clientX,
+      startX: clientX ?? e.clientX,
       startTime: clickedTime
     };
 
@@ -964,9 +1019,11 @@ export default function StemEditorModal() {
     }
 
     const onGlobalMinimapMove = (moveEvent) => {
+      if (moveEvent.touches && moveEvent.cancelable) moveEvent.preventDefault();
       if (!minimapWrapRef.current || durationRef.current <= 0) return;
       const mRect = minimapWrapRef.current.getBoundingClientRect();
-      const curX = Math.max(0, Math.min(mRect.width, moveEvent.clientX - mRect.left));
+      const mClientX = moveEvent.touches ? (moveEvent.touches[0] || moveEvent.changedTouches?.[0])?.clientX : moveEvent.clientX;
+      const curX = Math.max(0, Math.min(mRect.width, (mClientX ?? moveEvent.clientX) - mRect.left));
       const curTime = (curX / mRect.width) * durationRef.current;
       const currentMode = isDraggingMinimapRef.current;
       const anchor = dragAnchorRef.current;
@@ -1017,10 +1074,14 @@ export default function StemEditorModal() {
       document.body.style.cursor = '';
       window.removeEventListener('mousemove', onGlobalMinimapMove);
       window.removeEventListener('mouseup', onGlobalMinimapUp);
+      window.removeEventListener('touchmove', onGlobalMinimapMove);
+      window.removeEventListener('touchend', onGlobalMinimapUp);
     };
 
     window.addEventListener('mousemove', onGlobalMinimapMove);
     window.addEventListener('mouseup', onGlobalMinimapUp);
+    window.addEventListener('touchmove', onGlobalMinimapMove, { passive: false });
+    window.addEventListener('touchend', onGlobalMinimapUp);
   };
 
   const handleMinimapMouseMove = (e) => {
@@ -1029,13 +1090,16 @@ export default function StemEditorModal() {
     if (!wrap || durationRef.current <= 0) return;
     const rect = wrap.getBoundingClientRect();
     const mmW = rect.width;
+    const mmH = rect.height;
     const dur = durationRef.current;
     const vStart = viewStartRef.current;
     const vDur = viewDurationRef.current;
     const sel = selectionRef.current;
 
-    const clickX = Math.max(0, Math.min(mmW, e.clientX - rect.left));
-    const clickY = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+    const clientX = e.touches ? (e.touches[0] || e.changedTouches?.[0])?.clientX : e.clientX;
+    const clientY = e.touches ? (e.touches[0] || e.changedTouches?.[0])?.clientY : e.clientY;
+    const clickX = Math.max(0, Math.min(mmW, (clientX ?? e.clientX) - rect.left));
+    const clickY = Math.max(0, Math.min(rect.height, (clientY ?? e.clientY) - rect.top));
     const curTime = (clickX / mmW) * dur;
 
     const vpX1 = (vStart / dur) * mmW;
@@ -1058,7 +1122,7 @@ export default function StemEditorModal() {
 
     candidates.sort((a, b) => {
       if (Math.abs(a.dist - b.dist) < 1.0) {
-        if (clickY < 8 || clickY > 28) {
+        if (clickY < mmH * 0.25 || clickY > mmH * 0.75) {
           if (a.mode.startsWith('vp') && !b.mode.startsWith('vp')) return -1;
           if (!a.mode.startsWith('vp') && b.mode.startsWith('vp')) return 1;
         } else {
@@ -1289,6 +1353,7 @@ export default function StemEditorModal() {
 
   // 10. COMPREHENSIVE ESSENTIAL KEYBOARD SHORTCUTS
   useEffect(() => {
+    if (!song) return;
     const handleKeyDown = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
 
@@ -1303,24 +1368,24 @@ export default function StemEditorModal() {
         } else {
           handleTogglePlay();
         }
-      } else if (e.key.toLowerCase() === 'k') {
+      } else if (e.key.toLowerCase() === 'k' && !cmdOrCtrl) {
         e.preventDefault();
         handleStop();
       } else if (e.key.toLowerCase() === 'l' && !cmdOrCtrl) {
         e.preventDefault();
         setIsLooping((prev) => !prev);
-      } else if (e.key === 'Enter') {
+      } else if (e.key === 'Enter' && !cmdOrCtrl) {
         e.preventDefault();
         if (selection && selection.end > selection.start) {
           handleApplyTransfer();
         }
       }
 
-      // Zooming & Viewport
-      else if (e.key === '+' || e.key === '=') {
+      // Zooming & Viewport (preserve Cmd/Ctrl +/- for browser native zoom)
+      else if ((e.key === '+' || e.key === '=') && !cmdOrCtrl) {
         e.preventDefault();
         handleZoom(0.70);
-      } else if (e.key === '-' || e.key === '_') {
+      } else if ((e.key === '-' || e.key === '_') && !cmdOrCtrl) {
         e.preventDefault();
         handleZoom(1.40);
       } else if (e.key.toLowerCase() === 'f' && !cmdOrCtrl) {
@@ -1385,11 +1450,11 @@ export default function StemEditorModal() {
       }
 
       // Track switching via 1, 2, 3
-      else if (e.key === '1') {
+      else if (e.key === '1' && !cmdOrCtrl) {
         setSourceStem('inst');
-      } else if (e.key === '2') {
+      } else if (e.key === '2' && !cmdOrCtrl) {
         setSourceStem('lead');
-      } else if (e.key === '3') {
+      } else if (e.key === '3' && !cmdOrCtrl) {
         setSourceStem('back');
       }
 
@@ -1506,8 +1571,8 @@ export default function StemEditorModal() {
             />
             <div className="stem-editor-title-group">
               <div className="stem-editor-title">
-                <i className="icon-sliders" style={{ color: '#10b981', marginRight: '0.45rem' }}></i>
-                Stem Editor: "{song.title || 'Untitled'}"
+                <i className="icon-sliders" style={{ color: '#10b981', marginRight: '0.45rem', flexShrink: 0 }}></i>
+                <span className="stem-editor-title-text">Stem Editor: "{song.title || 'Untitled'}"</span>
               </div>
               <div className="stem-editor-meta">
                 <span>{song.artist || 'Unknown Artist'}</span>
@@ -1523,26 +1588,36 @@ export default function StemEditorModal() {
             <div className="time-readout-main">
               {formatTimePrecise(currentTime)}
             </div>
-            <div className="time-readout-sub">
-              {selection ? (
-                <span style={{ color: '#a5b4fc' }}>
-                  Sel: {formatTimePrecise(selection.start)} - {formatTimePrecise(selection.end)} ({formatTimePrecise(selection.end - selection.start).slice(3)}s)
+            <div
+              className="time-readout-sub"
+              title={
+                selection && selection.end > selection.start
+                  ? `Selection: ${formatTimePrecise(selection.start)} - ${formatTimePrecise(selection.end)} (${(selection.end - selection.start).toFixed(2)}s)`
+                  : 'No Range Selected'
+              }
+            >
+              {selection && selection.end > selection.start ? (
+                <span className="time-readout-sel">
+                  <span className="time-readout-bounds">
+                    {formatBoundsTime(selection.start, duration)} → {formatBoundsTime(selection.end, duration)}
+                  </span>
+                  <span className="time-readout-dur"> ({(selection.end - selection.start).toFixed(2)}s)</span>
                 </span>
               ) : (
-                <span style={{ color: '#64748b' }}>No Range Selected</span>
+                <span className="time-readout-none">No Selection</span>
               )}
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div className="stem-editor-header-actions">
             <button
               type="button"
-              className="btn btn-tool"
+              className="btn btn-tool btn-shortcuts"
               onClick={() => setShowShortcutsModal(true)}
               title="Keyboard Shortcuts Cheatsheet (?)"
             >
               <i className="icon-help-circle"></i>
-              <span>Shortcuts</span>
+              <span className="btn-label-text">Shortcuts</span>
             </button>
             <button
               className="btn-close"
@@ -1569,7 +1644,7 @@ export default function StemEditorModal() {
               disabled={!isAudioLoaded}
             >
               <i className={isPlaying ? 'icon-pause' : 'icon-play'}></i>
-              <span>{isPlaying ? 'Pause' : 'Play'}</span>
+              <span className="btn-label-text">{isPlaying ? 'Pause' : 'Play'}</span>
             </button>
 
             <button
@@ -1590,7 +1665,7 @@ export default function StemEditorModal() {
               disabled={!isAudioLoaded || !selection}
             >
               <i className="icon-repeat"></i>
-              <span>Loop</span>
+              <span className="btn-label-text">Loop</span>
             </button>
 
             <button
@@ -1601,7 +1676,7 @@ export default function StemEditorModal() {
               disabled={!isAudioLoaded || !selection}
             >
               <i className="icon-play-circle"></i>
-              <span>Play Selection</span>
+              <span className="btn-label-text">Play Selection</span>
             </button>
           </div>
 
@@ -1635,20 +1710,19 @@ export default function StemEditorModal() {
               disabled={!isAudioLoaded}
             >
               <i className="icon-maximize-2"></i>
-              <span>Fit</span>
+              <span className="btn-label-text">Fit</span>
             </button>
 
-            {selection && (
-              <button
-                type="button"
-                className="btn btn-tool"
-                onClick={handleZoomToSelection}
-                title="Zoom Directly to Selected Interval (Z)"
-              >
-                <i className="icon-crop"></i>
-                <span>Selection</span>
-              </button>
-            )}
+            <button
+              type="button"
+              className={`btn btn-tool btn-tool-sel ${selection && selection.end > selection.start ? 'has-selection' : ''}`}
+              onClick={handleZoomToSelection}
+              title="Zoom Directly to Selected Interval (Z)"
+              disabled={!isAudioLoaded || !selection || selection.end <= selection.start}
+            >
+              <i className="icon-crop"></i>
+              <span className="btn-label-text">Selection</span>
+            </button>
 
             <span className="zoom-level-badge">
               View: {formatTimePrecise(viewDuration).slice(3)}s
@@ -1665,7 +1739,7 @@ export default function StemEditorModal() {
               title="Undo last audio correction (Ctrl+Z)"
             >
               <i className="icon-undo"></i>
-              <span>Undo {historyCount > 0 ? `(${historyCount})` : ''}</span>
+              <span className="btn-label-text">Undo {historyCount > 0 ? `(${historyCount})` : ''}</span>
             </button>
 
             <button
@@ -1686,7 +1760,8 @@ export default function StemEditorModal() {
               title="Save modified stem files to server (Ctrl+S)"
             >
               <i className={isSaving ? 'icon-loader-2 icon-spin' : 'icon-save'}></i>
-              <span>{isSaving ? 'Saving Stems...' : 'Save & Apply Stems'}</span>
+              <span className="btn-save-full-label">{isSaving ? 'Saving Stems...' : 'Save & Apply Stems'}</span>
+              <span className="btn-save-short-label">{isSaving ? 'Saving...' : 'Save'}</span>
             </button>
           </div>
         </div>
@@ -1727,17 +1802,21 @@ export default function StemEditorModal() {
           onMouseDown={handleMinimapMouseDown}
           onMouseMove={handleMinimapMouseMove}
           onMouseUp={handleMinimapMouseUp}
+          onTouchStart={handleMinimapMouseDown}
+          onTouchMove={handleMinimapMouseMove}
+          onTouchEnd={handleMinimapMouseUp}
           title="Minimap: Drag cyan edges to resize view window, drag purple edges to resize selection, drag body to move, or click to jump"
         >
           <canvas ref={minimapCanvasRef} className="minimap-canvas" />
         </div>
 
         {/* Main Multi-Track Audio Waveform Workspace (2-Column Architecture with ZERO OFFSET) */}
-        <div
-          ref={workspaceRef}
-          className="stem-editor-workspace"
-          onWheel={handleWheel}
-        >
+        <ScrollShadowWrapper className="stem-editor-workspace-wrapper" scrollRef={workspaceRef}>
+          <div
+            ref={workspaceRef}
+            className="stem-editor-workspace"
+            onWheel={handleWheel}
+          >
           <div className="tracks-split-container">
             {/* Left Column: Fixed 220px Track Control Headers */}
             <div className="track-headers-column">
@@ -1818,6 +1897,9 @@ export default function StemEditorModal() {
               onMouseDown={handleWaveformMouseDown}
               onMouseMove={handleWaveformMouseMove}
               onMouseUp={handleWaveformMouseUp}
+              onTouchStart={handleWaveformMouseDown}
+              onTouchMove={handleWaveformMouseMove}
+              onTouchEnd={handleWaveformMouseUp}
             >
               {/* Synchronized Time Ruler */}
               <div className="ruler-waveform-wrap">
@@ -1836,8 +1918,9 @@ export default function StemEditorModal() {
             </div>
           </div>
         </div>
+      </ScrollShadowWrapper>
 
-        {/* Stem Transfer & Correction Tool Panel */}
+      {/* Stem Transfer & Correction Tool Panel */}
         <div className="stem-transfer-panel">
           <div className="transfer-header">
             <div className="transfer-title">
@@ -1851,7 +1934,7 @@ export default function StemEditorModal() {
 
           <div className="transfer-controls-row">
             {/* Source Stem Selector */}
-            <div className="transfer-input-group">
+            <div className="transfer-input-group transfer-group-source">
               <label>Source Stem</label>
               <select
                 className="select-input transfer-select"
@@ -1865,7 +1948,7 @@ export default function StemEditorModal() {
             </div>
 
             {/* Action Type Selector */}
-            <div className="transfer-input-group">
+            <div className="transfer-input-group transfer-group-action">
               <label>Correction Action</label>
               <select
                 className="select-input transfer-select"
@@ -1879,24 +1962,29 @@ export default function StemEditorModal() {
               </select>
             </div>
 
-            {/* Destination Stem Selector (if not silencing) */}
-            {actionType !== 'silence' && (
-              <div className="transfer-input-group">
-                <label>Destination Stem</label>
-                <select
-                  className="select-input transfer-select"
-                  value={targetStem}
-                  onChange={(e) => setTargetStem(e.target.value)}
-                >
-                  <option value="inst" disabled={sourceStem === 'inst'}>Instrumental</option>
-                  <option value="lead" disabled={sourceStem === 'lead'}>Lead Vocals</option>
-                  <option value="back" disabled={sourceStem === 'back'}>Backing Vocals</option>
-                </select>
-              </div>
-            )}
+            {/* Destination Stem Selector */}
+            <div className={`transfer-input-group transfer-group-dest ${actionType === 'silence' ? 'is-disabled' : ''}`}>
+              <label>Destination Stem</label>
+              <select
+                className="select-input transfer-select"
+                value={actionType === 'silence' ? '' : targetStem}
+                onChange={(e) => setTargetStem(e.target.value)}
+                disabled={actionType === 'silence'}
+              >
+                {actionType === 'silence' ? (
+                  <option value="" disabled>N/A (Silencing)</option>
+                ) : (
+                  <>
+                    <option value="inst" disabled={sourceStem === 'inst'}>Instrumental</option>
+                    <option value="lead" disabled={sourceStem === 'lead'}>Lead Vocals</option>
+                    <option value="back" disabled={sourceStem === 'back'}>Backing Vocals</option>
+                  </>
+                )}
+              </select>
+            </div>
 
             {/* Crossfade edge selector */}
-            <div className="transfer-input-group" style={{ maxWidth: '120px' }}>
+            <div className="transfer-input-group transfer-group-crossfade">
               <label>Crossfade</label>
               <select
                 className="select-input transfer-select"
@@ -1913,19 +2001,29 @@ export default function StemEditorModal() {
             </div>
 
             {/* Selected Time Bounds inputs */}
-            <div className="transfer-input-group" style={{ maxWidth: '170px' }}>
+            <div className="transfer-input-group transfer-group-bounds">
               <label>Selection Bounds</label>
-              <div className="selection-bounds-readout">
-                {selection ? (
-                  <span>{formatTimePrecise(selection.start).slice(3)} → {formatTimePrecise(selection.end).slice(3)}</span>
+              <div
+                className="selection-bounds-readout"
+                title={
+                  selection && selection.end > selection.start
+                    ? `${formatTimePrecise(selection.start)} to ${formatTimePrecise(selection.end)} (${(selection.end - selection.start).toFixed(2)}s)`
+                    : 'No range selected'
+                }
+              >
+                {selection && selection.end > selection.start ? (
+                  <span className="bounds-active-text">
+                    {formatBoundsTime(selection.start, duration)} → {formatBoundsTime(selection.end, duration)}
+                  </span>
                 ) : (
-                  <span style={{ color: '#64748b' }}>None</span>
+                  <span className="bounds-none-text">— None —</span>
                 )}
               </div>
             </div>
 
             {/* Apply Action Button */}
-            <div className="transfer-input-group" style={{ alignSelf: 'flex-end' }}>
+            <div className="transfer-input-group transfer-group-apply">
+              <label className="apply-label-spacer" aria-hidden="true">&nbsp;</label>
               <button
                 type="button"
                 className="btn btn-apply-transfer"
