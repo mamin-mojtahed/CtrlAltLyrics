@@ -54,46 +54,71 @@ export default function DisplayApp() {
       if (!state) return;
 
       if (state.songData) {
-        const queueId = state.queueId || state.songData.queueId || null;
-        const fullSong = { ...state.songData, queueId };
+        const queueId = state.queueId || state.songData.queueId || (songRef.current?.id === (state.songData.id || state.songId) ? songRef.current.queueId : null);
+        const incomingLyrics = Array.isArray(state.songData.lyrics) && state.songData.lyrics.length > 0 ? state.songData.lyrics : null;
+        const currentLyrics = songRef.current?.lyrics || [];
+        const fullSong = {
+          ...state.songData,
+          queueId,
+          lyrics: incomingLyrics || currentLyrics
+        };
         const isNewTrack = !songRef.current ||
           songRef.current.id !== fullSong.id ||
           (queueId && songRef.current.queueId && String(songRef.current.queueId) !== String(queueId));
 
-        setSong(fullSong);
-        songRef.current = fullSong;
-        const colorSrc = fullSong.id ? `/api/cover/${fullSong.id}` : getHighResAlbumArt(fullSong.albumArt);
-        extractColorsFromSongCover(colorSrc);
-
         if (isNewTrack) {
+          audioPlayer.stopAllSources();
+
+          const initialTime = typeof state.currentTime === 'number' ? state.currentTime : 0;
+          const initialPlaying = typeof state.isPlaying === 'boolean' ? state.isPlaying : false;
+          syncAnchorRef.current.time = initialTime;
+          syncAnchorRef.current.timestamp = performance.now();
+          syncAnchorRef.current.isPlaying = initialPlaying;
+          setCurrentTime(initialTime);
+          setIsPlaying(initialPlaying);
+
+          if (state.audioMaster !== undefined) {
+            audioMasterRef.current = state.audioMaster;
+            setAudioMaster(state.audioMaster);
+          }
+
+          setSong(fullSong);
+          songRef.current = fullSong;
+          const colorSrc = fullSong.id ? `/api/cover/${fullSong.id}` : getHighResAlbumArt(fullSong.albumArt);
+          extractColorsFromSongCover(colorSrc);
+
           audioPlayer.setupAudio(fullSong, volumesRef.current).then((dur) => {
             if (dur > 0) setDuration(dur);
             if (audioMasterRef.current === 'display' && (state.isPlaying || syncAnchorRef.current.isPlaying)) {
               audioPlayer.playAudio(syncAnchorRef.current.time);
             }
           });
+        } else {
+          setSong(fullSong);
+          songRef.current = fullSong;
+          const colorSrc = fullSong.id ? `/api/cover/${fullSong.id}` : getHighResAlbumArt(fullSong.albumArt);
+          extractColorsFromSongCover(colorSrc);
         }
       } else if (('songId' in state && state.songId === null) || ('songData' in state && state.songData === null)) {
         handleEndQueue(true);
       }
 
       if (state.currentTime !== undefined) {
-        if (audioMasterRef.current !== 'display') {
+        if (!syncAnchorRef.current.isPlaying || audioMasterRef.current !== 'display') {
           setCurrentTime(state.currentTime);
           const now = performance.now();
+          syncAnchorRef.current.time = state.currentTime;
+          syncAnchorRef.current.timestamp = now;
+        } else {
+          const now = performance.now();
           const curAnchor = syncAnchorRef.current;
-          if (curAnchor.isPlaying) {
-            const currentEstimated = curAnchor.time + (now - curAnchor.timestamp) / 1000;
-            const delta = state.currentTime - currentEstimated;
-            // Only snap anchor if delta is significant (e.g. user sought or jumped lines)
-            if (Math.abs(delta) > 0.45) {
-              curAnchor.time = state.currentTime;
-              curAnchor.timestamp = now;
-            }
-            // Otherwise, the microsecond animation loop runs continuously without any stutter or hitch
-          } else {
+          const currentEstimated = curAnchor.time + (now - curAnchor.timestamp) / 1000;
+          const delta = state.currentTime - currentEstimated;
+          // Only snap anchor if delta is significant (e.g. user sought or jumped lines)
+          if (Math.abs(delta) > 0.45) {
             curAnchor.time = state.currentTime;
             curAnchor.timestamp = now;
+            setCurrentTime(state.currentTime);
           }
         }
       }
@@ -198,13 +223,96 @@ export default function DisplayApp() {
         handleTogglePlayPause();
       } else if (cmd.command === 'end_queue') {
         handleEndQueue(true);
+      } else if (cmd.command === 'select_song' && cmd.id) {
+        if (cmd.audioMaster === 'dashboard') {
+          audioPlayer.stopAllSources();
+          audioMasterRef.current = 'dashboard';
+          setAudioMaster('dashboard');
+        }
+        syncAnchorRef.current.time = 0;
+        syncAnchorRef.current.timestamp = performance.now();
+        syncAnchorRef.current.isPlaying = false;
+        setCurrentTime(0);
+        setIsPlaying(false);
       }
     });
+
+    const handleLyricsUpdated = (data) => {
+      if (!data || !data.songId) return;
+      if (songRef.current && songRef.current.id === data.songId) {
+        setSong(prev => {
+          if (!prev || prev.id !== data.songId) return prev;
+          const updated = {
+            ...prev,
+            lyrics: data.lyrics || [],
+            lyricsProvider: data.lyricsProvider || prev.lyricsProvider,
+            isSynced: data.isSynced !== undefined ? data.isSynced : prev.isSynced
+          };
+          songRef.current = updated;
+          return updated;
+        });
+      }
+    };
+    socket.on('lyrics_updated', handleLyricsUpdated);
 
     socket.on('queue_updated', (q) => {
       if (Array.isArray(q)) {
         setQueue(q);
         queueRef.current = q;
+
+        // If currently playing song is missing lyrics or video, check if queue item has resolved
+        if (songRef.current) {
+          const currentInQueue = q.find(item =>
+            (songRef.current.queueId && item.queueId === songRef.current.queueId) ||
+            item.id === songRef.current.id
+          );
+          if (currentInQueue) {
+            const hasNoLyrics = !Array.isArray(songRef.current.lyrics) || songRef.current.lyrics.length === 0;
+            if (hasNoLyrics && Array.isArray(currentInQueue.lyrics) && currentInQueue.lyrics.length > 0) {
+              setSong(prev => {
+                if (!prev) return prev;
+                const updated = {
+                  ...prev,
+                  lyrics: currentInQueue.lyrics,
+                  lyricsProvider: currentInQueue.lyricsProvider || prev.lyricsProvider,
+                  isSynced: currentInQueue.isSynced !== undefined ? currentInQueue.isSynced : prev.isSynced
+                };
+                songRef.current = updated;
+                return updated;
+              });
+            } else if (hasNoLyrics && (currentInQueue.status === 'ready' || currentInQueue.hasLyrics)) {
+              fetchSong(songRef.current.id).then(fresh => {
+                if (fresh && Array.isArray(fresh.lyrics) && fresh.lyrics.length > 0 && songRef.current?.id === fresh.id) {
+                  setSong(prev => {
+                    if (!prev || prev.id !== fresh.id) return prev;
+                    const updated = {
+                      ...prev,
+                      lyrics: fresh.lyrics,
+                      lyricsProvider: fresh.lyricsProvider || prev.lyricsProvider,
+                      isSynced: fresh.isSynced !== undefined ? fresh.isSynced : prev.isSynced
+                    };
+                    songRef.current = updated;
+                    return updated;
+                  });
+                }
+              }).catch(() => {});
+            }
+
+            if (!songRef.current.youtubeId && currentInQueue.youtubeId) {
+              setSong(prev => {
+                if (!prev || prev.id !== currentInQueue.id) return prev;
+                const updated = {
+                  ...prev,
+                  youtubeId: currentInQueue.youtubeId,
+                  youtubeUrl: currentInQueue.youtubeUrl,
+                  videoStatus: currentInQueue.videoStatus
+                };
+                songRef.current = updated;
+                return updated;
+              });
+            }
+          }
+        }
       }
     });
 
@@ -212,6 +320,7 @@ export default function DisplayApp() {
       socket.off('sync_state');
       socket.off('player_command');
       socket.off('queue_updated');
+      socket.off('lyrics_updated', handleLyricsUpdated);
     };
   }, []);
 
@@ -273,14 +382,30 @@ export default function DisplayApp() {
     const queueId = (itemOrId && typeof itemOrId === 'object') ? (itemOrId.queueId || null) : (maybeQueueId || null);
 
     try {
+      // 1. Immediately halt existing audio and reset timeline anchor to 0
+      audioPlayer.stopAllSources();
+      audioMasterRef.current = 'display';
+      setAudioMaster('display');
+      syncAnchorRef.current.time = 0;
+      syncAnchorRef.current.timestamp = performance.now();
+      syncAnchorRef.current.isPlaying = false;
+      setCurrentTime(0);
+      setIsPlaying(false);
+
       emitPlayerCommand({ command: 'select_song', id, queueId, audioMaster: 'display' });
       const fullSong = await fetchSong(id);
       fullSong.queueId = queueId;
-      setSong(fullSong);
-      songRef.current = fullSong;
 
       const colorSrc = fullSong.id ? `/api/cover/${fullSong.id}` : getHighResAlbumArt(fullSong.albumArt);
       extractColorsFromSongCover(colorSrc);
+
+      // Reset anchor once more right before setting song state
+      syncAnchorRef.current.time = 0;
+      syncAnchorRef.current.timestamp = performance.now();
+      syncAnchorRef.current.isPlaying = true;
+
+      setSong(fullSong);
+      songRef.current = fullSong;
 
       const dur = await audioPlayer.setupAudio(fullSong, volumesRef.current);
       if (dur > 0) setDuration(dur);

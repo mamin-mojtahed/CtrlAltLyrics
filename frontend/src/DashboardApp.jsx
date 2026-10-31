@@ -141,8 +141,24 @@ export default function DashboardApp() {
       }
     };
 
+    const handleLyricsUpdated = (data) => {
+      if (!data || !data.songId) return;
+      const { currentSong } = usePlaybackStore.getState();
+      if (currentSong && currentSong.id === data.songId) {
+        usePlaybackStore.setState({
+          currentSong: {
+            ...currentSong,
+            lyrics: data.lyrics || [],
+            lyricsProvider: data.lyricsProvider || currentSong.lyricsProvider,
+            isSynced: data.isSynced !== undefined ? data.isSynced : currentSong.isSynced
+          }
+        });
+      }
+    };
+
     socket.on('sync_state', syncFromSocket);
     socket.on('player_command', handlePlayerCommand);
+    socket.on('lyrics_updated', handleLyricsUpdated);
     socket.on('queue_updated', (data) => {
       if (Array.isArray(data)) {
         setQueue(data);
@@ -153,6 +169,48 @@ export default function DashboardApp() {
             selectSong(readySongs[0].id, false, readySongs[0].queueId);
           } else {
             usePlaybackStore.getState().endQueue();
+          }
+        } else if (currentSong) {
+          const queueItem = data.find(s => (currentQueueId && String(s.queueId) === String(currentQueueId)) || s.id === currentSong.id);
+          if (queueItem) {
+            const hasNoLyrics = !Array.isArray(currentSong.lyrics) || currentSong.lyrics.length === 0;
+            if (hasNoLyrics && Array.isArray(queueItem.lyrics) && queueItem.lyrics.length > 0) {
+              usePlaybackStore.setState({
+                currentSong: {
+                  ...currentSong,
+                  lyrics: queueItem.lyrics,
+                  lyricsProvider: queueItem.lyricsProvider || currentSong.lyricsProvider,
+                  isSynced: queueItem.isSynced !== undefined ? queueItem.isSynced : currentSong.isSynced
+                }
+              });
+            } else if (hasNoLyrics && (queueItem.status === 'ready' || queueItem.hasLyrics)) {
+              fetchSong(currentSong.id).then(fresh => {
+                if (fresh && Array.isArray(fresh.lyrics) && fresh.lyrics.length > 0) {
+                  const state = usePlaybackStore.getState();
+                  if (state.currentSong && state.currentSong.id === fresh.id) {
+                    usePlaybackStore.setState({
+                      currentSong: {
+                        ...state.currentSong,
+                        lyrics: fresh.lyrics,
+                        lyricsProvider: fresh.lyricsProvider || state.currentSong.lyricsProvider,
+                        isSynced: fresh.isSynced !== undefined ? fresh.isSynced : state.currentSong.isSynced
+                      }
+                    });
+                  }
+                }
+              }).catch(() => {});
+            }
+
+            if (!currentSong.youtubeId && queueItem.youtubeId) {
+              usePlaybackStore.setState({
+                currentSong: {
+                  ...currentSong,
+                  youtubeId: queueItem.youtubeId,
+                  youtubeUrl: queueItem.youtubeUrl,
+                  videoStatus: queueItem.videoStatus
+                }
+              });
+            }
           }
         }
       } else {
@@ -167,6 +225,7 @@ export default function DashboardApp() {
     return () => {
       socket.off('sync_state', syncFromSocket);
       socket.off('player_command', handlePlayerCommand);
+      socket.off('lyrics_updated', handleLyricsUpdated);
       socket.off('queue_updated');
       socket.off('library_updated');
     };

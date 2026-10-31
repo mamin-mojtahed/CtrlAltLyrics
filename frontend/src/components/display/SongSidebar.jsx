@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import socket from '../../services/socket';
 import { formatTimeDisplay } from '../../utils/themeColors';
 import { useScrollShadows } from '../../hooks/useScrollShadows';
@@ -10,6 +10,11 @@ export default function SongSidebar({ song, queue = [], currentTime = 0, duratio
 
   const [isDragging, setIsDragging] = useState(false);
   const [scrubTime, setScrubTime] = useState(0);
+
+  useEffect(() => {
+    setIsDragging(false);
+    setScrubTime(0);
+  }, [song?.id, song?.queueId]);
 
   const displayTime = isDragging ? scrubTime : currentTime;
 
@@ -38,8 +43,9 @@ export default function SongSidebar({ song, queue = [], currentTime = 0, duratio
   };
 
   const handleSliderChange = (e) => {
-    setIsDragging(false);
     const target = parseFloat(e.target.value) || 0;
+    setScrubTime(target);
+    setIsDragging(false);
     if (onSeek) {
       onSeek(target);
     } else {

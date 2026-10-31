@@ -617,7 +617,11 @@
     "spotifyUrl": "https://open.spotify.com/track/0yXKYYBPxOuakAOshy1cah",
     "spotifyTrackId": "0yXKYYBPxOuakAOshy1cah",
     "isSpotify": true,
-    "isUploaded": false
+    "isUploaded": false,
+    "youtubeId": "xYsUSIuRhr0",
+    "youtubeUrl": "https://www.youtube.com/watch?v=xYsUSIuRhr0",
+    "videoStatus": "ready",
+    "videoError": null
   },
   {
     "id": "upload_1787287622227",
@@ -717,10 +721,9 @@
     "spotifyTrackId": "3FsqlxtjL2EJ5kxwgdj1Yl",
     "isSpotify": true,
     "isUploaded": false,
-    "youtubeId": "FgJhzDxnA9o",
-    "youtubeUrl": "https://www.youtube.com/watch?v=FgJhzDxnA9o",
-    "videoStatus": "ready",
-    "videoError": null
+    "youtubeId": "lhggp54DcP4",
+    "youtubeUrl": "https://www.youtube.com/watch?v=lhggp54DcP4",
+    "videoStatus": "ready"
   },
   {
     "id": "1528780636",
@@ -830,7 +833,10 @@
     "spotifyUrl": null,
     "spotifyTrackId": null,
     "isSpotify": false,
-    "isUploaded": false
+    "isUploaded": false,
+    "youtubeId": "jc69YieqcA8",
+    "youtubeUrl": "https://www.youtube.com/watch?v=jc69YieqcA8",
+    "videoStatus": "ready"
   },
   {
     "id": "6792690860",
@@ -930,7 +936,11 @@
     "spotifyUrl": null,
     "spotifyTrackId": null,
     "isSpotify": false,
-    "isUploaded": true
+    "isUploaded": true,
+    "youtubeId": null,
+    "youtubeUrl": null,
+    "videoStatus": "error",
+    "videoError": "No matching YouTube music video found"
   },
   {
     "id": "1377813701",
@@ -1273,5 +1283,63 @@
     "youtubeUrl": "https://www.youtube.com/watch?v=uNvpg2hfX3I",
     "videoStatus": "ready",
     "videoError": null
+  },
+  {
+    "id": "1736167680",
+    "title": "Hegh Hegh",
+    "artist": "Habib",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/a5/b9/fe/a5b9fec3-91d3-04fe-9369-423b7b1077b5/82cdd293-65f1-4a79-9f78-205deb0aafa8.jpg/100x100bb.jpg",
+    "query": "Hegh Hegh Habib",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/1736167680/instrumental.mp3",
+      "lead": "/audio/1736167680/lead_vocal.mp3",
+      "back": "/audio/1736167680/back_vocal.mp3",
+      "full": "/audio/1736167680/audio.mp3"
+    },
+    "downloadMethod": "yt-dlp Direct (Title + Artist)",
+    "downloadAttempts": [
+      {
+        "provider": "SpotDL",
+        "status": "failed",
+        "detail": "SpotDL verified search failed on Spotify catalog for \"Hegh Hegh Habib\""
+      },
+      {
+        "provider": "yt-dlp Direct (Title + Artist)",
+        "status": "success",
+        "detail": "Audio extracted via YouTube audio search for \"Hegh Hegh Habib\""
+      },
+      {
+        "provider": "yt-dlp Title Fallback",
+        "status": "skipped",
+        "detail": "Not needed (acquired via yt-dlp Direct)"
+      }
+    ],
+    "engineSettings": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "isCustom": false
+    },
+    "separationInfo": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "primaryModel": "UVR-MDX-NET-Inst_HQ_3.onnx",
+      "karaokeModel": "5_HP-Karaoke-UVR.pth",
+      "isCustom": false
+    },
+    "lyricsProvider": null,
+    "isSynced": true,
+    "hasLyrics": false,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false,
+    "youtubeId": "6cbwxUr06VQ",
+    "youtubeUrl": "https://www.youtube.com/watch?v=6cbwxUr06VQ",
+    "videoStatus": "ready",
+    "videoError": null,
+    "lyricsError": "No lyrics found across any provider."
   }
 ]

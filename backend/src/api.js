@@ -2,6 +2,7 @@ const express = require('express');
 const { exec, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const https = require('https');
 const axios = require('axios');
 const util = require('util');
 const multer = require('multer');
@@ -104,11 +105,27 @@ function extractYoutubeId(urlOrId) {
   return match ? match[1] : null;
 }
 
+function getActiveCurrentState(io = null) {
+  if (io && typeof io.getCurrentState === 'function') {
+    return io.getCurrentState();
+  }
+  return null;
+}
+
 function syncSongAcrossQueue(updatedSong) {
   if (!updatedSong || !updatedSong.id) return;
+  const lyricsData = readSongLyrics(updatedSong.id);
+  const songWithLyrics = {
+    ...updatedSong,
+    lyrics: (Array.isArray(updatedSong.lyrics) && updatedSong.lyrics.length > 0)
+      ? updatedSong.lyrics
+      : (Array.isArray(lyricsData.lyrics) ? lyricsData.lyrics : []),
+    lyricsProvider: updatedSong.lyricsProvider || lyricsData.lyricsProvider || null,
+    isSynced: updatedSong.isSynced !== undefined ? updatedSong.isSynced : (lyricsData.isSynced !== undefined ? lyricsData.isSynced : true)
+  };
   for (let i = 0; i < queue.length; i++) {
     if (queue[i].id === updatedSong.id) {
-      queue[i] = { ...updatedSong, queueId: queue[i].queueId };
+      queue[i] = { ...queue[i], ...songWithLyrics, queueId: queue[i].queueId };
     }
   }
 }
@@ -556,7 +573,12 @@ router.post('/reupload/:id', upload.single('audioFile'), async (req, res) => {
     if (io) {
       io.emit('queue_updated', queue);
       io.emit('library_updated', readHistory());
-      io.emit('sync_state', { songData: song });
+      const cur = getActiveCurrentState(io);
+      if (cur && cur.songId === song.id) {
+        const updatedActive = { ...cur.songData, ...song };
+        if (typeof io.updateCurrentState === 'function') io.updateCurrentState({ songData: updatedActive });
+        io.emit('sync_state', { songId: song.id, songData: updatedActive });
+      }
     }
 
     res.json({
@@ -986,12 +1008,25 @@ async function resolveYoutubeMusicVideo(song, io = null, customUrlOrQuery = null
       song.youtubeUrl = `https://www.youtube.com/watch?v=${directId}`;
       song.videoStatus = 'ready';
       delete song.videoError;
+      // Pre-warm video stream extraction in background so playback has zero delay!
+      extractVideoStreamUrl(directId).catch(() => {});
       saveLightweightHistoryItem(song);
       syncSongAcrossQueue(song);
       if (io) {
         io.emit('queue_updated', queue);
         io.emit('library_updated', readHistory());
-        io.emit('sync_state', { songId: song.id, songData: { ...song } });
+        const cur = getActiveCurrentState(io);
+        if (cur && cur.songId === song.id) {
+          const updatedActive = {
+            ...cur.songData,
+            ...song,
+            youtubeId: directId,
+            youtubeUrl: song.youtubeUrl,
+            videoStatus: 'ready'
+          };
+          if (typeof io.updateCurrentState === 'function') io.updateCurrentState({ songData: updatedActive });
+          io.emit('sync_state', { songId: song.id, songData: updatedActive });
+        }
       }
       return { success: true, youtubeId: directId, youtubeUrl: song.youtubeUrl };
     }
@@ -1013,7 +1048,16 @@ async function resolveYoutubeMusicVideo(song, io = null, customUrlOrQuery = null
   if (io) {
     io.emit('queue_updated', queue);
     io.emit('library_updated', readHistory());
-    io.emit('sync_state', { songId: song.id, songData: { ...song } });
+    const cur = getActiveCurrentState(io);
+    if (cur && cur.songId === song.id) {
+      const updatedActive = {
+        ...cur.songData,
+        ...song,
+        videoStatus: 'fetching'
+      };
+      if (typeof io.updateCurrentState === 'function') io.updateCurrentState({ songData: updatedActive });
+      io.emit('sync_state', { songId: song.id, songData: updatedActive });
+    }
   }
 
   const venvActivate = getVenvActivatePath();
@@ -1113,6 +1157,8 @@ async function resolveYoutubeMusicVideo(song, io = null, customUrlOrQuery = null
     song.youtubeUrl = `https://www.youtube.com/watch?v=${resolvedId}`;
     song.videoStatus = 'ready';
     delete song.videoError;
+    // Pre-warm video stream extraction in background so playback has zero delay!
+    extractVideoStreamUrl(resolvedId).catch(() => {});
     console.log(`[MusicVideo][${song.id}] Resolved online video for "${song.title}": https://www.youtube.com/watch?v=${resolvedId}`);
   } else {
     song.videoStatus = 'error';
@@ -1126,11 +1172,181 @@ async function resolveYoutubeMusicVideo(song, io = null, customUrlOrQuery = null
   if (io) {
     io.emit('queue_updated', queue);
     io.emit('library_updated', readHistory());
-    io.emit('sync_state', { songId: song.id, songData: { ...song } });
+    const cur = getActiveCurrentState(io);
+    if (cur && cur.songId === song.id) {
+      const updatedActive = {
+        ...cur.songData,
+        ...song,
+        youtubeId: song.youtubeId,
+        youtubeUrl: song.youtubeUrl,
+        videoStatus: song.videoStatus,
+        videoError: song.videoError
+      };
+      if (typeof io.updateCurrentState === 'function') io.updateCurrentState({ songData: updatedActive });
+      io.emit('sync_state', { songId: song.id, songData: updatedActive });
+    }
   }
 
   return { success: !!resolvedId, youtubeId: song.youtubeId, youtubeUrl: song.youtubeUrl, error: song.videoError };
 }
+
+// In-memory cache for extracted direct video stream URLs
+const videoStreamCache = new Map(); // cleanYoutubeId -> { url: string, expiresAt: number }
+const activeExtractionPromises = new Map(); // cleanYoutubeId -> Promise<string>
+
+async function extractVideoStreamUrl(youtubeId, forceFresh = false) {
+  const cleanId = extractYoutubeId(youtubeId) || youtubeId;
+  if (!cleanId || cleanId.length !== 11) {
+    throw new Error(`Invalid YouTube ID: ${youtubeId}`);
+  }
+
+  if (!forceFresh) {
+    const cached = videoStreamCache.get(cleanId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.url;
+    }
+  }
+
+  if (activeExtractionPromises.has(cleanId)) {
+    return activeExtractionPromises.get(cleanId);
+  }
+
+  const extractionPromise = (async () => {
+    const venvActivate = getVenvActivatePath();
+    const activatePrefix = venvActivate ? `source "${venvActivate}" && ` : '';
+    const ytdlpPath = getYtDlpExecutablePath();
+
+    // Prefer fast, hardware-accelerated 720p H.264 (avc1) or MP4 video for smooth hardware decoding
+    const format = 'bestvideo[height<=720][vcodec^=avc1]/bestvideo[height<=720][ext=mp4]/best[height<=720]/best';
+    const cmd = `${activatePrefix}"${ytdlpPath}" --no-playlist --no-warnings --no-update --js-runtimes node -g -f "${format}" "https://www.youtube.com/watch?v=${cleanId}"`;
+
+    console.log(`[VideoStream] Extracting direct stream URL for ${cleanId}...`);
+    const startTime = Date.now();
+    const { stdout } = await execPromise(cmd, { timeout: 15000 });
+    const streamUrl = (stdout || '').trim().split(/\r?\n/)[0];
+    if (!streamUrl || !streamUrl.startsWith('http')) {
+      throw new Error(`yt-dlp failed to return stream URL for ${cleanId}`);
+    }
+
+    console.log(`[VideoStream] Extracted direct stream URL for ${cleanId} in ${Date.now() - startTime}ms`);
+    // Cache for 4 hours
+    videoStreamCache.set(cleanId, {
+      url: streamUrl,
+      expiresAt: Date.now() + 4 * 60 * 60 * 1000
+    });
+    return streamUrl;
+  })();
+
+  activeExtractionPromises.set(cleanId, extractionPromise);
+  try {
+    return await extractionPromise;
+  } finally {
+    activeExtractionPromises.delete(cleanId);
+  }
+}
+
+// Stream video with full Range (byte-range) support for native HTML5 video
+router.get('/video_stream/:id', async (req, res) => {
+  const rawId = req.params.id;
+  let ytId = extractYoutubeId(rawId) || rawId;
+
+  // If a songId was passed instead of youtubeId, find its youtubeId
+  if (!ytId || ytId.length !== 11) {
+    const history = readHistory();
+    const found = queue.find(s => s.id === rawId) || history.find(s => s.id === rawId);
+    if (found && found.youtubeId) {
+      ytId = found.youtubeId;
+    }
+  }
+
+  if (!ytId || ytId.length !== 11) {
+    return res.status(400).json({ error: 'Missing or invalid YouTube video ID' });
+  }
+
+  const streamVideo = async (isRetry = false) => {
+    try {
+      const streamUrl = await extractVideoStreamUrl(ytId, isRetry);
+
+      const proxyHeaders = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      };
+      if (req.headers.range) {
+        proxyHeaders['Range'] = req.headers.range;
+      }
+
+      const proxyReq = https.get(streamUrl, { headers: proxyHeaders }, (proxyRes) => {
+        // If upstream returns 403 (expired signed token) and we haven't retried yet, refresh cache
+        if (proxyRes.statusCode === 403 && !isRetry) {
+          videoStreamCache.delete(ytId);
+          proxyReq.destroy();
+          return streamVideo(true);
+        }
+
+        const responseHeaders = {
+          'Content-Type': proxyRes.headers['content-type'] || 'video/mp4',
+          'Accept-Ranges': 'bytes',
+          'Cache-Control': 'no-cache'
+        };
+        if (proxyRes.headers['content-length']) {
+          responseHeaders['Content-Length'] = proxyRes.headers['content-length'];
+        }
+        if (proxyRes.headers['content-range']) {
+          responseHeaders['Content-Range'] = proxyRes.headers['content-range'];
+        }
+
+        res.writeHead(proxyRes.statusCode || 200, responseHeaders);
+        proxyRes.pipe(res);
+      });
+
+      proxyReq.on('error', (err) => {
+        if (!res.headersSent) {
+          res.status(502).json({ error: 'Upstream video stream error' });
+        }
+        res.end();
+      });
+
+      req.on('close', () => {
+        proxyReq.destroy();
+      });
+    } catch (err) {
+      console.error(`[VideoStream] Error streaming video ${ytId}:`, err.message);
+      if (!res.headersSent) {
+        res.status(500).json({ error: err.message });
+      }
+    }
+  };
+
+  await streamVideo(false);
+});
+
+router.get('/video_url/:id', async (req, res) => {
+  const rawId = req.params.id;
+  let ytId = extractYoutubeId(rawId) || rawId;
+
+  if (!ytId || ytId.length !== 11) {
+    const history = readHistory();
+    const found = queue.find(s => s.id === rawId) || history.find(s => s.id === rawId);
+    if (found && found.youtubeId) {
+      ytId = found.youtubeId;
+    }
+  }
+
+  if (!ytId || ytId.length !== 11) {
+    return res.status(400).json({ error: 'Missing or invalid YouTube video ID' });
+  }
+
+  try {
+    const streamUrl = await extractVideoStreamUrl(ytId);
+    res.json({
+      success: true,
+      youtubeId: ytId,
+      streamUrl: `/api/video_stream/${ytId}`,
+      directUrl: streamUrl
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 async function downloadSongAudio(song, requestedSource = 'auto') {
   const songDir = path.join(DOWNLOADS_DIR, song.id);
@@ -1485,6 +1701,31 @@ async function processSong(song, io) {
     if (io) {
       io.emit('queue_updated', queue);
       io.emit('library_updated', readHistory());
+      const cur = getActiveCurrentState(io);
+      if (cur && cur.songId === song.id) {
+        const lyricsData = readSongLyrics(song.id);
+        const resolvedLyrics = (Array.isArray(song.lyrics) && song.lyrics.length > 0)
+          ? song.lyrics
+          : (Array.isArray(lyricsData.lyrics) ? lyricsData.lyrics : []);
+        const updatedActive = {
+          ...cur.songData,
+          ...song,
+          status,
+          lyrics: resolvedLyrics,
+          lyricsProvider: song.lyricsProvider || lyricsData.lyricsProvider || null,
+          isSynced: song.isSynced !== undefined ? song.isSynced : (lyricsData.isSynced !== undefined ? lyricsData.isSynced : true)
+        };
+        if (typeof io.updateCurrentState === 'function') io.updateCurrentState({ songData: updatedActive });
+        io.emit('sync_state', { songId: song.id, songData: updatedActive });
+        if (resolvedLyrics.length > 0) {
+          io.emit('lyrics_updated', {
+            songId: song.id,
+            lyrics: resolvedLyrics,
+            lyricsProvider: updatedActive.lyricsProvider,
+            isSynced: updatedActive.isSynced
+          });
+        }
+      }
     }
   };
 
@@ -1506,6 +1747,13 @@ async function processSong(song, io) {
     // 3. Lyrics Fetching
     updateStatus('fetching_lyrics');
     await fetchAndProcessLyrics(song, 'auto', io);
+
+    const savedLyrics = readSongLyrics(song.id);
+    if (Array.isArray(savedLyrics.lyrics) && savedLyrics.lyrics.length > 0) {
+      song.lyrics = savedLyrics.lyrics;
+      song.lyricsProvider = savedLyrics.lyricsProvider || song.lyricsProvider;
+      song.isSynced = savedLyrics.isSynced !== undefined ? savedLyrics.isSynced : song.isSynced;
+    }
 
     // Done
     updateStatus('ready');
@@ -1752,6 +2000,28 @@ async function fetchAndProcessLyrics(song, requestedProvider = 'auto', io = null
   }
 
   saveLightweightHistoryItem(song);
+  syncSongAcrossQueue(song);
+
+  if (io) {
+    io.emit('queue_updated', queue);
+    io.emit('library_updated', readHistory());
+    const cur = getActiveCurrentState(io);
+    if (cur && cur.songId === song.id && Array.isArray(song.lyrics) && song.lyrics.length > 0) {
+      const updatedActive = {
+        ...cur.songData,
+        ...song
+      };
+      if (typeof io.updateCurrentState === 'function') io.updateCurrentState({ songData: updatedActive });
+      io.emit('sync_state', { songId: song.id, songData: updatedActive });
+      io.emit('lyrics_updated', {
+        songId: song.id,
+        lyrics: song.lyrics,
+        lyricsProvider: song.lyricsProvider,
+        isSynced: song.isSynced
+      });
+    }
+  }
+
   return song;
 }
 
@@ -1824,7 +2094,18 @@ router.post('/refetch_lyrics_subtitles/:id', async (req, res) => {
         lyricsCount: song.lyrics.length,
         lyricsError: null
       });
-      io.emit('sync_state', { songData: song });
+      const cur = getActiveCurrentState(io);
+      if (cur && cur.songId === song.id) {
+        const updatedActive = { ...cur.songData, ...song };
+        if (typeof io.updateCurrentState === 'function') io.updateCurrentState({ songData: updatedActive });
+        io.emit('sync_state', { songId: song.id, songData: updatedActive });
+        io.emit('lyrics_updated', {
+          songId: song.id,
+          lyrics: song.lyrics,
+          lyricsProvider: song.lyricsProvider,
+          isSynced: song.isSynced
+        });
+      }
     }
 
     res.json({
@@ -1882,7 +2163,18 @@ router.post('/retry_lyrics/:id', async (req, res) => {
       lyricsCount: (song.lyrics || []).length,
       lyricsError: song.lyricsError
     });
-    io.emit('sync_state', { songData: song });
+    const cur = getActiveCurrentState(io);
+    if (cur && cur.songId === song.id) {
+      const updatedActive = { ...cur.songData, ...song };
+      if (typeof io.updateCurrentState === 'function') io.updateCurrentState({ songData: updatedActive });
+      io.emit('sync_state', { songId: song.id, songData: updatedActive });
+      io.emit('lyrics_updated', {
+        songId: song.id,
+        lyrics: song.lyrics || [],
+        lyricsProvider: song.lyricsProvider,
+        isSynced: song.isSynced
+      });
+    }
   }
 
   res.json({
@@ -1959,6 +2251,19 @@ router.post('/import_lyrics/:id', async (req, res) => {
   const io = req.app.get('io');
   if (io) {
     io.emit('queue_updated', queue);
+    io.emit('library_updated', readHistory());
+    const cur = getActiveCurrentState(io);
+    if (cur && cur.songId === song.id) {
+      const updatedActive = { ...cur.songData, ...song };
+      if (typeof io.updateCurrentState === 'function') io.updateCurrentState({ songData: updatedActive });
+      io.emit('sync_state', { songId: song.id, songData: updatedActive });
+      io.emit('lyrics_updated', {
+        songId: song.id,
+        lyrics: song.lyrics,
+        lyricsProvider: song.lyricsProvider,
+        isSynced: song.isSynced
+      });
+    }
   }
 
   res.json({
@@ -2323,7 +2628,18 @@ router.post('/edit_lyrics', (req, res) => {
       item.lyrics = lyrics;
     }
   }
-  req.app.get('io').emit('queue_updated', queue);
+  const io = req.app.get('io');
+  if (io) {
+    io.emit('queue_updated', queue);
+    io.emit('library_updated', readHistory());
+    const cur = getActiveCurrentState(io);
+    if (cur && cur.songId === songId) {
+      const updatedActive = { ...cur.songData, lyrics };
+      if (typeof io.updateCurrentState === 'function') io.updateCurrentState({ songData: updatedActive });
+      io.emit('sync_state', { songId, songData: updatedActive });
+      io.emit('lyrics_updated', { songId, lyrics });
+    }
+  }
   
   res.json({ success: true });
 });
@@ -2422,10 +2738,16 @@ router.post('/edit_metadata', upload.single('coverImage'), async (req, res) => {
   }
 
   // Notify all clients to refresh queue and library
-  req.app.get('io').emit('queue_updated', queue);
-  req.app.get('io').emit('library_updated');
-  if (updatedSong) {
-    req.app.get('io').emit('sync_state', { songId: songId, songData: updatedSong });
+  const io = req.app.get('io');
+  if (io) {
+    io.emit('queue_updated', queue);
+    io.emit('library_updated');
+    const cur = getActiveCurrentState(io);
+    if (updatedSong && cur && cur.songId === songId) {
+      const updatedActive = { ...cur.songData, ...updatedSong };
+      if (typeof io.updateCurrentState === 'function') io.updateCurrentState({ songData: updatedActive });
+      io.emit('sync_state', { songId: songId, songData: updatedActive });
+    }
   }
 
   res.json({ success: true, updatedSong });
@@ -2478,7 +2800,19 @@ router.delete('/video/:id', (req, res) => {
   if (io) {
     io.emit('queue_updated', queue);
     io.emit('library_updated', readHistory());
-    io.emit('sync_state', { songId: song.id, songData: { ...song } });
+    const cur = getActiveCurrentState(io);
+    if (cur && cur.songId === song.id) {
+      const updatedActive = {
+        ...cur.songData,
+        ...song,
+        youtubeId: song.youtubeId,
+        youtubeUrl: song.youtubeUrl,
+        videoStatus: song.videoStatus,
+        videoError: song.videoError
+      };
+      if (typeof io.updateCurrentState === 'function') io.updateCurrentState({ songData: updatedActive });
+      io.emit('sync_state', { songId: song.id, songData: updatedActive });
+    }
   }
   res.json({ success: true });
 });

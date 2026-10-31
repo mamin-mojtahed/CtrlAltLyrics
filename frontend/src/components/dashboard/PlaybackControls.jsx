@@ -101,6 +101,7 @@ export default function PlaybackControls() {
   // High-precision sync anchor when audioMaster is display (or remote)
   const syncAnchorRef = useRef({ time: 0, timestamp: performance.now(), isPlaying: false });
   const activeIndexRef = useRef(-1);
+  const isDraggingRef = useRef(false);
 
   // Subscribe to store updates without triggering 10Hz React component re-renders
   useEffect(() => {
@@ -135,7 +136,7 @@ export default function PlaybackControls() {
       }
 
       // If audio is paused and user is not dragging, sync DOM slider & timestamps
-      if (!state.isPlaying && !isDragging) {
+      if (!state.isPlaying && !isDraggingRef.current) {
         const maxDur = typeof state.duration === 'number' && state.duration > 0 ? state.duration : 0;
         const bounded = maxDur > 0 ? Math.min(maxDur, safeTime) : safeTime;
         if (sliderRef.current) sliderRef.current.value = bounded;
@@ -233,7 +234,7 @@ export default function PlaybackControls() {
       const maxDur = typeof duration === 'number' && duration > 0 ? duration : 0;
       const bounded = maxDur > 0 ? Math.min(maxDur, cur) : cur;
 
-      if (sliderRef.current && !isDragging) {
+      if (sliderRef.current && !isDraggingRef.current) {
         sliderRef.current.value = bounded;
       }
       if (timeCurrentRef.current) {
@@ -269,6 +270,7 @@ export default function PlaybackControls() {
 
   const handleSliderInput = (e) => {
     const val = parseFloat(e.target.value) || 0;
+    isDraggingRef.current = true;
     setIsDragging(true);
     setDraggingSlider(true);
     setSliderTime(val);
@@ -302,8 +304,12 @@ export default function PlaybackControls() {
 
   const handleSliderChange = (e) => {
     const target = parseFloat(e.target.value) || 0;
+    isDraggingRef.current = false;
     setIsDragging(false);
     setDraggingSlider(false);
+    setSliderTime(target);
+    if (sliderRef.current) sliderRef.current.value = target;
+    if (timeCurrentRef.current) timeCurrentRef.current.textContent = formatTime(target);
     seek(target);
   };
 

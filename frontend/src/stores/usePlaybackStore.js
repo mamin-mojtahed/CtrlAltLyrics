@@ -270,9 +270,7 @@ export const usePlaybackStore = create((set, get) => ({
     const target = Math.max(0, maxDur > 0 ? Math.min(maxDur, time) : time);
 
     set({ currentTime: target });
-    if (state.audioMaster !== 'display') {
-      audioPlayer.seekAudio(target, state.isPlaying);
-    }
+    audioPlayer.seekAudio(target, state.isPlaying);
     emitPlayerCommand({ command: 'seek', time: target, audioMaster: state.audioMaster });
     emitUpdateState({ currentTime: target });
   },
@@ -488,7 +486,10 @@ export const usePlaybackStore = create((set, get) => ({
         current.selectSong(trackWithQueue, state.isPlaying, incomingQueueId);
       }
     } else if (state.songData && current.currentSong && current.currentSong.id === state.songData.id) {
-      updates.currentSong = { ...current.currentSong, ...state.songData };
+      const mergedLyrics = (Array.isArray(state.songData.lyrics) && state.songData.lyrics.length > 0)
+        ? state.songData.lyrics
+        : (current.currentSong.lyrics || []);
+      updates.currentSong = { ...current.currentSong, ...state.songData, lyrics: mergedLyrics };
     } else if (('songId' in state && state.songId === null) || ('songData' in state && state.songData === null)) {
       audioPlayer.resetAudio();
       updates.currentSong = null;

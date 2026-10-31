@@ -37,7 +37,14 @@ function LyricsDisplay({
     bottomThreshold: 15
   });
 
+  const [seekTimestamp, setSeekTimestamp] = useState(null);
+
+  useEffect(() => {
+    setSeekTimestamp(null);
+  }, [song?.id, song?.queueId]);
+
   const handleLineClick = (time) => {
+    setSeekTimestamp(time);
     if (onSeek) {
       onSeek(time);
     }
@@ -252,11 +259,12 @@ function LyricsDisplay({
       {/* Background YouTube Music Video (centered & cover 16:9, non-interactive, obeys timeline) */}
       {song?.youtubeId && (
         <YouTubeBackgroundPlayer
-          key={song.youtubeId}
+          key={`${song.id || 'song'}_${song.queueId || 'q'}_${song.youtubeId}`}
           youtubeId={song.youtubeId}
           isPlaying={isPlaying}
           isVisible={showMusicVideo}
           syncAnchorRef={syncAnchorRef}
+          seekTimestamp={seekTimestamp}
         />
       )}
 

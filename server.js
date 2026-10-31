@@ -73,6 +73,20 @@ let currentState = {
   showMusicVideo: true
 };
 
+io.getCurrentState = () => currentState;
+io.updateCurrentState = (updater) => {
+  if (typeof updater === 'function') {
+    currentState = updater(currentState);
+  } else if (updater && typeof updater === 'object') {
+    currentState = { ...currentState, ...updater };
+  }
+  return currentState;
+};
+
+app.set('io', io);
+app.set('getCurrentState', io.getCurrentState);
+app.set('updateCurrentState', io.updateCurrentState);
+
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
   socket.emit('sync_state', currentState);
