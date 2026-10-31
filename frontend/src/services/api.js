@@ -215,3 +215,20 @@ export async function saveStemCorrections(id, { inst, lead, back }) {
   return res.json();
 }
 
+export async function getSpotifyCookieStatus() {
+  const res = await fetch('/api/spotify_cookie_status');
+  if (!res.ok) throw new Error(`Failed to check Spotify cookie: ${res.statusText}`);
+  return res.json();
+}
+
+export async function saveSpotifyCookie(cookie) {
+  const res = await fetch('/api/spotify_cookie', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cookie })
+  });
+  if (!res.ok) throw new Error(`Failed to save Spotify cookie: ${res.statusText}`);
+  return res.json();
+}
+
+

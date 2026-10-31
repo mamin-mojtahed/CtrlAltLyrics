@@ -53,6 +53,25 @@ const upload = multer({
 const readHistory = () => JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf-8'));
 const writeHistory = (data) => fs.writeFileSync(HISTORY_FILE, JSON.stringify(data, null, 2));
 
+const SETTINGS_FILE = path.join(__dirname, '..', 'data', 'settings.json');
+const readSettings = () => {
+  try {
+    if (fs.existsSync(SETTINGS_FILE)) {
+      return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    console.error('Error reading settings.json:', e);
+  }
+  return {};
+};
+const writeSettings = (data) => {
+  try {
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(data, null, 2));
+  } catch (e) {
+    console.error('Error writing settings.json:', e);
+  }
+};
+
 // In-memory queue & engine settings
 let queue = [];
 function generateQueueId() {
@@ -305,6 +324,38 @@ router.post('/engine_settings', (req, res) => {
     };
   }
   res.json(currentEngineSettings);
+});
+
+// Spotify session cookie management
+router.get('/spotify_cookie_status', (req, res) => {
+  const settings = readSettings();
+  const cookie = (settings.spotify_cookie || process.env.SPOTIFY_COOKIE_SP_DC || '').trim();
+  const configured = Boolean(cookie.length > 0);
+  const maskedCookie = configured
+    ? (cookie.length > 16 ? `${cookie.substring(0, 8)}...${cookie.substring(cookie.length - 8)}` : '••••••••')
+    : null;
+  res.json({
+    configured,
+    maskedCookie,
+  });
+});
+
+router.post('/spotify_cookie', (req, res) => {
+  const { cookie } = req.body || {};
+  const settings = readSettings();
+  settings.spotify_cookie = typeof cookie === 'string' ? cookie.trim() : '';
+  writeSettings(settings);
+  const configured = Boolean(settings.spotify_cookie.length > 0);
+  const maskedCookie = configured
+    ? (settings.spotify_cookie.length > 16
+        ? `${settings.spotify_cookie.substring(0, 8)}...${settings.spotify_cookie.substring(settings.spotify_cookie.length - 8)}`
+        : '••••••••')
+    : null;
+  res.json({
+    success: true,
+    configured,
+    maskedCookie,
+  });
 });
 
 router.get('/history', (req, res) => {
@@ -1625,9 +1676,16 @@ async function fetchAndProcessLyrics(song, requestedProvider = 'auto', io = null
       if (m) spotifyTrackId = m[1];
     }
     const spotifyTrackArg = spotifyTrackId ? ` --spotify_track_id "${spotifyTrackId}"` : '';
-    const cmd = `${activatePrefix}python "${scriptPath}" --title "${safeTitle}" --artist "${safeArtist}" --query "${safeQuery}" --provider "${requestedProvider}"${spotifyTrackArg}`;
+
+    const settings = readSettings();
+    const spotifyCookie = (settings.spotify_cookie || process.env.SPOTIFY_COOKIE_SP_DC || '').trim();
+    const spotifyCookieArg = spotifyCookie ? ` --spotify_cookie "${spotifyCookie.replace(/["\\]/g, '')}"` : '';
+
+    const cmd = `${activatePrefix}python "${scriptPath}" --title "${safeTitle}" --artist "${safeArtist}" --query "${safeQuery}" --provider "${requestedProvider}"${spotifyTrackArg}${spotifyCookieArg}`;
     
-    const child = spawn('/bin/bash', ['-c', cmd]);
+    const child = spawn('/bin/bash', ['-c', cmd], {
+      env: { ...process.env, SPOTIFY_COOKIE_SP_DC: spotifyCookie }
+    });
 
     let stdoutData = "";
     let stderrData = "";

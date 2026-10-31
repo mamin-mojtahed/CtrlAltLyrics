@@ -51,6 +51,40 @@ export default function ComponentManagerModal() {
   const [lyLoading, setLyLoading] = useState(false);
   const [lyStatusMsg, setLyStatusMsg] = useState(null);
 
+  // Spotify session cookie options
+  const [spotifyCookieStatus, setSpotifyCookieStatus] = useState({ configured: false, maskedCookie: null });
+  const [showCookieInput, setShowCookieInput] = useState(false);
+  const [cookieInputVal, setCookieInputVal] = useState('');
+  const [savingCookie, setSavingCookie] = useState(false);
+  const [cookieMsg, setCookieMsg] = useState(null);
+
+  const checkSpotifyCookie = async () => {
+    try {
+      const status = await api.getSpotifyCookieStatus();
+      setSpotifyCookieStatus(status);
+    } catch (e) {
+      console.error('Failed to load Spotify cookie status:', e);
+    }
+  };
+
+  const handleSaveSpotifyCookie = async (valToSave = null) => {
+    setSavingCookie(true);
+    setCookieMsg(null);
+    try {
+      const val = valToSave !== null ? valToSave : cookieInputVal;
+      const res = await api.saveSpotifyCookie(val);
+      setSpotifyCookieStatus({ configured: res.configured, maskedCookie: res.maskedCookie });
+      setCookieMsg({ type: 'success', text: res.configured ? 'Spotify cookie updated!' : 'Spotify cookie cleared.' });
+      if (!res.configured) setCookieInputVal('');
+      setTimeout(() => setCookieMsg(null), 3500);
+      setShowCookieInput(false);
+    } catch (err) {
+      setCookieMsg({ type: 'error', text: err.message || 'Failed to save cookie' });
+    } finally {
+      setSavingCookie(false);
+    }
+  };
+
   const loadDetails = async () => {
     if (!songId) return;
     setIsLoading(true);
@@ -77,6 +111,7 @@ export default function ComponentManagerModal() {
   useEffect(() => {
     if (songId) {
       loadDetails();
+      checkSpotifyCookie();
     }
   }, [songId]);
 
@@ -614,6 +649,105 @@ export default function ComponentManagerModal() {
                     </button>
                   )}
                 </div>
+
+                {/* Spotify Session Configuration Box */}
+                {lyricsProvider === 'Spotify' && (
+                  <div style={{
+                    marginTop: '0.6rem',
+                    padding: '0.55rem 0.75rem',
+                    borderRadius: '8px',
+                    background: 'rgba(30, 215, 96, 0.08)',
+                    border: '1px solid rgba(30, 215, 96, 0.25)',
+                    fontSize: '0.8rem',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.4rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span style={{
+                          display: 'inline-block',
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          background: spotifyCookieStatus.configured ? '#10b981' : '#f59e0b',
+                        }}></span>
+                        <span style={{ fontWeight: 600, color: spotifyCookieStatus.configured ? '#34d399' : '#fbbf24' }}>
+                          {spotifyCookieStatus.configured
+                            ? `Spotify Session Cookie Active (${spotifyCookieStatus.maskedCookie})`
+                            : 'No Spotify Cookie (Partner Fallback Active)'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{
+                          fontSize: '0.72rem',
+                          padding: '0.2rem 0.5rem',
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          border: '1px solid rgba(255, 255, 255, 0.15)',
+                          color: '#e2e8f0',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => setShowCookieInput(!showCookieInput)}
+                      >
+                        <i className={showCookieInput ? "icon-chevron-up" : "icon-settings"} style={{ marginRight: '0.25rem' }}></i>
+                        {showCookieInput ? 'Hide' : (spotifyCookieStatus.configured ? 'Change sp_dc' : 'Set sp_dc')}
+                      </button>
+                    </div>
+
+                    {showCookieInput && (
+                      <div style={{ marginTop: '0.5rem' }}>
+                        <div style={{ color: '#94a3b8', fontSize: '0.73rem', marginBottom: '0.35rem', lineHeight: 1.35 }}>
+                          Paste your browser's <code>sp_dc</code> cookie to fetch official line-synced Color-Lyrics directly from Spotify. Without a cookie, it seamlessly uses Spotify's official Musixmatch partner.
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                          <input
+                            type="password"
+                            className="text-input"
+                            placeholder={spotifyCookieStatus.configured ? "Paste new sp_dc cookie to replace..." : "Paste sp_dc cookie value here..."}
+                            value={cookieInputVal}
+                            onChange={(e) => setCookieInputVal(e.target.value)}
+                            style={{ flex: '1 1 180px', fontSize: '0.75rem', padding: '0.3rem 0.5rem', minWidth: 0 }}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            style={{ fontSize: '0.75rem', padding: '0.3rem 0.65rem' }}
+                            onClick={() => handleSaveSpotifyCookie()}
+                            disabled={savingCookie}
+                          >
+                            <i className={savingCookie ? "icon-loader-2 icon-spin" : "icon-check"}></i>
+                            {savingCookie ? 'Saving...' : 'Save'}
+                          </button>
+                          {spotifyCookieStatus.configured && (
+                            <button
+                              type="button"
+                              className="btn btn-outline"
+                              style={{ fontSize: '0.75rem', padding: '0.3rem 0.5rem', color: '#f87171' }}
+                              onClick={() => {
+                                setCookieInputVal('');
+                                handleSaveSpotifyCookie('');
+                              }}
+                              disabled={savingCookie}
+                              title="Clear stored Spotify cookie"
+                            >
+                              <i className="icon-trash-2"></i> Clear
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {cookieMsg && (
+                      <div style={{
+                        marginTop: '0.35rem',
+                        fontSize: '0.72rem',
+                        color: cookieMsg.type === 'success' ? '#34d399' : '#f87171',
+                      }}>
+                        {cookieMsg.text}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Subtitle Re-fetch Actions Row */}
                 <div className="component-sub-actions-row">

@@ -238,7 +238,11 @@
     "spotifyUrl": null,
     "spotifyTrackId": null,
     "isSpotify": false,
-    "isUploaded": false
+    "isUploaded": false,
+    "youtubeId": "HKG3TGea7Aw",
+    "youtubeUrl": "https://www.youtube.com/watch?v=HKG3TGea7Aw",
+    "videoStatus": "ready",
+    "videoError": null
   },
   {
     "id": "1544491998",
@@ -438,7 +442,11 @@
     "spotifyUrl": null,
     "spotifyTrackId": null,
     "isSpotify": false,
-    "isUploaded": false
+    "isUploaded": false,
+    "youtubeId": "L_jWHffIx5E",
+    "youtubeUrl": "https://www.youtube.com/watch?v=L_jWHffIx5E",
+    "videoStatus": "ready",
+    "videoError": null
   },
   {
     "id": "1570098305",
@@ -554,8 +562,8 @@
     "spotifyTrackId": "5aTY5Mw6DnDuBQupkCgEiI",
     "isSpotify": true,
     "isUploaded": false,
-    "videoUrl": "/audio/spotify_5aTY5Mw6DnDuBQupkCgEiI/video.mp4",
-    "youtubeUrl": null,
+    "youtubeId": "-bFjYSCjmOA",
+    "youtubeUrl": "https://www.youtube.com/watch?v=-bFjYSCjmOA",
     "videoStatus": "ready",
     "videoError": null
   },
@@ -709,8 +717,8 @@
     "spotifyTrackId": "3FsqlxtjL2EJ5kxwgdj1Yl",
     "isSpotify": true,
     "isUploaded": false,
-    "videoUrl": "/audio/spotify_3FsqlxtjL2EJ5kxwgdj1Yl/video.mp4",
-    "youtubeUrl": null,
+    "youtubeId": "FgJhzDxnA9o",
+    "youtubeUrl": "https://www.youtube.com/watch?v=FgJhzDxnA9o",
     "videoStatus": "ready",
     "videoError": null
   },
@@ -1089,5 +1097,181 @@
     "youtubeId": "fJ9rUzIMcZQ",
     "youtubeUrl": "https://www.youtube.com/watch?v=fJ9rUzIMcZQ",
     "videoStatus": "ready"
+  },
+  {
+    "id": "291160304",
+    "title": "Shahla",
+    "artist": "Habib",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music/12/2a/31/mzi.gnqbjzdo.jpg/100x100bb.jpg",
+    "query": "Shahla Habib",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/291160304/instrumental.mp3",
+      "lead": "/audio/291160304/lead_vocal.mp3",
+      "back": "/audio/291160304/back_vocal.mp3",
+      "full": "/audio/291160304/audio.mp3"
+    },
+    "downloadMethod": "yt-dlp Direct (Title + Artist)",
+    "downloadAttempts": [
+      {
+        "provider": "SpotDL",
+        "status": "failed",
+        "detail": "SpotDL verified search failed on Spotify catalog for \"Shahla Habib\""
+      },
+      {
+        "provider": "yt-dlp Direct (Title + Artist)",
+        "status": "success",
+        "detail": "Audio extracted via YouTube audio search for \"Shahla Habib\""
+      },
+      {
+        "provider": "yt-dlp Title Fallback",
+        "status": "skipped",
+        "detail": "Not needed (acquired via yt-dlp Direct)"
+      }
+    ],
+    "engineSettings": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "isCustom": false
+    },
+    "separationInfo": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "primaryModel": "UVR-MDX-NET-Inst_HQ_3.onnx",
+      "karaokeModel": "5_HP-Karaoke-UVR.pth",
+      "isCustom": false
+    },
+    "lyricsProvider": "LRCLIB (Synced)",
+    "isSynced": true,
+    "hasLyrics": true,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false,
+    "youtubeId": "KifynLgwQro",
+    "youtubeUrl": "https://www.youtube.com/watch?v=KifynLgwQro",
+    "videoStatus": "ready",
+    "videoError": null
+  },
+  {
+    "id": "6793106997",
+    "title": "Kabootare Del",
+    "artist": "Susan Roshan",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/51/c2/01/51c201b8-ee51-38fb-d807-f96ff03af846/26UMGIM89551.rgb.jpg/100x100bb.jpg",
+    "query": "Kabootare Del Susan Roshan",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/6793106997/instrumental.mp3",
+      "lead": "/audio/6793106997/lead_vocal.mp3",
+      "back": "/audio/6793106997/back_vocal.mp3",
+      "full": "/audio/6793106997/audio.mp3"
+    },
+    "downloadMethod": "yt-dlp Direct (Title + Artist)",
+    "downloadAttempts": [
+      {
+        "provider": "SpotDL",
+        "status": "failed",
+        "detail": "SpotDL verified search failed on Spotify catalog for \"Kabootare Del Susan Roshan\""
+      },
+      {
+        "provider": "yt-dlp Direct (Title + Artist)",
+        "status": "success",
+        "detail": "Audio extracted via YouTube audio search for \"Kabootare Del Susan Roshan\""
+      },
+      {
+        "provider": "yt-dlp Title Fallback",
+        "status": "skipped",
+        "detail": "Not needed (acquired via yt-dlp Direct)"
+      }
+    ],
+    "engineSettings": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "isCustom": false
+    },
+    "separationInfo": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "primaryModel": "UVR-MDX-NET-Inst_HQ_3.onnx",
+      "karaokeModel": "5_HP-Karaoke-UVR.pth",
+      "isCustom": false
+    },
+    "lyricsProvider": "Spotify (Color Lyrics)",
+    "isSynced": true,
+    "hasLyrics": true,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false,
+    "youtubeId": "JYOV3ye28ng",
+    "youtubeUrl": "https://www.youtube.com/watch?v=JYOV3ye28ng",
+    "videoStatus": "ready",
+    "videoError": null
+  },
+  {
+    "id": "1502162088",
+    "title": "Nazm",
+    "artist": "Mohsen Namjoo",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/d1/f9/db/d1f9dbe2-9e39-ac44-d2f6-412fa779e9d9/676868225055.jpg/100x100bb.jpg",
+    "query": "Nazm Mohsen Namjoo",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/1502162088/instrumental.mp3",
+      "lead": "/audio/1502162088/lead_vocal.mp3",
+      "back": "/audio/1502162088/back_vocal.mp3",
+      "full": "/audio/1502162088/audio.mp3"
+    },
+    "downloadMethod": "Uploaded",
+    "downloadAttempts": [
+      {
+        "provider": "Local File Reupload",
+        "status": "success",
+        "detail": "Reuploaded \"11 Nazm.mp3\" (10.9 MB)"
+      },
+      {
+        "provider": "SpotDL",
+        "status": "failed",
+        "detail": "SpotDL verified search failed on Spotify catalog for \"Nazm Mohsen Namjoo\""
+      },
+      {
+        "provider": "yt-dlp Direct (Title + Artist)",
+        "status": "success",
+        "detail": "Audio extracted via YouTube audio search for \"Nazm Mohsen Namjoo\""
+      },
+      {
+        "provider": "yt-dlp Title Fallback",
+        "status": "skipped",
+        "detail": "Not needed (acquired via yt-dlp Direct)"
+      }
+    ],
+    "engineSettings": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "isCustom": false
+    },
+    "separationInfo": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "primaryModel": "UVR-MDX-NET-Inst_HQ_3.onnx",
+      "karaokeModel": "5_HP-Karaoke-UVR.pth",
+      "isCustom": false
+    },
+    "lyricsProvider": "LRCLIB (Synced)",
+    "isSynced": true,
+    "hasLyrics": true,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": true,
+    "youtubeId": "uNvpg2hfX3I",
+    "youtubeUrl": "https://www.youtube.com/watch?v=uNvpg2hfX3I",
+    "videoStatus": "ready",
+    "videoError": null
   }
 ]

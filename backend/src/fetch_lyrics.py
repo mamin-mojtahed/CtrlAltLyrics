@@ -80,73 +80,177 @@ def fetch_syncedlyrics_provider(search_term, provider_name, musixmatch_token=Non
         sys.stderr.write(f"Syncedlyrics error for {provider_name}: {e}\n")
     return None
 
-def fetch_spotify_session(title, artist, query, sp_dc_cookie, track_id=None):
-    """Method 3a: Spotify Logged-in Session API using sp_dc cookie"""
-    log_progress("Trying Spotify Session API...")
+def get_spotify_web_token(sp_dc_cookie):
+    """Exchanges sp_dc cookie for a WebPlayer accessToken using Spotify's token endpoint with TOTP validation."""
     if not sp_dc_cookie:
         return None
+
+    client = requests
     try:
-        session = requests.Session()
-        session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'App-Platform': 'WebPlayer'
-        })
-        session.cookies.set('sp_dc', sp_dc_cookie, domain='.spotify.com')
-        
-        token_res = session.get('https://open.spotify.com/get_access_token?reason=transport&productType=web_player', timeout=5)
-        if token_res.status_code != 200:
-            return None
-            
-        token_data = token_res.json()
-        access_token = token_data.get('accessToken')
-        if not access_token:
-            return None
+        from curl_cffi import requests as cffi_requests
+        client = cffi_requests
+    except Exception:
+        pass
+
+    # 1. Modern open.spotify.com/api/token with TOTP
+    try:
+        totp = None
+        version = 61
+        try:
+            from spotapi.client import generate_totp
+            totp, version = generate_totp()
+        except Exception:
+            pass
+
+        params = {
+            'reason': 'transport',
+            'productType': 'web-player',
+        }
+        if totp:
+            params['totp'] = totp
+            params['totpVer'] = str(version)
+            params['totpServer'] = totp
 
         headers = {
-            'Authorization': f'Bearer {access_token}',
+            'Accept': 'application/json',
+            'Accept-Language': 'en-US,en;q=0.9',
             'App-Platform': 'WebPlayer',
-            'User-Agent': 'Mozilla/5.0'
+            'Referer': 'https://open.spotify.com/',
+            'Origin': 'https://open.spotify.com',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         }
-        
-        album_id = None
-        if track_id:
+        cookies = {'sp_dc': sp_dc_cookie}
+
+        kwargs = {'params': params, 'headers': headers, 'cookies': cookies, 'timeout': 8}
+        if hasattr(client, 'Session') and client != requests:
+            kwargs['impersonate'] = 'chrome'
+
+        resp = client.get('https://open.spotify.com/api/token', **kwargs)
+        if resp.status_code == 200:
+            token = resp.json().get('accessToken')
+            if token:
+                return token
+    except Exception as e:
+        sys.stderr.write(f"Spotify token API error: {e}\n")
+
+    # 2. Fallback: legacy get_access_token endpoint
+    try:
+        legacy_url = 'https://open.spotify.com/get_access_token?reason=transport&productType=web-player'
+        headers = {
+            'Accept': 'application/json',
+            'App-Platform': 'WebPlayer',
+            'Referer': 'https://open.spotify.com/',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        }
+        kwargs = {'headers': headers, 'cookies': {'sp_dc': sp_dc_cookie}, 'timeout': 8}
+        if hasattr(client, 'Session') and client != requests:
+            kwargs['impersonate'] = 'chrome'
+        resp = client.get(legacy_url, **kwargs)
+        if resp.status_code == 200:
+            token = resp.json().get('accessToken')
+            if token:
+                return token
+    except Exception as e:
+        sys.stderr.write(f"Spotify legacy token error: {e}\n")
+
+    return None
+
+def load_settings():
+    """Loads configuration settings such as spotify_cookie from backend/data/settings.json."""
+    try:
+        settings_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'settings.json')
+        if os.path.exists(settings_path):
+            with open(settings_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+def search_spotify_track_ids(title, artist, query, access_token=None):
+    """Finds Spotify track ID candidates using SpotAPI Public search or Web API."""
+    search_str = query or f"{title} {artist}".strip()
+    candidates = []
+
+    # Method A: Try spotapi Public search (avoids api.spotify.com rate limits)
+    try:
+        from spotapi.public import Public
+        p = Public()
+        for page in p.song_search(search_str):
+            for item in page:
+                d = item.get('item', {}).get('data', {})
+                tid = d.get('id')
+                if tid and tid not in candidates:
+                    candidates.append(tid)
+                if len(candidates) >= 5:
+                    break
+            break
+    except Exception as e:
+        sys.stderr.write(f"SpotAPI public search error: {e}\n")
+
+    # Method B: Try official search with web token
+    if not candidates and access_token:
+        try:
+            client = requests
             try:
-                track_res = session.get(
-                    f"https://api.spotify.com/v1/tracks/{track_id}",
-                    headers=headers,
-                    timeout=5
-                )
-                if track_res.status_code == 200:
-                    album_id = track_res.json().get('album', {}).get('id')
+                from curl_cffi import requests as cffi_requests
+                client = cffi_requests
             except Exception:
                 pass
 
-        if not album_id:
-            search_term = query or f"{title} {artist}".strip()
-            search_res = session.get(
-                f"https://api.spotify.com/v1/search?q={urllib.parse.quote(search_term)}&type=track&limit=1",
-                headers=headers,
-                timeout=5
-            )
-            if search_res.status_code != 200:
-                return None
-                
-            tracks = search_res.json().get('tracks', {}).get('items', [])
-            if not tracks:
-                return None
-                
-            track_id = tracks[0]['id']
-            album_id = tracks[0]['album']['id']
+            headers = {
+                'Authorization': f'Bearer {access_token}',
+                'Accept': 'application/json',
+                'App-Platform': 'WebPlayer',
+                'Referer': 'https://open.spotify.com/',
+            }
+            url = f"https://api.spotify.com/v1/search?q={urllib.parse.quote(search_str)}&type=track&limit=5"
+            kwargs = {'headers': headers, 'timeout': 5}
+            if hasattr(client, 'Session') and client != requests:
+                kwargs['impersonate'] = 'chrome'
+            sr = client.get(url, **kwargs)
+            if sr.status_code == 200:
+                tracks = sr.json().get('tracks', {}).get('items', [])
+                for t in tracks:
+                    tid = t.get('id')
+                    if tid and tid not in candidates:
+                        candidates.append(tid)
+        except Exception:
+            pass
 
-        lyrics_res = session.get(
-            f"https://spclient.wg.spotify.com/color-lyrics/v2/album/{album_id}/track/{track_id}?format=json",
-            headers=headers,
-            timeout=5
-        )
-        
-        if lyrics_res.status_code == 200:
-            data = lyrics_res.json()
+    return candidates
+
+def fetch_spotify_color_lyrics(track_id, access_token):
+    """Fetches color-lyrics from spclient.wg.spotify.com for track_id."""
+    if not track_id or not access_token:
+        return None
+
+    client = requests
+    try:
+        from curl_cffi import requests as cffi_requests
+        client = cffi_requests
+    except Exception:
+        pass
+
+    headers = {
+        'Authorization': f'Bearer {access_token}',
+        'App-Platform': 'WebPlayer',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+    }
+
+    url = f"https://spclient.wg.spotify.com/color-lyrics/v2/track/{track_id}?format=json&vocalRemoval=false"
+    kwargs = {'headers': headers, 'timeout': 8}
+    if hasattr(client, 'Session') and client != requests:
+        kwargs['impersonate'] = 'chrome'
+
+    try:
+        lr = client.get(url, **kwargs)
+        if lr.status_code == 200:
+            data = lr.json()
             lines = data.get('lyrics', {}).get('lines', [])
+            sync_type = data.get('lyrics', {}).get('syncType', '')
+            is_synced = (sync_type == 'LINE_SYNCED' or sync_type == 'SYLLABLE_SYNCED')
+
             lrc_lines = []
             for l in lines:
                 start_ms = int(l.get('startTimeMs', 0))
@@ -156,7 +260,42 @@ def fetch_spotify_session(title, artist, query, sp_dc_cookie, track_id=None):
                 if words:
                     lrc_lines.append(f"[{mins:02d}:{secs:05.2f}] {words}")
             if lrc_lines:
-                return {'provider': 'Spotify (Synced Session)', 'lrc': '\n'.join(lrc_lines), 'is_synced': True}
+                return {
+                    'provider': 'Spotify (Color Lyrics)',
+                    'lrc': '\n'.join(lrc_lines),
+                    'is_synced': is_synced,
+                    'spotify_track_id': track_id
+                }
+    except Exception as e:
+        sys.stderr.write(f"Color-lyrics error: {e}\n")
+
+    return None
+
+def fetch_spotify_session(title, artist, query, sp_dc_cookie, track_id=None):
+    """Method 3a: Spotify Logged-in Session API using sp_dc cookie and color-lyrics"""
+    log_progress("Trying Spotify Color-Lyrics API...")
+    if not sp_dc_cookie:
+        return None
+
+    try:
+        access_token = get_spotify_web_token(sp_dc_cookie)
+        if not access_token:
+            log_progress("Spotify session token failed; checking fallback...")
+            return None
+
+        candidates = []
+        if track_id:
+            candidates.append(track_id)
+
+        searched = search_spotify_track_ids(title, artist, query, access_token)
+        for tid in searched:
+            if tid not in candidates:
+                candidates.append(tid)
+
+        for tid in candidates:
+            result = fetch_spotify_color_lyrics(tid, access_token)
+            if result:
+                return result
     except Exception as e:
         sys.stderr.write(f"Spotify session error: {e}\n")
 
@@ -203,8 +342,10 @@ def main():
     artist = args.artist.strip()
     query = args.query.strip()
     search_term = query or f"{title} {artist}".strip()
-    sp_dc = args.spotify_cookie.strip() or os.environ.get("SPOTIFY_COOKIE_SP_DC", "")
-    mxm_token = args.musixmatch_token.strip() or os.environ.get("MUSIXMATCH_USER_TOKEN", "")
+
+    settings = load_settings()
+    sp_dc = args.spotify_cookie.strip() or os.environ.get("SPOTIFY_COOKIE_SP_DC", "") or settings.get("spotify_cookie", "").strip()
+    mxm_token = args.musixmatch_token.strip() or os.environ.get("MUSIXMATCH_USER_TOKEN", "") or settings.get("musixmatch_token", "").strip()
 
     spotify_track_id = args.spotify_track_id.strip()
 
@@ -215,28 +356,85 @@ def main():
         p = args.provider.lower()
         if p == "lrclib":
             result = fetch_lrclib(title, artist, query)
+            if result:
+                attempts.append({'provider': args.provider, 'status': 'success', 'detail': f"Loaded via {result['provider']}"})
+            else:
+                attempts.append({'provider': args.provider, 'status': 'failed', 'detail': 'No match found'})
         elif p == "musixmatch":
             result = fetch_syncedlyrics_provider(search_term, 'Musixmatch', mxm_token)
+            if result:
+                attempts.append({'provider': args.provider, 'status': 'success', 'detail': f"Loaded via {result['provider']}"})
+            else:
+                attempts.append({'provider': args.provider, 'status': 'failed', 'detail': 'No synced lyrics found on Musixmatch'})
         elif p == "netease":
             result = fetch_syncedlyrics_provider(search_term, 'NetEase')
+            if result:
+                attempts.append({'provider': args.provider, 'status': 'success', 'detail': f"Loaded via {result['provider']}"})
+            else:
+                attempts.append({'provider': args.provider, 'status': 'failed', 'detail': 'No synced lyrics found on NetEase'})
         elif p == "megalobiz":
             result = fetch_syncedlyrics_provider(search_term, 'Megalobiz')
+            if result:
+                attempts.append({'provider': args.provider, 'status': 'success', 'detail': f"Loaded via {result['provider']}"})
+            else:
+                attempts.append({'provider': args.provider, 'status': 'failed', 'detail': 'No synced lyrics found on Megalobiz'})
         elif p == "deezer":
             result = fetch_syncedlyrics_provider(search_term, 'Deezer')
+            if result:
+                attempts.append({'provider': args.provider, 'status': 'success', 'detail': f"Loaded via {result['provider']}"})
+            else:
+                attempts.append({'provider': args.provider, 'status': 'failed', 'detail': 'No synced lyrics found on Deezer'})
         elif p == "lyricsify":
             result = fetch_syncedlyrics_provider(search_term, 'Lyricsify')
+            if result:
+                attempts.append({'provider': args.provider, 'status': 'success', 'detail': f"Loaded via {result['provider']}"})
+            else:
+                attempts.append({'provider': args.provider, 'status': 'failed', 'detail': 'No synced lyrics found on Lyricsify'})
         elif p == "spotify":
-            result = fetch_spotify_session(title, artist, query, sp_dc, spotify_track_id)
+            # 1. Native Spotify Color-Lyrics via sp_dc session
+            if sp_dc:
+                res_sp = fetch_spotify_session(title, artist, query, sp_dc, spotify_track_id)
+                if res_sp:
+                    attempts.append({'provider': 'Spotify (Color Lyrics)', 'status': 'success', 'detail': 'Loaded native line-synced lyrics from Spotify'})
+                    result = res_sp
+                else:
+                    attempts.append({'provider': 'Spotify (Color Lyrics)', 'status': 'failed', 'detail': 'Track lacks color-lyrics on Spotify; falling back to Spotify partner'})
+            else:
+                attempts.append({'provider': 'Spotify (Color Lyrics)', 'status': 'skipped', 'detail': 'No sp_dc session cookie configured; using Spotify official partner fallback'})
+
+            # 2. Universal Spotify Partner Fallback: Spotify's official lyrics partner is Musixmatch
+            if not result:
+                res_mxm = fetch_syncedlyrics_provider(search_term, 'Musixmatch', mxm_token)
+                if res_mxm:
+                    attempts.append({'provider': 'Musixmatch (Spotify Partner Fallback)', 'status': 'success', 'detail': 'Found synced lyrics via Musixmatch'})
+                    result = res_mxm
+                else:
+                    attempts.append({'provider': 'Musixmatch (Spotify Partner Fallback)', 'status': 'failed', 'detail': 'No synced match on Musixmatch'})
+
+            # 3. LRCLIB Synced / Plain Fallback
+            if not result:
+                res_lrc = fetch_lrclib(title, artist, query)
+                if res_lrc:
+                    attempts.append({'provider': 'LRCLIB (Fallback)', 'status': 'success', 'detail': f"Found {'synced' if res_lrc.get('is_synced') else 'plain'} lyrics via LRCLIB"})
+                    result = res_lrc
+                else:
+                    attempts.append({'provider': 'LRCLIB (Fallback)', 'status': 'failed', 'detail': 'No match found on LRCLIB'})
+
+            # 4. Genius Plain Text Fallback
+            if not result:
+                res_genius = fetch_genius_or_plain(title, artist, query)
+                if res_genius:
+                    attempts.append({'provider': 'Genius / Plain (Fallback)', 'status': 'success', 'detail': 'Found plain text fallback'})
+                    result = res_genius
+                else:
+                    attempts.append({'provider': 'Genius / Plain (Fallback)', 'status': 'failed', 'detail': 'No plain lyrics found'})
+
         elif p == "genius":
             result = fetch_genius_or_plain(title, artist, query)
-        
-        if result:
-            attempts.append({'provider': args.provider, 'status': 'success', 'detail': f"Loaded via {result['provider']}"})
-        else:
-            detail = 'No match found'
-            if p == "spotify" and not sp_dc:
-                detail = 'No sp_dc session cookie configured (SPOTIFY_COOKIE_SP_DC)'
-            attempts.append({'provider': args.provider, 'status': 'failed', 'detail': detail})
+            if result:
+                attempts.append({'provider': args.provider, 'status': 'success', 'detail': f"Loaded via {result['provider']}"})
+            else:
+                attempts.append({'provider': args.provider, 'status': 'failed', 'detail': 'No match found'})
     else:
         # Full sequential fallback chain with attempts tracking
         # 1. LRCLIB
@@ -250,7 +448,21 @@ def main():
         else:
             attempts.append({'provider': 'LRCLIB', 'status': 'failed', 'detail': 'No match found'})
 
-        # 2. Musixmatch
+        # 2. Spotify Session (Color Lyrics)
+        if not result or not result.get('is_synced'):
+            if sp_dc:
+                res_sp = fetch_spotify_session(title, artist, query, sp_dc, spotify_track_id)
+                if res_sp:
+                    attempts.append({'provider': 'Spotify Session', 'status': 'success', 'detail': 'Found Spotify color-lyrics'})
+                    result = res_sp
+                else:
+                    attempts.append({'provider': 'Spotify Session', 'status': 'failed', 'detail': 'No color-lyrics found'})
+            else:
+                attempts.append({'provider': 'Spotify Session', 'status': 'skipped', 'detail': 'No sp_dc session cookie configured'})
+        else:
+            attempts.append({'provider': 'Spotify Session', 'status': 'skipped', 'detail': 'Skipped (synced lyrics already found)'})
+
+        # 3. Musixmatch
         if not result or not result.get('is_synced'):
             res_mxm = fetch_syncedlyrics_provider(search_term, 'Musixmatch', mxm_token)
             if res_mxm:
