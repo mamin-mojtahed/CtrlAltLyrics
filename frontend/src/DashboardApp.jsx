@@ -19,6 +19,7 @@ import ComponentManagerModal from './components/modals/ComponentManagerModal';
 import MetadataModal from './components/modals/MetadataModal';
 import LyricsSyncModal from './components/modals/LyricsSyncModal';
 import StemEditorModal from './components/modals/StemEditorModal';
+import { extractYoutubeId } from './utils/youtube';
 
 export default function DashboardApp() {
   const syncFromSocket = usePlaybackStore((state) => state.syncFromSocket);
@@ -171,7 +172,8 @@ export default function DashboardApp() {
             usePlaybackStore.getState().endQueue();
           }
         } else if (currentSong) {
-          const queueItem = data.find(s => (currentQueueId && String(s.queueId) === String(currentQueueId)) || s.id === currentSong.id);
+          const currentSongId = currentSong.id || currentSong.songId;
+          const queueItem = data.find(s => (currentQueueId && String(s.queueId) === String(currentQueueId)) || s.id === currentSongId || s.songId === currentSongId);
           if (queueItem) {
             const hasNoLyrics = !Array.isArray(currentSong.lyrics) || currentSong.lyrics.length === 0;
             if (hasNoLyrics && Array.isArray(queueItem.lyrics) && queueItem.lyrics.length > 0) {
@@ -184,10 +186,11 @@ export default function DashboardApp() {
                 }
               });
             } else if (hasNoLyrics && (queueItem.status === 'ready' || queueItem.hasLyrics)) {
-              fetchSong(currentSong.id).then(fresh => {
+              fetchSong(currentSongId).then(fresh => {
                 if (fresh && Array.isArray(fresh.lyrics) && fresh.lyrics.length > 0) {
                   const state = usePlaybackStore.getState();
-                  if (state.currentSong && state.currentSong.id === fresh.id) {
+                  const stateSongId = state.currentSong?.id || state.currentSong?.songId;
+                  if (state.currentSong && (stateSongId === fresh.id || stateSongId === fresh.songId)) {
                     usePlaybackStore.setState({
                       currentSong: {
                         ...state.currentSong,
@@ -201,13 +204,15 @@ export default function DashboardApp() {
               }).catch(() => {});
             }
 
-            if (!currentSong.youtubeId && queueItem.youtubeId) {
+            const currentYt = currentSong.youtubeId || currentSong.youtube_id || extractYoutubeId(currentSong.youtubeUrl) || extractYoutubeId(currentSong.youtube_url);
+            const queueYt = queueItem.youtubeId || queueItem.youtube_id || extractYoutubeId(queueItem.youtubeUrl) || extractYoutubeId(queueItem.youtube_url);
+            if (!currentYt && queueYt) {
               usePlaybackStore.setState({
                 currentSong: {
                   ...currentSong,
-                  youtubeId: queueItem.youtubeId,
-                  youtubeUrl: queueItem.youtubeUrl,
-                  videoStatus: queueItem.videoStatus
+                  youtubeId: queueYt,
+                  youtubeUrl: queueItem.youtubeUrl || `https://www.youtube.com/watch?v=${queueYt}`,
+                  videoStatus: queueItem.videoStatus || 'ready'
                 }
               });
             }

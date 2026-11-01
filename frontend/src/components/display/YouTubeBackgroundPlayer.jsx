@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, memo } from 'react';
 import socket from '../../services/socket';
+import { extractYoutubeId } from '../../utils/youtube';
 
 function YouTubeBackgroundPlayer({
   youtubeId,
@@ -8,10 +9,14 @@ function YouTubeBackgroundPlayer({
   syncAnchorRef = null,
   seekTimestamp = null
 }) {
+  const cleanId = extractYoutubeId(youtubeId) || (typeof youtubeId === 'string' && /^[a-zA-Z0-9_-]{11}$/.test(youtubeId.trim()) ? youtubeId.trim() : null);
+
   const containerRef = useRef(null);
   const videoRef = useRef(null);
   const [hasPlaybackStarted, setHasPlaybackStarted] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const retryCountRef = useRef(0);
+  const retryTimeoutRef = useRef(null);
 
   const isPlayingRef = useRef(isPlaying);
   isPlayingRef.current = isPlaying;
@@ -21,6 +26,37 @@ function YouTubeBackgroundPlayer({
   const lastSeekTimeRef = useRef(0);
   const lastPausedTargetTimeRef = useRef(null);
   const prevSeekTimestampRef = useRef(seekTimestamp);
+
+  // Reset retry and error state whenever the YouTube ID changes
+  useEffect(() => {
+    setHasError(false);
+    setHasPlaybackStarted(false);
+    retryCountRef.current = 0;
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
+  }, [cleanId]);
+
+  // Clean up any pending retry timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Self-heal error state when user plays or replays
+  useEffect(() => {
+    if (hasError && isPlaying) {
+      setHasError(false);
+      retryCountRef.current = 0;
+      if (videoRef.current) {
+        videoRef.current.load();
+      }
+    }
+  }, [isPlaying, hasError]);
 
   // High-precision sync time retrieval from sync anchor
   const getCurrentSyncTime = () => {
@@ -33,7 +69,8 @@ function YouTubeBackgroundPlayer({
 
   const syncVideoPlayback = (targetTime, forceSeek = false) => {
     const v = videoRef.current;
-    if (!v) return;
+    // Wait until metadata is ready (readyState >= 1) before scrubbing or playing
+    if (!v || v.readyState < 1) return;
 
     try {
       const cur = v.currentTime || 0;
@@ -41,7 +78,11 @@ function YouTubeBackgroundPlayer({
 
       if (forceSeek || drift > 0.45) {
         lastSeekTimeRef.current = performance.now();
-        v.currentTime = targetTime;
+        if (v.duration && targetTime >= v.duration) {
+          v.currentTime = v.duration;
+        } else {
+          v.currentTime = Math.max(0, targetTime);
+        }
       }
 
       if (isPlayingRef.current && isVisibleRef.current) {
@@ -58,13 +99,18 @@ function YouTubeBackgroundPlayer({
 
   // Socket player command listener for seeks
   useEffect(() => {
-    if (!youtubeId) return;
+    if (!cleanId) return;
 
     const handlePlayerCommand = (cmd) => {
       const v = videoRef.current;
       if (!v) return;
 
       if (cmd && cmd.command === 'seek' && typeof cmd.time === 'number') {
+        if (hasError) {
+          setHasError(false);
+          retryCountRef.current = 0;
+          v.load();
+        }
         syncVideoPlayback(cmd.time, true);
         setHasPlaybackStarted(true);
       }
@@ -74,15 +120,15 @@ function YouTubeBackgroundPlayer({
     return () => {
       socket.off('player_command', handlePlayerCommand);
     };
-  }, [youtubeId]);
+  }, [cleanId, hasError]);
 
   // Periodic drift synchronization loop
   useEffect(() => {
-    if (!youtubeId) return;
+    if (!cleanId) return;
 
     const interval = setInterval(() => {
       const v = videoRef.current;
-      if (!v) return;
+      if (!v || v.readyState < 1) return;
 
       const targetTime = getCurrentSyncTime();
 
@@ -92,7 +138,11 @@ function YouTubeBackgroundPlayer({
         }
         const drift = Math.abs(v.currentTime - targetTime);
         if (drift > 0.6) {
-          v.currentTime = targetTime;
+          if (v.duration && targetTime >= v.duration) {
+            v.currentTime = v.duration;
+          } else {
+            v.currentTime = Math.max(0, targetTime);
+          }
         }
       } else if (isVisibleRef.current) {
         if (!v.paused) {
@@ -101,19 +151,23 @@ function YouTubeBackgroundPlayer({
         // When paused, seek if user scrubbed or jumped lines
         if (lastPausedTargetTimeRef.current === null || Math.abs(targetTime - lastPausedTargetTimeRef.current) > 0.15) {
           lastPausedTargetTimeRef.current = targetTime;
-          v.currentTime = targetTime;
+          if (v.duration && targetTime >= v.duration) {
+            v.currentTime = v.duration;
+          } else {
+            v.currentTime = Math.max(0, targetTime);
+          }
           setHasPlaybackStarted(true);
         }
       }
     }, 150);
 
     return () => clearInterval(interval);
-  }, [youtubeId]);
+  }, [cleanId]);
 
   // React immediately to play/pause state changes
   useEffect(() => {
     const v = videoRef.current;
-    if (!v) return;
+    if (!v || v.readyState < 1) return;
 
     const targetTime = getCurrentSyncTime();
     lastPausedTargetTimeRef.current = isPlaying ? null : targetTime;
@@ -131,9 +185,14 @@ function YouTubeBackgroundPlayer({
     }
     prevSeekTimestampRef.current = seekTimestamp;
 
+    if (hasError && videoRef.current) {
+      setHasError(false);
+      retryCountRef.current = 0;
+      videoRef.current.load();
+    }
     syncVideoPlayback(seekTimestamp, true);
     setHasPlaybackStarted(true);
-  }, [seekTimestamp]);
+  }, [seekTimestamp, hasError]);
 
   // When metadata loads: seek to current sync position and play or pause
   const handleLoadedMetadata = () => {
@@ -144,14 +203,27 @@ function YouTubeBackgroundPlayer({
     v.volume = 0;
 
     const startSeconds = getCurrentSyncTime();
-    v.currentTime = startSeconds;
+    try {
+      if (v.duration && startSeconds >= v.duration) {
+        v.currentTime = v.duration;
+      } else {
+        v.currentTime = Math.max(0, startSeconds);
+      }
+    } catch (e) {}
 
     if (isPlayingRef.current && isVisibleRef.current) {
       v.play().catch(() => {});
     } else {
       v.pause();
     }
+  };
+
+  const handleCanPlay = () => {
     setHasPlaybackStarted(true);
+    const v = videoRef.current;
+    if (v && isPlayingRef.current && isVisibleRef.current && v.paused) {
+      v.play().catch(() => {});
+    }
   };
 
   const handleEnded = () => {
@@ -164,15 +236,37 @@ function YouTubeBackgroundPlayer({
   };
 
   const handleError = (e) => {
-    console.warn('[NativeVideoPlayer] Stream load error, trying fallback:', e);
+    const v = videoRef.current;
+    const mediaError = v?.error;
+    console.warn('[NativeVideoPlayer] Stream load event error:', mediaError?.code, mediaError?.message || e);
+
+    // Code 1 is MEDIA_ERR_ABORTED: the user/browser aborted fetching (e.g. seeking or navigating).
+    if (mediaError && mediaError.code === 1) {
+      return;
+    }
+
+    // Exponential backoff retry (up to 3 retries: 800ms, 1600ms, 2400ms)
+    if (retryCountRef.current < 3) {
+      retryCountRef.current += 1;
+      const delay = 800 * retryCountRef.current;
+      console.log(`[NativeVideoPlayer] Retrying stream load (attempt ${retryCountRef.current}/3) in ${delay}ms...`);
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.load();
+        }
+      }, delay);
+      return;
+    }
+
     setHasError(true);
   };
 
-  if (hasError || !youtubeId) {
+  if (hasError || !cleanId) {
     return null;
   }
 
-  const streamSrc = `/api/video_stream/${youtubeId}`;
+  const streamSrc = `/api/video_stream/${cleanId}`;
 
   return (
     <div
@@ -199,7 +293,7 @@ function YouTubeBackgroundPlayer({
           playsInline
           preload="auto"
           onLoadedMetadata={handleLoadedMetadata}
-          onCanPlay={() => setHasPlaybackStarted(true)}
+          onCanPlay={handleCanPlay}
           onEnded={handleEnded}
           onError={handleError}
           style={{

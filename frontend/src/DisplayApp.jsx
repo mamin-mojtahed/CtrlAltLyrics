@@ -7,6 +7,7 @@ import LyricsDisplay from './components/display/LyricsDisplay';
 import { useDisplayResizer } from './hooks/useDisplayResizer';
 import { extractColorsFromSongCover, getHighResAlbumArt } from './utils/themeColors';
 import { prepareLyricsForDisplay } from './utils/lyricsWrapping';
+import { extractYoutubeId } from './utils/youtube';
 
 export default function DisplayApp() {
   const [song, setSong] = useState(null);
@@ -54,16 +55,24 @@ export default function DisplayApp() {
       if (!state) return;
 
       if (state.songData) {
-        const queueId = state.queueId || state.songData.queueId || (songRef.current?.id === (state.songData.id || state.songId) ? songRef.current.queueId : null);
+        const resolvedSongId = state.songData.id || state.songData.songId || state.songId;
+        const currentSongId = songRef.current?.id || songRef.current?.songId;
+        const queueId = state.queueId || state.songData.queueId || (currentSongId === resolvedSongId ? songRef.current.queueId : null);
         const incomingLyrics = Array.isArray(state.songData.lyrics) && state.songData.lyrics.length > 0 ? state.songData.lyrics : null;
         const currentLyrics = songRef.current?.lyrics || [];
+        const resolvedYtId = state.songData.youtubeId || state.songData.youtube_id || extractYoutubeId(state.songData.youtubeUrl) || extractYoutubeId(state.songData.youtube_url) || null;
+        const resolvedYtUrl = state.songData.youtubeUrl || state.songData.youtube_url || (resolvedYtId ? `https://www.youtube.com/watch?v=${resolvedYtId}` : null);
+
         const fullSong = {
           ...state.songData,
+          id: resolvedSongId,
+          youtubeId: resolvedYtId,
+          youtubeUrl: resolvedYtUrl,
           queueId,
           lyrics: incomingLyrics || currentLyrics
         };
         const isNewTrack = !songRef.current ||
-          songRef.current.id !== fullSong.id ||
+          currentSongId !== resolvedSongId ||
           (queueId && songRef.current.queueId && String(songRef.current.queueId) !== String(queueId));
 
         if (isNewTrack) {
@@ -262,9 +271,11 @@ export default function DisplayApp() {
 
         // If currently playing song is missing lyrics or video, check if queue item has resolved
         if (songRef.current) {
+          const currentSongId = songRef.current.id || songRef.current.songId;
           const currentInQueue = q.find(item =>
             (songRef.current.queueId && item.queueId === songRef.current.queueId) ||
-            item.id === songRef.current.id
+            item.id === currentSongId ||
+            item.songId === currentSongId
           );
           if (currentInQueue) {
             const hasNoLyrics = !Array.isArray(songRef.current.lyrics) || songRef.current.lyrics.length === 0;
@@ -281,10 +292,10 @@ export default function DisplayApp() {
                 return updated;
               });
             } else if (hasNoLyrics && (currentInQueue.status === 'ready' || currentInQueue.hasLyrics)) {
-              fetchSong(songRef.current.id).then(fresh => {
-                if (fresh && Array.isArray(fresh.lyrics) && fresh.lyrics.length > 0 && songRef.current?.id === fresh.id) {
+              fetchSong(currentSongId).then(fresh => {
+                if (fresh && Array.isArray(fresh.lyrics) && fresh.lyrics.length > 0 && (songRef.current?.id === fresh.id || songRef.current?.songId === fresh.id)) {
                   setSong(prev => {
-                    if (!prev || prev.id !== fresh.id) return prev;
+                    if (!prev || (prev.id !== fresh.id && prev.songId !== fresh.id)) return prev;
                     const updated = {
                       ...prev,
                       lyrics: fresh.lyrics,
@@ -298,14 +309,19 @@ export default function DisplayApp() {
               }).catch(() => {});
             }
 
-            if (!songRef.current.youtubeId && currentInQueue.youtubeId) {
+            const currentYt = songRef.current.youtubeId || songRef.current.youtube_id || extractYoutubeId(songRef.current.youtubeUrl) || extractYoutubeId(songRef.current.youtube_url);
+            const queueYt = currentInQueue.youtubeId || currentInQueue.youtube_id || extractYoutubeId(currentInQueue.youtubeUrl) || extractYoutubeId(currentInQueue.youtube_url);
+            if (!currentYt && queueYt) {
               setSong(prev => {
-                if (!prev || prev.id !== currentInQueue.id) return prev;
+                if (!prev) return prev;
+                const prevId = prev.id || prev.songId;
+                const inQueueId = currentInQueue.id || currentInQueue.songId;
+                if (prevId !== inQueueId) return prev;
                 const updated = {
                   ...prev,
-                  youtubeId: currentInQueue.youtubeId,
-                  youtubeUrl: currentInQueue.youtubeUrl,
-                  videoStatus: currentInQueue.videoStatus
+                  youtubeId: queueYt,
+                  youtubeUrl: currentInQueue.youtubeUrl || `https://www.youtube.com/watch?v=${queueYt}`,
+                  videoStatus: currentInQueue.videoStatus || 'ready'
                 };
                 songRef.current = updated;
                 return updated;
@@ -678,8 +694,10 @@ export default function DisplayApp() {
         return;
       }
 
+      const key = e.key.toLowerCase();
+
       // 'i': Toggle song info sidebar
-      if (e.key === 'i' || e.key === 'I') {
+      if (key === 'i') {
         e.preventDefault();
         setSidebarOpen(prev => !prev);
         return;
@@ -697,7 +715,6 @@ export default function DisplayApp() {
       }
 
       // Stem Volume & Mute Shortcuts
-      const key = e.key.toLowerCase();
       const step = e.shiftKey ? 0.15 : 0.05;
       const v = volumesRef.current;
 

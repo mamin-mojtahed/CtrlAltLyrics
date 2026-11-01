@@ -3,6 +3,7 @@ import socket from '../../services/socket';
 import VisualizerCanvas from './VisualizerCanvas';
 import YouTubeBackgroundPlayer from './YouTubeBackgroundPlayer';
 import { useScrollShadows } from '../../hooks/useScrollShadows';
+import { extractYoutubeId } from '../../utils/youtube';
 import {
   isRtlText,
   isInstrumentalText,
@@ -254,13 +255,16 @@ function LyricsDisplay({
     }
   }
 
+  const activeYtId = song?.youtubeId || song?.youtube_id || extractYoutubeId(song?.youtubeUrl) || extractYoutubeId(song?.youtube_url);
+  const stableSongKey = song?.id || song?.songId || 'song';
+
   return (
     <main className="lyrics-main-content" ref={mainRef}>
       {/* Background YouTube Music Video (centered & cover 16:9, non-interactive, obeys timeline) */}
-      {song?.youtubeId && (
+      {activeYtId && (
         <YouTubeBackgroundPlayer
-          key={`${song.id || 'song'}_${song.queueId || 'q'}_${song.youtubeId}`}
-          youtubeId={song.youtubeId}
+          key={`${stableSongKey}_${activeYtId}`}
+          youtubeId={activeYtId}
           isPlaying={isPlaying}
           isVisible={showMusicVideo}
           syncAnchorRef={syncAnchorRef}

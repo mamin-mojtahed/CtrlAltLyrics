@@ -3,6 +3,7 @@ const { exec, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
+const http = require('http');
 const axios = require('axios');
 const util = require('util');
 const multer = require('multer');
@@ -101,7 +102,7 @@ function extractYoutubeId(urlOrId) {
   if (!urlOrId || typeof urlOrId !== 'string') return null;
   const str = urlOrId.trim();
   if (/^[a-zA-Z0-9_-]{11}$/.test(str)) return str;
-  const match = str.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/i);
+  const match = str.match(/(?:youtu\.be\/|(?:www\.|music\.)?youtube\.com\/(?:embed\/|v\/|shorts\/|live\/|watch\?v=|watch\?.+&v=))([\w-]{11})/i);
   return match ? match[1] : null;
 }
 
@@ -1205,6 +1206,8 @@ async function extractVideoStreamUrl(youtubeId, forceFresh = false) {
     if (cached && cached.expiresAt > Date.now()) {
       return cached.url;
     }
+  } else {
+    videoStreamCache.delete(cleanId);
   }
 
   if (activeExtractionPromises.has(cleanId)) {
@@ -1216,23 +1219,23 @@ async function extractVideoStreamUrl(youtubeId, forceFresh = false) {
     const activatePrefix = venvActivate ? `source "${venvActivate}" && ` : '';
     const ytdlpPath = getYtDlpExecutablePath();
 
-    // Prefer fast, hardware-accelerated 720p H.264 (avc1) or MP4 video for smooth hardware decoding
-    const format = 'bestvideo[height<=720][vcodec^=avc1]/bestvideo[height<=720][ext=mp4]/best[height<=720]/best';
-    const cmd = `${activatePrefix}"${ytdlpPath}" --no-playlist --no-warnings --no-update --js-runtimes node -g -f "${format}" "https://www.youtube.com/watch?v=${cleanId}"`;
+    // Prefer reliable Android streams (720p/360p MP4 or AVC1) to avoid 403 PO-token blocks on web/VR clients
+    const format = 'best[height<=720][ext=mp4]/bestvideo[height<=720][ext=mp4]/22/18/best[height<=720]/bestvideo/best';
+    const cmd = `${activatePrefix}"${ytdlpPath}" --no-playlist --no-warnings --no-update --extractor-args "youtube:player_client=android" -g -f "${format}" "https://www.youtube.com/watch?v=${cleanId}"`;
 
     console.log(`[VideoStream] Extracting direct stream URL for ${cleanId}...`);
     const startTime = Date.now();
-    const { stdout } = await execPromise(cmd, { timeout: 15000 });
+    const { stdout } = await execPromise(cmd, { timeout: 30000 });
     const streamUrl = (stdout || '').trim().split(/\r?\n/)[0];
     if (!streamUrl || !streamUrl.startsWith('http')) {
       throw new Error(`yt-dlp failed to return stream URL for ${cleanId}`);
     }
 
     console.log(`[VideoStream] Extracted direct stream URL for ${cleanId} in ${Date.now() - startTime}ms`);
-    // Cache for 4 hours
+    // Cache for 2 hours
     videoStreamCache.set(cleanId, {
       url: streamUrl,
-      expiresAt: Date.now() + 4 * 60 * 60 * 1000
+      expiresAt: Date.now() + 2 * 60 * 60 * 1000
     });
     return streamUrl;
   })();
@@ -1248,69 +1251,117 @@ async function extractVideoStreamUrl(youtubeId, forceFresh = false) {
 // Stream video with full Range (byte-range) support for native HTML5 video
 router.get('/video_stream/:id', async (req, res) => {
   const rawId = req.params.id;
-  let ytId = extractYoutubeId(rawId) || rawId;
+  let ytId = extractYoutubeId(rawId);
 
-  // If a songId was passed instead of youtubeId, find its youtubeId
-  if (!ytId || ytId.length !== 11) {
+  // If a songId or queueId was passed instead of youtubeId, find its youtubeId or youtubeUrl
+  if (!ytId) {
     const history = readHistory();
-    const found = queue.find(s => s.id === rawId) || history.find(s => s.id === rawId);
-    if (found && found.youtubeId) {
-      ytId = found.youtubeId;
+    const found = queue.find(s => s.id === rawId || s.queueId === rawId || s.songId === rawId) ||
+      history.find(s => s.id === rawId || s.songId === rawId);
+    if (found) {
+      ytId = found.youtubeId || extractYoutubeId(found.youtubeUrl);
     }
+  }
+
+  // If still not an 11-char ID, check if rawId itself is an 11-char ID
+  if (!ytId && typeof rawId === 'string' && /^[a-zA-Z0-9_-]{11}$/.test(rawId.trim())) {
+    ytId = rawId.trim();
   }
 
   if (!ytId || ytId.length !== 11) {
     return res.status(400).json({ error: 'Missing or invalid YouTube video ID' });
   }
 
+  let clientClosed = false;
+  req.once('close', () => {
+    clientClosed = true;
+  });
+
   const streamVideo = async (isRetry = false) => {
     try {
       const streamUrl = await extractVideoStreamUrl(ytId, isRetry);
+      if (clientClosed) return;
 
       const proxyHeaders = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'User-Agent': req.headers['user-agent'] || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Accept-Language': req.headers['accept-language'] || 'en-US,en;q=0.9'
       };
       if (req.headers.range) {
         proxyHeaders['Range'] = req.headers.range;
       }
 
-      const proxyReq = https.get(streamUrl, { headers: proxyHeaders }, (proxyRes) => {
-        // If upstream returns 403 (expired signed token) and we haven't retried yet, refresh cache
-        if (proxyRes.statusCode === 403 && !isRetry) {
-          videoStreamCache.delete(ytId);
-          proxyReq.destroy();
-          return streamVideo(true);
+      let activeReq = null;
+
+      const makeUpstreamRequest = (targetUrl, redirectCount = 0) => {
+        if (redirectCount > 4) {
+          if (!clientClosed && !res.headersSent) {
+            res.status(502).json({ error: 'Too many redirects from upstream' });
+          }
+          return;
         }
 
-        const responseHeaders = {
-          'Content-Type': proxyRes.headers['content-type'] || 'video/mp4',
-          'Accept-Ranges': 'bytes',
-          'Cache-Control': 'no-cache'
-        };
-        if (proxyRes.headers['content-length']) {
-          responseHeaders['Content-Length'] = proxyRes.headers['content-length'];
-        }
-        if (proxyRes.headers['content-range']) {
-          responseHeaders['Content-Range'] = proxyRes.headers['content-range'];
-        }
+        const httpModule = targetUrl.startsWith('https:') ? https : http;
+        activeReq = httpModule.get(targetUrl, { headers: proxyHeaders }, (proxyRes) => {
+          if (clientClosed) {
+            proxyRes.destroy();
+            return;
+          }
 
-        res.writeHead(proxyRes.statusCode || 200, responseHeaders);
-        proxyRes.pipe(res);
-      });
+          // Follow redirect upstream
+          if (proxyRes.statusCode >= 300 && proxyRes.statusCode < 400 && proxyRes.headers.location) {
+            proxyRes.destroy();
+            return makeUpstreamRequest(proxyRes.headers.location, redirectCount + 1);
+          }
 
-      proxyReq.on('error', (err) => {
-        if (!res.headersSent) {
-          res.status(502).json({ error: 'Upstream video stream error' });
-        }
-        res.end();
-      });
+          // If upstream returns 403 (expired signed token) and we haven't retried yet, refresh cache
+          if (proxyRes.statusCode === 403 && !isRetry) {
+            console.warn(`[VideoStream] Received 403 for ${ytId}, refreshing stream URL...`);
+            videoStreamCache.delete(ytId);
+            activeReq.removeAllListeners('error');
+            activeReq.on('error', () => {});
+            proxyRes.destroy();
+            activeReq.destroy();
+            return streamVideo(true);
+          }
 
-      req.on('close', () => {
-        proxyReq.destroy();
+          if (proxyRes.statusCode === 403 || proxyRes.statusCode === 410) {
+            videoStreamCache.delete(ytId);
+          }
+
+          const responseHeaders = {
+            'Content-Type': proxyRes.headers['content-type'] || 'video/mp4',
+            'Accept-Ranges': 'bytes',
+            'Cache-Control': 'no-cache'
+          };
+          if (proxyRes.headers['content-length']) {
+            responseHeaders['Content-Length'] = proxyRes.headers['content-length'];
+          }
+          if (proxyRes.headers['content-range']) {
+            responseHeaders['Content-Range'] = proxyRes.headers['content-range'];
+          }
+
+          res.writeHead(proxyRes.statusCode || 200, responseHeaders);
+          proxyRes.pipe(res);
+        });
+
+        activeReq.on('error', (err) => {
+          if (!clientClosed && !res.headersSent) {
+            console.warn(`[VideoStream] Upstream request error for ${ytId}:`, err.message);
+            res.status(502).json({ error: 'Upstream video stream error' });
+          }
+          res.end();
+        });
+      };
+
+      makeUpstreamRequest(streamUrl, 0);
+
+      req.once('close', () => {
+        if (activeReq) activeReq.destroy();
       });
     } catch (err) {
       console.error(`[VideoStream] Error streaming video ${ytId}:`, err.message);
-      if (!res.headersSent) {
+      if (!clientClosed && !res.headersSent) {
         res.status(500).json({ error: err.message });
       }
     }
@@ -1321,14 +1372,19 @@ router.get('/video_stream/:id', async (req, res) => {
 
 router.get('/video_url/:id', async (req, res) => {
   const rawId = req.params.id;
-  let ytId = extractYoutubeId(rawId) || rawId;
+  let ytId = extractYoutubeId(rawId);
 
-  if (!ytId || ytId.length !== 11) {
+  if (!ytId) {
     const history = readHistory();
-    const found = queue.find(s => s.id === rawId) || history.find(s => s.id === rawId);
-    if (found && found.youtubeId) {
-      ytId = found.youtubeId;
+    const found = queue.find(s => s.id === rawId || s.queueId === rawId || s.songId === rawId) ||
+      history.find(s => s.id === rawId || s.songId === rawId);
+    if (found) {
+      ytId = found.youtubeId || extractYoutubeId(found.youtubeUrl);
     }
+  }
+
+  if (!ytId && typeof rawId === 'string' && /^[a-zA-Z0-9_-]{11}$/.test(rawId.trim())) {
+    ytId = rawId.trim();
   }
 
   if (!ytId || ytId.length !== 11) {

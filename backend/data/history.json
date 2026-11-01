@@ -1040,8 +1040,8 @@
       "karaokeModel": "5_HP-Karaoke-UVR.pth",
       "isCustom": false
     },
-    "lyricsProvider": "LRCLIB (Plain)",
-    "isSynced": false,
+    "lyricsProvider": "LRCLIB (Synced)",
+    "isSynced": true,
     "hasLyrics": true,
     "spotifyUrl": null,
     "spotifyTrackId": null,
@@ -1219,8 +1219,7 @@
     "isUploaded": false,
     "youtubeId": "JYOV3ye28ng",
     "youtubeUrl": "https://www.youtube.com/watch?v=JYOV3ye28ng",
-    "videoStatus": "ready",
-    "videoError": null
+    "videoStatus": "ready"
   },
   {
     "id": "1502162088",
