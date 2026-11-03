@@ -25,7 +25,9 @@
     "isUploaded": false,
     "youtubeId": "HJuqVdJH73A",
     "youtubeUrl": "https://www.youtube.com/watch?v=HJuqVdJH73A",
-    "videoStatus": "ready"
+    "videoStatus": "ready",
+    "videoOffset": 6.9,
+    "videoDuration": 236
   },
   {
     "id": "1440053120",
@@ -503,7 +505,8 @@
     "youtubeId": "D_6WE3pHRdw",
     "youtubeUrl": "https://www.youtube.com/watch?v=D_6WE3pHRdw",
     "videoStatus": "ready",
-    "videoError": null
+    "videoDuration": 397,
+    "videoOffset": -9.8
   },
   {
     "id": "spotify_5aTY5Mw6DnDuBQupkCgEiI",
@@ -667,7 +670,9 @@
     "isUploaded": true,
     "youtubeId": "9Fz5jIJsTn8",
     "youtubeUrl": "https://www.youtube.com/watch?v=9Fz5jIJsTn8",
-    "videoStatus": "ready"
+    "videoStatus": "ready",
+    "videoDuration": 320,
+    "videoOffset": 2.03
   },
   {
     "id": "spotify_3FsqlxtjL2EJ5kxwgdj1Yl",
@@ -780,7 +785,8 @@
     "youtubeId": "mPeuOi8G9Yg",
     "youtubeUrl": "https://www.youtube.com/watch?v=mPeuOi8G9Yg",
     "videoStatus": "ready",
-    "videoError": null
+    "videoDuration": 281,
+    "videoOffset": 11.49
   },
   {
     "id": "92286036",
@@ -890,10 +896,12 @@
     "spotifyTrackId": null,
     "isSpotify": false,
     "isUploaded": false,
-    "youtubeId": null,
-    "youtubeUrl": null,
-    "videoStatus": "error",
-    "videoError": "No matching YouTube music video found"
+    "youtubeId": "tDMQRWmQ1Fc",
+    "youtubeUrl": "https://www.youtube.com/watch?v=tDMQRWmQ1Fc",
+    "videoStatus": "ready",
+    "videoError": null,
+    "videoDuration": 283,
+    "videoOffset": 0.4
   },
   {
     "id": "upload_1787439244332",
@@ -1163,7 +1171,8 @@
     "youtubeId": "KifynLgwQro",
     "youtubeUrl": "https://www.youtube.com/watch?v=KifynLgwQro",
     "videoStatus": "ready",
-    "videoError": null
+    "videoDuration": 187,
+    "videoOffset": -4.5
   },
   {
     "id": "6793106997",
@@ -1219,7 +1228,9 @@
     "isUploaded": false,
     "youtubeId": "JYOV3ye28ng",
     "youtubeUrl": "https://www.youtube.com/watch?v=JYOV3ye28ng",
-    "videoStatus": "ready"
+    "videoStatus": "ready",
+    "videoOffset": 4.36,
+    "videoDuration": 334
   },
   {
     "id": "1502162088",

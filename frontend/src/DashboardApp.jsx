@@ -47,6 +47,9 @@ export default function DashboardApp() {
   const stepBack = useModalStore((state) => state.stepBack);
   const lyricsSyncModalSong = useModalStore((state) => state.lyricsSyncModalSong);
   const stemEditorModalSong = useModalStore((state) => state.stemEditorModalSong);
+  const metadataModalSong = useModalStore((state) => state.metadataModalSong);
+  const componentManagerSongId = useModalStore((state) => state.componentManagerSongId);
+  const uploadModalOpen = useModalStore((state) => state.uploadModalOpen);
 
   // Hook for all dashboard border dividers and persistent CSS variables
   useDashboardResizers();
@@ -124,7 +127,8 @@ export default function DashboardApp() {
       } else if (cmd.command === 'select_song' && cmd.id) {
         if (cmd.audioMaster === 'display') {
           audioPlayer.stopAllSources();
-          usePlaybackStore.getState().selectSong(cmd.id, false, cmd.queueId, 'display');
+          const willPlay = cmd.isPlaying !== undefined ? !!cmd.isPlaying : true;
+          usePlaybackStore.getState().selectSong(cmd.id, willPlay, cmd.queueId, 'display');
         } else {
           selectSong(cmd.id, true, cmd.queueId);
         }
@@ -165,17 +169,25 @@ export default function DashboardApp() {
         setQueue(data);
         const { currentSong, currentQueueId } = usePlaybackStore.getState();
         const readySongs = data.filter(s => s.status === 'ready');
-        if (currentQueueId && !data.some(s => String(s.queueId) === String(currentQueueId))) {
+        const currentSongId = currentSong?.id || currentSong?.songId;
+
+        const matchingQueueItem = data.find(s => (currentQueueId && String(s.queueId) === String(currentQueueId)) || (currentSongId && (s.id === currentSongId || s.songId === currentSongId)));
+
+        if (matchingQueueItem) {
+          if (matchingQueueItem.queueId && String(matchingQueueItem.queueId) !== String(currentQueueId)) {
+            usePlaybackStore.setState({ currentQueueId: matchingQueueItem.queueId });
+          }
+        } else if (!currentSong && currentQueueId) {
           if (readySongs.length > 0) {
             selectSong(readySongs[0].id, false, readySongs[0].queueId);
           } else {
             usePlaybackStore.getState().endQueue();
           }
-        } else if (currentSong) {
-          const currentSongId = currentSong.id || currentSong.songId;
-          const queueItem = data.find(s => (currentQueueId && String(s.queueId) === String(currentQueueId)) || s.id === currentSongId || s.songId === currentSongId);
-          if (queueItem) {
-            const hasNoLyrics = !Array.isArray(currentSong.lyrics) || currentSong.lyrics.length === 0;
+        }
+
+        if (currentSong && matchingQueueItem) {
+          const queueItem = matchingQueueItem;
+          const hasNoLyrics = !Array.isArray(currentSong.lyrics) || currentSong.lyrics.length === 0;
             if (hasNoLyrics && Array.isArray(queueItem.lyrics) && queueItem.lyrics.length > 0) {
               usePlaybackStore.setState({
                 currentSong: {
@@ -206,18 +218,19 @@ export default function DashboardApp() {
 
             const currentYt = currentSong.youtubeId || currentSong.youtube_id || extractYoutubeId(currentSong.youtubeUrl) || extractYoutubeId(currentSong.youtube_url);
             const queueYt = queueItem.youtubeId || queueItem.youtube_id || extractYoutubeId(queueItem.youtubeUrl) || extractYoutubeId(queueItem.youtube_url);
-            if (!currentYt && queueYt) {
+            if ((!currentYt && queueYt) || (queueItem.videoOffset !== undefined && queueItem.videoOffset !== currentSong.videoOffset)) {
               usePlaybackStore.setState({
                 currentSong: {
                   ...currentSong,
-                  youtubeId: queueYt,
-                  youtubeUrl: queueItem.youtubeUrl || `https://www.youtube.com/watch?v=${queueYt}`,
-                  videoStatus: queueItem.videoStatus || 'ready'
+                  youtubeId: queueYt || currentSong.youtubeId,
+                  youtubeUrl: queueItem.youtubeUrl || currentSong.youtubeUrl || (queueYt ? `https://www.youtube.com/watch?v=${queueYt}` : null),
+                  videoStatus: queueItem.videoStatus || currentSong.videoStatus || 'ready',
+                  videoOffset: queueItem.videoOffset ?? currentSong.videoOffset ?? 0,
+                  videoDuration: queueItem.videoDuration || currentSong.videoDuration || null
                 }
               });
             }
           }
-        }
       } else {
         loadQueue();
       }
@@ -239,8 +252,8 @@ export default function DashboardApp() {
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // If a modal with dedicated keyboard controls is open, let that modal handle shortcuts (including Escape)
-      if (lyricsSyncModalSong || stemEditorModalSong) {
+      // If a modal is open, let that modal handle shortcuts (including Escape and Space)
+      if (lyricsSyncModalSong || stemEditorModalSong || metadataModalSong || componentManagerSongId || uploadModalOpen) {
         return;
       }
 
@@ -259,8 +272,14 @@ export default function DashboardApp() {
         return;
       }
 
-      // Ignore other shortcuts when typing in inputs/textareas
-      if ((e.target.tagName === 'INPUT' && e.target.type !== 'range') || e.target.tagName === 'TEXTAREA') {
+      // Ignore other shortcuts when typing in inputs/textareas or interacting with form controls
+      if (e.target && (
+        e.target.tagName === 'INPUT' ||
+        e.target.tagName === 'TEXTAREA' ||
+        e.target.tagName === 'SELECT' ||
+        e.target.tagName === 'BUTTON' ||
+        e.target.isContentEditable
+      )) {
         return;
       }
 
@@ -347,7 +366,7 @@ export default function DashboardApp() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [togglePlayPause, playNext, playPrev, jumpToNextLine, jumpToPrevLine, seek, currentTime, duration, volumes, setVolumes, toggleStemMute, stepBack, lyricsSyncModalSong, stemEditorModalSong]);
+  }, [togglePlayPause, playNext, playPrev, jumpToNextLine, jumpToPrevLine, seek, currentTime, duration, volumes, setVolumes, toggleStemMute, stepBack, lyricsSyncModalSong, stemEditorModalSong, metadataModalSong, componentManagerSongId, uploadModalOpen]);
 
   return (
     <div id="app" className="dashboard-vertical">

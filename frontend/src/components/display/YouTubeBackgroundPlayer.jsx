@@ -7,7 +7,8 @@ function YouTubeBackgroundPlayer({
   isPlaying = false,
   isVisible = true,
   syncAnchorRef = null,
-  seekTimestamp = null
+  seekTimestamp = null,
+  videoOffset = 0
 }) {
   const cleanId = extractYoutubeId(youtubeId) || (typeof youtubeId === 'string' && /^[a-zA-Z0-9_-]{11}$/.test(youtubeId.trim()) ? youtubeId.trim() : null);
 
@@ -22,6 +23,8 @@ function YouTubeBackgroundPlayer({
   isPlayingRef.current = isPlaying;
   const isVisibleRef = useRef(isVisible);
   isVisibleRef.current = isVisible;
+  const videoOffsetRef = useRef(videoOffset);
+  videoOffsetRef.current = videoOffset;
 
   const lastSeekTimeRef = useRef(0);
   const lastPausedTargetTimeRef = useRef(null);
@@ -67,22 +70,32 @@ function YouTubeBackgroundPlayer({
     return Math.max(0, (anchor.time || 0) + elapsed);
   };
 
-  const syncVideoPlayback = (targetTime, forceSeek = false) => {
+  const syncVideoPlayback = (targetAudioTime, forceSeek = false) => {
     const v = videoRef.current;
     // Wait until metadata is ready (readyState >= 1) before scrubbing or playing
     if (!v || v.readyState < 1) return;
 
     try {
+      const targetVideoTime = targetAudioTime + (videoOffsetRef.current || 0);
+
+      if (targetVideoTime < 0) {
+        if (v.currentTime !== 0) v.currentTime = 0;
+        if (!v.paused) v.pause();
+        return;
+      }
+
+      if (v.duration && targetVideoTime >= v.duration) {
+        if (v.currentTime !== v.duration) v.currentTime = v.duration;
+        if (!v.paused) v.pause();
+        return;
+      }
+
       const cur = v.currentTime || 0;
-      const drift = Math.abs(cur - targetTime);
+      const drift = Math.abs(cur - targetVideoTime);
 
       if (forceSeek || drift > 0.45) {
         lastSeekTimeRef.current = performance.now();
-        if (v.duration && targetTime >= v.duration) {
-          v.currentTime = v.duration;
-        } else {
-          v.currentTime = Math.max(0, targetTime);
-        }
+        v.currentTime = targetVideoTime;
       }
 
       if (isPlayingRef.current && isVisibleRef.current) {
@@ -130,32 +143,37 @@ function YouTubeBackgroundPlayer({
       const v = videoRef.current;
       if (!v || v.readyState < 1) return;
 
-      const targetTime = getCurrentSyncTime();
+      const targetAudioTime = getCurrentSyncTime();
+      const targetVideoTime = targetAudioTime + (videoOffsetRef.current || 0);
+
+      if (targetVideoTime < 0) {
+        if (v.currentTime !== 0) v.currentTime = 0;
+        if (!v.paused) v.pause();
+        return;
+      }
+
+      if (v.duration && targetVideoTime >= v.duration) {
+        if (v.currentTime !== v.duration) v.currentTime = v.duration;
+        if (!v.paused) v.pause();
+        return;
+      }
 
       if (isPlayingRef.current && isVisibleRef.current) {
         if (v.paused) {
           v.play().catch(() => {});
         }
-        const drift = Math.abs(v.currentTime - targetTime);
+        const drift = Math.abs(v.currentTime - targetVideoTime);
         if (drift > 0.6) {
-          if (v.duration && targetTime >= v.duration) {
-            v.currentTime = v.duration;
-          } else {
-            v.currentTime = Math.max(0, targetTime);
-          }
+          v.currentTime = targetVideoTime;
         }
       } else if (isVisibleRef.current) {
         if (!v.paused) {
           v.pause();
         }
         // When paused, seek if user scrubbed or jumped lines
-        if (lastPausedTargetTimeRef.current === null || Math.abs(targetTime - lastPausedTargetTimeRef.current) > 0.15) {
-          lastPausedTargetTimeRef.current = targetTime;
-          if (v.duration && targetTime >= v.duration) {
-            v.currentTime = v.duration;
-          } else {
-            v.currentTime = Math.max(0, targetTime);
-          }
+        if (lastPausedTargetTimeRef.current === null || Math.abs(targetVideoTime - lastPausedTargetTimeRef.current) > 0.15) {
+          lastPausedTargetTimeRef.current = targetVideoTime;
+          v.currentTime = targetVideoTime;
           setHasPlaybackStarted(true);
         }
       }
@@ -169,10 +187,18 @@ function YouTubeBackgroundPlayer({
     const v = videoRef.current;
     if (!v || v.readyState < 1) return;
 
-    const targetTime = getCurrentSyncTime();
-    lastPausedTargetTimeRef.current = isPlaying ? null : targetTime;
-    syncVideoPlayback(targetTime, true);
+    const targetAudioTime = getCurrentSyncTime();
+    lastPausedTargetTimeRef.current = isPlaying ? null : (targetAudioTime + (videoOffsetRef.current || 0));
+    syncVideoPlayback(targetAudioTime, true);
   }, [isPlaying, isVisible]);
+
+  // React immediately to videoOffset changes
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || v.readyState < 1) return;
+    lastPausedTargetTimeRef.current = null;
+    syncVideoPlayback(getCurrentSyncTime(), true);
+  }, [videoOffset]);
 
   // React immediately to explicit lyric line clicks
   useEffect(() => {
@@ -194,7 +220,7 @@ function YouTubeBackgroundPlayer({
     setHasPlaybackStarted(true);
   }, [seekTimestamp, hasError]);
 
-  // When metadata loads: seek to current sync position and play or pause
+  // When metadata loads: seek to current sync position with offset and play or pause
   const handleLoadedMetadata = () => {
     const v = videoRef.current;
     if (!v) return;
@@ -202,16 +228,20 @@ function YouTubeBackgroundPlayer({
     v.muted = true;
     v.volume = 0;
 
-    const startSeconds = getCurrentSyncTime();
+    const audioSeconds = getCurrentSyncTime();
+    const targetSeconds = audioSeconds + (videoOffsetRef.current || 0);
+
     try {
-      if (v.duration && startSeconds >= v.duration) {
+      if (targetSeconds <= 0) {
+        v.currentTime = 0;
+      } else if (v.duration && targetSeconds >= v.duration) {
         v.currentTime = v.duration;
       } else {
-        v.currentTime = Math.max(0, startSeconds);
+        v.currentTime = targetSeconds;
       }
     } catch (e) {}
 
-    if (isPlayingRef.current && isVisibleRef.current) {
+    if (isPlayingRef.current && isVisibleRef.current && targetSeconds >= 0 && (!v.duration || targetSeconds < v.duration)) {
       v.play().catch(() => {});
     } else {
       v.pause();
@@ -222,7 +252,11 @@ function YouTubeBackgroundPlayer({
     setHasPlaybackStarted(true);
     const v = videoRef.current;
     if (v && isPlayingRef.current && isVisibleRef.current && v.paused) {
-      v.play().catch(() => {});
+      const curAudio = getCurrentSyncTime();
+      const targetSec = curAudio + (videoOffsetRef.current || 0);
+      if (targetSec >= 0 && (!v.duration || targetSec < v.duration)) {
+        v.play().catch(() => {});
+      }
     }
   };
 

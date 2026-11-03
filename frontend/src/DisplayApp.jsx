@@ -68,12 +68,23 @@ export default function DisplayApp() {
           id: resolvedSongId,
           youtubeId: resolvedYtId,
           youtubeUrl: resolvedYtUrl,
+          videoOffset: typeof state.songData.videoOffset === 'number' ? state.songData.videoOffset : (parseFloat(state.songData.videoOffset) || 0),
+          videoDuration: state.songData.videoDuration || null,
           queueId,
           lyrics: incomingLyrics || currentLyrics
         };
-        const isNewTrack = !songRef.current ||
-          currentSongId !== resolvedSongId ||
-          (queueId && songRef.current.queueId && String(songRef.current.queueId) !== String(queueId));
+        const isSameSong = !!(
+          songRef.current &&
+          resolvedSongId &&
+          (String(currentSongId) === String(resolvedSongId) ||
+           String(songRef.current.id) === String(resolvedSongId) ||
+           String(songRef.current.songId) === String(resolvedSongId))
+        );
+
+        const isNewTrack = !isSameSong && (
+          !songRef.current ||
+          currentSongId !== resolvedSongId
+        );
 
         if (isNewTrack) {
           audioPlayer.stopAllSources();
@@ -311,7 +322,7 @@ export default function DisplayApp() {
 
             const currentYt = songRef.current.youtubeId || songRef.current.youtube_id || extractYoutubeId(songRef.current.youtubeUrl) || extractYoutubeId(songRef.current.youtube_url);
             const queueYt = currentInQueue.youtubeId || currentInQueue.youtube_id || extractYoutubeId(currentInQueue.youtubeUrl) || extractYoutubeId(currentInQueue.youtube_url);
-            if (!currentYt && queueYt) {
+            if ((!currentYt && queueYt) || (currentInQueue.videoOffset !== undefined && currentInQueue.videoOffset !== songRef.current.videoOffset)) {
               setSong(prev => {
                 if (!prev) return prev;
                 const prevId = prev.id || prev.songId;
@@ -319,9 +330,11 @@ export default function DisplayApp() {
                 if (prevId !== inQueueId) return prev;
                 const updated = {
                   ...prev,
-                  youtubeId: queueYt,
-                  youtubeUrl: currentInQueue.youtubeUrl || `https://www.youtube.com/watch?v=${queueYt}`,
-                  videoStatus: currentInQueue.videoStatus || 'ready'
+                  youtubeId: queueYt || prev.youtubeId,
+                  youtubeUrl: currentInQueue.youtubeUrl || prev.youtubeUrl || (queueYt ? `https://www.youtube.com/watch?v=${queueYt}` : null),
+                  videoStatus: currentInQueue.videoStatus || prev.videoStatus || 'ready',
+                  videoOffset: currentInQueue.videoOffset ?? prev.videoOffset ?? 0,
+                  videoDuration: currentInQueue.videoDuration || prev.videoDuration || null
                 };
                 songRef.current = updated;
                 return updated;

@@ -3,6 +3,7 @@ import * as audioPlayer from '../services/audioPlayer';
 import { emitPlayerCommand, emitUpdateState } from '../services/socket';
 import { extractColorsFromSongCover, getHighResAlbumArt } from '../utils/themeColors';
 import { fetchQueue, fetchSong } from '../services/api';
+import { useModalStore } from './useModalStore';
 
 export const usePlaybackStore = create((set, get) => ({
   currentSong: null,
@@ -169,6 +170,15 @@ export const usePlaybackStore = create((set, get) => ({
         isPlaying: forcePlay !== null ? forcePlay : true,
         audioMaster: 'display'
       });
+
+      // Keep metadata modal in sync with chosen song if open
+      try {
+        const modalSong = useModalStore.getState().metadataModalSong;
+        if (modalSong) {
+          useModalStore.setState({ metadataModalSong: fullSong });
+        }
+      } catch (e) {}
+
       return;
     }
 
@@ -202,6 +212,20 @@ export const usePlaybackStore = create((set, get) => ({
   play: async (offset = 0) => {
     const state = get();
     if (!state.currentSong) return;
+
+    if (state.audioMaster === 'display') {
+      audioPlayer.stopAllSources();
+      set({ isPlaying: true, currentTime: offset });
+      emitPlayerCommand({ command: 'play', time: offset, audioMaster: 'display' });
+      emitUpdateState({
+        isPlaying: true,
+        currentTime: offset,
+        audioMaster: 'display',
+        queueId: state.currentQueueId || state.currentSong.queueId || null,
+        songId: state.currentSong.id
+      });
+      return;
+    }
 
     await audioPlayer.playAudio(offset);
     const blocked = audioPlayer.isContextSuspended();
@@ -464,10 +488,16 @@ export const usePlaybackStore = create((set, get) => ({
 
     const effectiveQueueId = incomingQueueId !== undefined ? incomingQueueId : current.currentQueueId;
 
-    const isNewTrack = state.songData && (
+    const isSameSong = !!(
+      state.songData &&
+      current.currentSong &&
+      (String(current.currentSong.id || current.currentSong.songId) === String(state.songData.id || state.songData.songId))
+    );
+
+    const isNewTrack = state.songData && !isSameSong && (
       !current.currentSong ||
-      current.currentSong.id !== state.songData.id ||
-      (effectiveQueueId && current.currentQueueId && String(effectiveQueueId) !== String(current.currentQueueId))
+      (current.currentSong.id !== state.songData.id &&
+       current.currentSong.songId !== state.songData.id)
     );
 
     if (isNewTrack) {
@@ -482,14 +512,27 @@ export const usePlaybackStore = create((set, get) => ({
         updates.audioMaster = 'display';
         const colorSrc = trackWithQueue.id ? `/api/cover/${trackWithQueue.id}` : getHighResAlbumArt(trackWithQueue.albumArt);
         extractColorsFromSongCover(colorSrc);
+
+        // Keep metadata modal in sync with chosen song if open
+        try {
+          const modalSong = useModalStore.getState().metadataModalSong;
+          if (modalSong) {
+            useModalStore.setState({ metadataModalSong: trackWithQueue });
+          }
+        } catch (e) {}
       } else {
         current.selectSong(trackWithQueue, state.isPlaying, incomingQueueId);
       }
-    } else if (state.songData && current.currentSong && current.currentSong.id === state.songData.id) {
+    } else if (isSameSong) {
       const mergedLyrics = (Array.isArray(state.songData.lyrics) && state.songData.lyrics.length > 0)
         ? state.songData.lyrics
         : (current.currentSong.lyrics || []);
-      updates.currentSong = { ...current.currentSong, ...state.songData, lyrics: mergedLyrics };
+      updates.currentSong = {
+        ...current.currentSong,
+        ...state.songData,
+        queueId: effectiveQueueId || current.currentSong.queueId || null,
+        lyrics: mergedLyrics
+      };
     } else if (('songId' in state && state.songId === null) || ('songData' in state && state.songData === null)) {
       audioPlayer.resetAudio();
       updates.currentSong = null;

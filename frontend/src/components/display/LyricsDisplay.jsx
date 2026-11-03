@@ -269,6 +269,7 @@ function LyricsDisplay({
           isVisible={showMusicVideo}
           syncAnchorRef={syncAnchorRef}
           seekTimestamp={seekTimestamp}
+          videoOffset={typeof song?.videoOffset === 'number' ? song.videoOffset : (parseFloat(song?.videoOffset) || 0)}
         />
       )}
 

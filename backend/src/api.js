@@ -247,7 +247,9 @@ function saveLightweightHistoryItem(song) {
     youtubeId: song.youtubeId || extractYoutubeId(song.youtubeUrl) || null,
     youtubeUrl: song.youtubeUrl || (song.youtubeId ? `https://www.youtube.com/watch?v=${song.youtubeId}` : null),
     videoStatus: song.videoStatus || (song.youtubeId ? 'ready' : null),
-    videoError: song.videoError || null
+    videoError: song.videoError || null,
+    videoDuration: typeof song.videoDuration === 'number' ? song.videoDuration : (parseFloat(song.videoDuration) || null),
+    videoOffset: typeof song.videoOffset === 'number' ? song.videoOffset : (parseFloat(song.videoOffset) || 0)
   };
 
   if (song.downloadError && !hasAudio) lightItem.downloadError = song.downloadError;
@@ -988,6 +990,26 @@ router.get('/cover/:id', async (req, res) => {
 // Map: songId -> { token: number, controller: AbortController, startTime: number }
 const activeVideoResolutions = new Map();
 
+async function getSongAudioDuration(song) {
+  if (!song) return 0;
+  if (typeof song.duration === 'number' && song.duration > 0) return song.duration;
+  const songDir = path.join(DOWNLOADS_DIR, song.id);
+  const possibleAudio = ['audio.mp3', 'instrumental.mp3', 'lead_vocal.mp3'];
+  for (const f of possibleAudio) {
+    const p = path.join(songDir, f);
+    if (fs.existsSync(p)) {
+      try {
+        const meta = await mm.parseFile(p);
+        if (meta && meta.format && meta.format.duration) {
+          song.duration = Number(meta.format.duration.toFixed(2));
+          return song.duration;
+        }
+      } catch (e) {}
+    }
+  }
+  return 0;
+}
+
 // Purely resolve YouTube Music Video ID online (NO VIDEO DOWNLOAD)
 async function resolveYoutubeMusicVideo(song, io = null, customUrlOrQuery = null) {
   if (!song || !song.id) return { success: false, error: 'Invalid song' };
@@ -1009,8 +1031,21 @@ async function resolveYoutubeMusicVideo(song, io = null, customUrlOrQuery = null
       song.youtubeUrl = `https://www.youtube.com/watch?v=${directId}`;
       song.videoStatus = 'ready';
       delete song.videoError;
-      // Pre-warm video stream extraction in background so playback has zero delay!
-      extractVideoStreamUrl(directId).catch(() => {});
+
+      // Extract duration and calculate ends-match offset
+      try {
+        const streamInfo = await extractVideoStreamUrl(directId);
+        if (streamInfo && streamInfo.duration) {
+          song.videoDuration = streamInfo.duration;
+          const audioDur = await getSongAudioDuration(song);
+          if ((song.videoOffset === undefined || song.videoOffset === null) && audioDur > 0) {
+            song.videoOffset = Number((streamInfo.duration - audioDur).toFixed(2));
+          }
+        }
+      } catch (e) {
+        extractVideoStreamUrl(directId).catch(() => {});
+      }
+
       saveLightweightHistoryItem(song);
       syncSongAcrossQueue(song);
       if (io) {
@@ -1023,13 +1058,21 @@ async function resolveYoutubeMusicVideo(song, io = null, customUrlOrQuery = null
             ...song,
             youtubeId: directId,
             youtubeUrl: song.youtubeUrl,
-            videoStatus: 'ready'
+            videoStatus: 'ready',
+            videoDuration: song.videoDuration,
+            videoOffset: song.videoOffset
           };
           if (typeof io.updateCurrentState === 'function') io.updateCurrentState({ songData: updatedActive });
           io.emit('sync_state', { songId: song.id, songData: updatedActive });
         }
       }
-      return { success: true, youtubeId: directId, youtubeUrl: song.youtubeUrl };
+      return {
+        success: true,
+        youtubeId: directId,
+        youtubeUrl: song.youtubeUrl,
+        videoDuration: song.videoDuration,
+        videoOffset: song.videoOffset
+      };
     }
   }
 
@@ -1099,6 +1142,7 @@ async function resolveYoutubeMusicVideo(song, io = null, customUrlOrQuery = null
   const ytFilter = `!is_live & duration < 900 & title !~= '(?i)(karaoke|instrumental|backing track|off vocal|minus one|piano cover|audio only|8d audio|hour loop|reaction|tutorial|bass boosted)'`;
 
   let resolvedId = null;
+  let resolvedDuration = null;
 
   try {
     for (const q of queriesToTry) {
@@ -1110,7 +1154,7 @@ async function resolveYoutubeMusicVideo(song, io = null, customUrlOrQuery = null
         // --no-cache-dir eliminates sqlite cache lock contention across parallel yt-dlp instances!
         // ytsearch3 checks top 3 candidates without throwing exit code 101
         const searchTarget = q.startsWith('ytsearch') ? `"${q}"` : `"ytsearch3:${q}"`;
-        const cmd = `${activatePrefix}"${ytdlpPath}" --no-cache-dir --js-runtimes node --no-warnings --match-filter "${ytFilter}" --print "%(id)s" ${searchTarget}`;
+        const cmd = `${activatePrefix}"${ytdlpPath}" --no-cache-dir --no-warnings --match-filter "${ytFilter}" --print "%(id)s\t%(duration)s" ${searchTarget}`;
 
         const result = await execPromise(cmd, {
           signal: controller.signal,
@@ -1133,9 +1177,16 @@ async function resolveYoutubeMusicVideo(song, io = null, customUrlOrQuery = null
       if (rawOutput) {
         const lines = rawOutput.trim().split(/\r?\n/).map(l => l.trim()).filter(Boolean);
         for (const line of lines) {
-          const extracted = extractYoutubeId(line);
+          const parts = line.split('\t');
+          const extracted = extractYoutubeId(parts[0]);
           if (extracted) {
             resolvedId = extracted;
+            if (parts[1]) {
+              const pDur = parseFloat(parts[1]);
+              if (!isNaN(pDur) && pDur > 0) {
+                resolvedDuration = pDur;
+              }
+            }
             break;
           }
         }
@@ -1157,10 +1208,17 @@ async function resolveYoutubeMusicVideo(song, io = null, customUrlOrQuery = null
     song.youtubeId = resolvedId;
     song.youtubeUrl = `https://www.youtube.com/watch?v=${resolvedId}`;
     song.videoStatus = 'ready';
+    if (resolvedDuration) {
+      song.videoDuration = resolvedDuration;
+    }
+    const audioDur = await getSongAudioDuration(song);
+    if ((song.videoOffset === undefined || song.videoOffset === null) && song.videoDuration && audioDur > 0) {
+      song.videoOffset = Number((song.videoDuration - audioDur).toFixed(2));
+    }
     delete song.videoError;
     // Pre-warm video stream extraction in background so playback has zero delay!
     extractVideoStreamUrl(resolvedId).catch(() => {});
-    console.log(`[MusicVideo][${song.id}] Resolved online video for "${song.title}": https://www.youtube.com/watch?v=${resolvedId}`);
+    console.log(`[MusicVideo][${song.id}] Resolved online video for "${song.title}": https://www.youtube.com/watch?v=${resolvedId} (dur: ${song.videoDuration}s, offset: ${song.videoOffset}s)`);
   } else {
     song.videoStatus = 'error';
     song.videoError = 'No matching YouTube music video found';
@@ -1181,6 +1239,8 @@ async function resolveYoutubeMusicVideo(song, io = null, customUrlOrQuery = null
         youtubeId: song.youtubeId,
         youtubeUrl: song.youtubeUrl,
         videoStatus: song.videoStatus,
+        videoDuration: song.videoDuration,
+        videoOffset: song.videoOffset,
         videoError: song.videoError
       };
       if (typeof io.updateCurrentState === 'function') io.updateCurrentState({ songData: updatedActive });
@@ -1188,7 +1248,14 @@ async function resolveYoutubeMusicVideo(song, io = null, customUrlOrQuery = null
     }
   }
 
-  return { success: !!resolvedId, youtubeId: song.youtubeId, youtubeUrl: song.youtubeUrl, error: song.videoError };
+  return {
+    success: !!resolvedId,
+    youtubeId: song.youtubeId,
+    youtubeUrl: song.youtubeUrl,
+    videoDuration: song.videoDuration,
+    videoOffset: song.videoOffset,
+    error: song.videoError
+  };
 }
 
 // In-memory cache for extracted direct video stream URLs
@@ -1204,7 +1271,7 @@ async function extractVideoStreamUrl(youtubeId, forceFresh = false) {
   if (!forceFresh) {
     const cached = videoStreamCache.get(cleanId);
     if (cached && cached.expiresAt > Date.now()) {
-      return cached.url;
+      return cached;
     }
   } else {
     videoStreamCache.delete(cleanId);
@@ -1221,23 +1288,30 @@ async function extractVideoStreamUrl(youtubeId, forceFresh = false) {
 
     // Prefer reliable Android streams (720p/360p MP4 or AVC1) to avoid 403 PO-token blocks on web/VR clients
     const format = 'best[height<=720][ext=mp4]/bestvideo[height<=720][ext=mp4]/22/18/best[height<=720]/bestvideo/best';
-    const cmd = `${activatePrefix}"${ytdlpPath}" --no-playlist --no-warnings --no-update --extractor-args "youtube:player_client=android" -g -f "${format}" "https://www.youtube.com/watch?v=${cleanId}"`;
+    const cmd = `${activatePrefix}"${ytdlpPath}" --no-playlist --no-warnings --no-update --extractor-args "youtube:player_client=android" --print "%(url)s" --print "%(duration)s" -f "${format}" "https://www.youtube.com/watch?v=${cleanId}"`;
 
     console.log(`[VideoStream] Extracting direct stream URL for ${cleanId}...`);
     const startTime = Date.now();
     const { stdout } = await execPromise(cmd, { timeout: 30000 });
-    const streamUrl = (stdout || '').trim().split(/\r?\n/)[0];
-    if (!streamUrl || !streamUrl.startsWith('http')) {
+    const lines = (stdout || '').trim().split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    const streamUrl = lines.find(l => l.startsWith('http'));
+    if (!streamUrl) {
       throw new Error(`yt-dlp failed to return stream URL for ${cleanId}`);
     }
+    const durLine = lines.find(l => !l.startsWith('http') && !isNaN(parseFloat(l)));
+    const videoDuration = durLine ? parseFloat(durLine) : null;
 
-    console.log(`[VideoStream] Extracted direct stream URL for ${cleanId} in ${Date.now() - startTime}ms`);
-    // Cache for 2 hours
-    videoStreamCache.set(cleanId, {
+    console.log(`[VideoStream] Extracted direct stream URL for ${cleanId} (duration: ${videoDuration}s) in ${Date.now() - startTime}ms`);
+    const cachedData = {
       url: streamUrl,
-      expiresAt: Date.now() + 2 * 60 * 60 * 1000
-    });
-    return streamUrl;
+      streamUrl: streamUrl,
+      duration: videoDuration,
+      videoDuration: videoDuration,
+      expiresAt: Date.now() + 2 * 60 * 60 * 1000,
+      toString() { return this.url; }
+    };
+    videoStreamCache.set(cleanId, cachedData);
+    return cachedData;
   })();
 
   activeExtractionPromises.set(cleanId, extractionPromise);
@@ -1279,7 +1353,8 @@ router.get('/video_stream/:id', async (req, res) => {
 
   const streamVideo = async (isRetry = false) => {
     try {
-      const streamUrl = await extractVideoStreamUrl(ytId, isRetry);
+      const streamInfo = await extractVideoStreamUrl(ytId, isRetry);
+      const streamUrl = (streamInfo && streamInfo.url) || String(streamInfo);
       if (clientClosed) return;
 
       const proxyHeaders = {
@@ -1372,15 +1447,16 @@ router.get('/video_stream/:id', async (req, res) => {
 
 router.get('/video_url/:id', async (req, res) => {
   const rawId = req.params.id;
+  const songIdParam = req.query.songId;
   let ytId = extractYoutubeId(rawId);
 
-  if (!ytId) {
-    const history = readHistory();
-    const found = queue.find(s => s.id === rawId || s.queueId === rawId || s.songId === rawId) ||
-      history.find(s => s.id === rawId || s.songId === rawId);
-    if (found) {
-      ytId = found.youtubeId || extractYoutubeId(found.youtubeUrl);
-    }
+  const history = readHistory();
+  const targetSong = (songIdParam ? (queue.find(s => s.id === songIdParam) || history.find(s => s.id === songIdParam)) : null) ||
+    queue.find(s => s.id === rawId || s.queueId === rawId || s.songId === rawId || (ytId && (s.youtubeId === ytId || extractYoutubeId(s.youtubeUrl) === ytId))) ||
+    history.find(s => s.id === rawId || s.songId === rawId || (ytId && (s.youtubeId === ytId || extractYoutubeId(s.youtubeUrl) === ytId)));
+
+  if (!ytId && targetSong) {
+    ytId = targetSong.youtubeId || extractYoutubeId(targetSong.youtubeUrl);
   }
 
   if (!ytId && typeof rawId === 'string' && /^[a-zA-Z0-9_-]{11}$/.test(rawId.trim())) {
@@ -1392,12 +1468,21 @@ router.get('/video_url/:id', async (req, res) => {
   }
 
   try {
-    const streamUrl = await extractVideoStreamUrl(ytId);
+    const streamInfo = await extractVideoStreamUrl(ytId);
+    const audioDur = targetSong ? await getSongAudioDuration(targetSong) : 0;
+    const endsMatchOffset = (streamInfo && streamInfo.duration && audioDur > 0)
+      ? Number((streamInfo.duration - audioDur).toFixed(2))
+      : null;
+
     res.json({
       success: true,
       youtubeId: ytId,
       streamUrl: `/api/video_stream/${ytId}`,
-      directUrl: streamUrl
+      directUrl: streamInfo.url,
+      videoDuration: streamInfo.duration || null,
+      audioDuration: audioDur || null,
+      videoOffset: targetSong?.videoOffset ?? (endsMatchOffset || 0),
+      endsMatchOffset
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -2702,9 +2787,15 @@ router.post('/edit_lyrics', (req, res) => {
 
 // Metadata editing endpoint
 router.post('/edit_metadata', upload.single('coverImage'), async (req, res) => {
-  const { songId, title, artist, coverUrl, youtubeUrl, triggerVideoSearch } = req.body;
+  const { songId, title, artist, coverUrl, youtubeUrl, triggerVideoSearch, videoOffset, videoDuration } = req.body;
   const history = readHistory();
   const idx = history.findIndex(s => s.id === songId);
+
+  const parsedOffset = (videoOffset !== undefined && videoOffset !== null && videoOffset !== '') ? parseFloat(videoOffset) : undefined;
+  const resolvedOffset = (parsedOffset !== undefined && !isNaN(parsedOffset)) ? Number(parsedOffset.toFixed(2)) : undefined;
+
+  const parsedDuration = (videoDuration !== undefined && videoDuration !== null && videoDuration !== '') ? parseFloat(videoDuration) : undefined;
+  const resolvedDuration = (parsedDuration !== undefined && !isNaN(parsedDuration)) ? Number(parsedDuration.toFixed(2)) : undefined;
 
   let newAlbumArt = coverUrl;
 
@@ -2752,6 +2843,8 @@ router.post('/edit_metadata', upload.single('coverImage'), async (req, res) => {
     if (title !== undefined) history[idx].title = title;
     if (artist !== undefined) history[idx].artist = artist;
     if (newAlbumArt !== undefined && newAlbumArt.trim() !== '') history[idx].albumArt = newAlbumArt;
+    if (resolvedOffset !== undefined) history[idx].videoOffset = resolvedOffset;
+    if (resolvedDuration !== undefined) history[idx].videoDuration = resolvedDuration;
     if (youtubeUrl !== undefined) {
       // Abort any in-flight background search so it cannot overwrite manual video edit
       if (activeVideoResolutions.has(songId)) {
@@ -2775,6 +2868,8 @@ router.post('/edit_metadata', upload.single('coverImage'), async (req, res) => {
       if (title !== undefined) item.title = title;
       if (artist !== undefined) item.artist = artist;
       if (newAlbumArt !== undefined && newAlbumArt.trim() !== '') item.albumArt = newAlbumArt;
+      if (resolvedOffset !== undefined) item.videoOffset = resolvedOffset;
+      if (resolvedDuration !== undefined) item.videoDuration = resolvedDuration;
       if (youtubeUrl !== undefined) {
         item.youtubeId = resolvedYtId || null;
         item.youtubeUrl = resolvedYtUrl;
@@ -2800,9 +2895,13 @@ router.post('/edit_metadata', upload.single('coverImage'), async (req, res) => {
     io.emit('library_updated');
     const cur = getActiveCurrentState(io);
     if (updatedSong && cur && cur.songId === songId) {
-      const updatedActive = { ...cur.songData, ...updatedSong };
-      if (typeof io.updateCurrentState === 'function') io.updateCurrentState({ songData: updatedActive });
-      io.emit('sync_state', { songId: songId, songData: updatedActive });
+      const updatedActive = {
+        ...cur.songData,
+        ...updatedSong,
+        queueId: cur.queueId || cur.songData?.queueId || null
+      };
+      if (typeof io.updateCurrentState === 'function') io.updateCurrentState({ songData: updatedActive, queueId: cur.queueId || null });
+      io.emit('sync_state', { songId: songId, queueId: cur.queueId || null, songData: updatedActive });
     }
   }
 
@@ -2844,9 +2943,15 @@ router.delete('/video/:id', (req, res) => {
     return res.status(404).json({ error: 'Song not found' });
   }
 
+  if (song.youtubeId) {
+    videoStreamCache.delete(song.youtubeId);
+  }
+
   song.youtubeId = null;
   song.youtubeUrl = null;
   song.videoStatus = null;
+  song.videoDuration = null;
+  song.videoOffset = 0;
   delete song.videoError;
 
   saveLightweightHistoryItem(song);
@@ -2861,13 +2966,16 @@ router.delete('/video/:id', (req, res) => {
       const updatedActive = {
         ...cur.songData,
         ...song,
-        youtubeId: song.youtubeId,
-        youtubeUrl: song.youtubeUrl,
-        videoStatus: song.videoStatus,
-        videoError: song.videoError
+        queueId: cur.queueId || cur.songData?.queueId || null,
+        youtubeId: null,
+        youtubeUrl: null,
+        videoStatus: null,
+        videoDuration: null,
+        videoOffset: 0,
+        videoError: null
       };
-      if (typeof io.updateCurrentState === 'function') io.updateCurrentState({ songData: updatedActive });
-      io.emit('sync_state', { songId: song.id, songData: updatedActive });
+      if (typeof io.updateCurrentState === 'function') io.updateCurrentState({ songData: updatedActive, queueId: cur.queueId || null });
+      io.emit('sync_state', { songId: song.id, queueId: cur.queueId || null, songData: updatedActive });
     }
   }
   res.json({ success: true });

@@ -120,9 +120,22 @@ export function resetAudio() {
 
 export async function setupAudio(song, initialVolumes = { inst: 1, back: 1, lead: 1 }) {
   const ctx = getAudioContext();
+  const loadingSongId = song ? song.id : null;
+
+  // If buffers for this exact song are already loaded, reuse cached buffers and adjust gain nodes
+  if (loadingSongId && currentSongId === loadingSongId && (buffers.leadBuf || buffers.instBuf || buffers.backBuf)) {
+    if (gainNodes.inst) gainNodes.inst.gain.value = parseFloat(initialVolumes.inst ?? 1);
+    if (gainNodes.leadVoc) gainNodes.leadVoc.gain.value = parseFloat(initialVolumes.lead ?? 1);
+    if (gainNodes.backVoc) gainNodes.backVoc.gain.value = parseFloat(initialVolumes.back ?? 1);
+    const dur = buffers.leadBuf ? buffers.leadBuf.duration
+      : (buffers.instBuf ? buffers.instBuf.duration
+      : (buffers.backBuf ? buffers.backBuf.duration : 0));
+    return dur;
+  }
+
   stopAllSources();
   buffers = {};
-  currentSongId = song ? song.id : null;
+  currentSongId = loadingSongId;
 
   gainNodes = {
     inst: ctx.createGain(),
@@ -151,7 +164,6 @@ export async function setupAudio(song, initialVolumes = { inst: 1, back: 1, lead
     return 0;
   }
 
-  const loadingSongId = song.id;
   const fetchPromises = [];
 
   if (song.stems.lead) {
@@ -173,6 +185,17 @@ export async function setupAudio(song, initialVolumes = { inst: 1, back: 1, lead
   if (song.stems.inst) {
     fetchPromises.push(
       fetch(song.stems.inst)
+        .then(r => r.arrayBuffer())
+        .then(b => ctx.decodeAudioData(b))
+        .then(b => { if (currentSongId === loadingSongId) buffers.instBuf = b; })
+    );
+  }
+
+  // Fallback to full audio if separate stems are not present
+  if (!song.stems.inst && !song.stems.lead && !song.stems.back && (song.stems.full || song.audioUrl)) {
+    const fullAudioPath = song.stems.full || song.audioUrl;
+    fetchPromises.push(
+      fetch(fullAudioPath)
         .then(r => r.arrayBuffer())
         .then(b => ctx.decodeAudioData(b))
         .then(b => { if (currentSongId === loadingSongId) buffers.instBuf = b; })
@@ -225,6 +248,11 @@ export async function playAudio(offset = 0) {
     primaryStem = 'backVoc';
   }
 
+  // Guard against starting at or past maxDuration which would immediately fire onended and auto-skip track
+  const safeOffset = (maxDuration > 0)
+    ? Math.max(0, Math.min(offset, Math.max(0, maxDuration - 0.15)))
+    : Math.max(0, offset);
+
   const onEndedHandler = () => {
     if (songEndFired) return;
     const curTime = ctx.currentTime - audioStartTime;
@@ -241,7 +269,7 @@ export async function playAudio(offset = 0) {
     sources.leadVoc.buffer = buffers.leadBuf;
     sources.leadVoc.connect(gainNodes.leadVoc);
     if (primaryStem === 'leadVoc') sources.leadVoc.onended = onEndedHandler;
-    sources.leadVoc.start(0, offset);
+    sources.leadVoc.start(0, safeOffset);
   }
 
   if (buffers.backBuf && gainNodes.backVoc) {
@@ -249,7 +277,7 @@ export async function playAudio(offset = 0) {
     sources.backVoc.buffer = buffers.backBuf;
     sources.backVoc.connect(gainNodes.backVoc);
     if (primaryStem === 'backVoc') sources.backVoc.onended = onEndedHandler;
-    sources.backVoc.start(0, offset);
+    sources.backVoc.start(0, safeOffset);
   }
 
   if (buffers.instBuf && gainNodes.inst) {
@@ -257,16 +285,17 @@ export async function playAudio(offset = 0) {
     sources.inst.buffer = buffers.instBuf;
     sources.inst.connect(gainNodes.inst);
     if (primaryStem === 'inst') sources.inst.onended = onEndedHandler;
-    sources.inst.start(0, offset);
+    sources.inst.start(0, safeOffset);
   }
 
-  audioStartTime = ctx.currentTime - offset;
-  pauseTime = offset;
+  audioStartTime = ctx.currentTime - safeOffset;
+  pauseTime = safeOffset;
 }
 
 export function pauseAudio() {
   const ctx = getAudioContext();
-  const currentActualTime = (ctx && ctx.state === 'running')
+  const hasActiveSources = !!(sources.leadVoc || sources.inst || sources.backVoc);
+  const currentActualTime = (hasActiveSources && ctx && ctx.state === 'running')
     ? (ctx.currentTime - audioStartTime)
     : pauseTime;
 
