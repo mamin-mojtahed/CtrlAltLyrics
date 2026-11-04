@@ -16,8 +16,8 @@ import torch
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Ctrl Alt Lyrics - AI Whisper Engine")
-    parser.add_argument("--action", required=True, choices=["generate", "align"], help="Action to execute")
-    parser.add_argument("--audio", required=True, help="Path to vocal audio stem or track")
+    parser.add_argument("--action", required=True, choices=["generate", "align", "download"], help="Action to execute")
+    parser.add_argument("--audio", default=None, help="Path to vocal audio stem or track")
     parser.add_argument("--lyrics_json", default=None, help="Path to JSON file containing lyrics lines array (for align)")
     parser.add_argument("--model", default="small", help="Whisper model size: tiny, base, small, medium, turbo, large-v3, large-v2")
     parser.add_argument("--device", default=None, help="Device: mps, cuda, or cpu (auto-detected if None)")
@@ -155,6 +155,18 @@ def ensure_model_available(model_name):
 
 def main():
     args = parse_args()
+    model_name = args.model or "small"
+
+    if args.action == "download":
+        ensure_model_available(model_name)
+        log_progress(100, "done", f"Whisper {model_name} model is downloaded and verified.")
+        print(json.dumps({"success": True, "action": "download", "model": model_name}), flush=True)
+        return
+
+    if not args.audio:
+        err_msg = "Audio file required for align and generate actions"
+        print(json.dumps({"success": False, "error": err_msg}), flush=True)
+        sys.exit(1)
 
     audio_path = os.path.abspath(args.audio)
     if not os.path.isfile(audio_path):
@@ -163,7 +175,6 @@ def main():
         sys.exit(1)
 
     device = resolve_device(args.device)
-    model_name = args.model or "small"
     lang = args.language if args.language and args.language.lower() not in ["", "auto", "none"] else None
 
     try:

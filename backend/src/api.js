@@ -383,6 +383,513 @@ router.post('/spotify_cookie', (req, res) => {
   });
 });
 
+// ==========================================
+// External AI Models Management (Whisper & Separation)
+// ==========================================
+const WHISPER_CACHE_DIR = path.join(process.env.HOME || process.env.USERPROFILE || '/tmp', '.cache', 'whisper');
+const SEPARATION_CACHE_DIR = '/tmp/audio-separator-models';
+const MODEL_USAGE_FILE = path.join(__dirname, '..', 'data', 'model_usage.json');
+
+const REGISTERED_MODELS = [
+  // Whisper Models (Speech & Lyrics)
+  {
+    id: 'whisper:tiny',
+    key: 'tiny',
+    name: 'Whisper Tiny',
+    type: 'whisper',
+    category: 'Lyrics & Speech Recognition',
+    description: 'Fastest inference, ultra-low resource footprint (~75 MB)',
+    approxSize: '75 MB',
+    files: ['tiny.pt'],
+    dir: WHISPER_CACHE_DIR
+  },
+  {
+    id: 'whisper:base',
+    key: 'base',
+    name: 'Whisper Base',
+    type: 'whisper',
+    category: 'Lyrics & Speech Recognition',
+    description: 'Lightweight transcription and alignment (~145 MB)',
+    approxSize: '145 MB',
+    files: ['base.pt'],
+    dir: WHISPER_CACHE_DIR
+  },
+  {
+    id: 'whisper:small',
+    key: 'small',
+    name: 'Whisper Small',
+    type: 'whisper',
+    category: 'Lyrics & Speech Recognition',
+    description: 'Balanced speed and accuracy for lyrics alignment (~484 MB)',
+    approxSize: '484 MB',
+    files: ['small.pt'],
+    dir: WHISPER_CACHE_DIR
+  },
+  {
+    id: 'whisper:medium',
+    key: 'medium',
+    name: 'Whisper Medium',
+    type: 'whisper',
+    category: 'Lyrics & Speech Recognition',
+    description: 'High-accuracy model for multilingual audio & lyrics (~1.53 GB)',
+    approxSize: '1.53 GB',
+    files: ['medium.pt'],
+    dir: WHISPER_CACHE_DIR
+  },
+  {
+    id: 'whisper:turbo',
+    key: 'turbo',
+    name: 'Whisper Turbo (v3)',
+    type: 'whisper',
+    category: 'Lyrics & Speech Recognition',
+    description: 'Optimized high-speed Whisper v3 architecture (~1.62 GB)',
+    approxSize: '1.62 GB',
+    files: ['large-v3-turbo.pt'],
+    dir: WHISPER_CACHE_DIR
+  },
+  {
+    id: 'whisper:large-v3',
+    key: 'large-v3',
+    name: 'Whisper Large v3',
+    type: 'whisper',
+    category: 'Lyrics & Speech Recognition',
+    description: 'Maximum precision speech and multilingual lyrics model (~3.1 GB)',
+    approxSize: '3.1 GB',
+    files: ['large-v3.pt'],
+    dir: WHISPER_CACHE_DIR
+  },
+  {
+    id: 'whisper:large-v2',
+    key: 'large-v2',
+    name: 'Whisper Large v2',
+    type: 'whisper',
+    category: 'Lyrics & Speech Recognition',
+    description: 'Legacy large model with robust time-stamping accuracy (~3.1 GB)',
+    approxSize: '3.1 GB',
+    files: ['large-v2.pt'],
+    dir: WHISPER_CACHE_DIR
+  },
+  // Audio Separation Models (Stems & Karaoke)
+  {
+    id: 'sep:UVR-MDX-NET-Inst_HQ_3.onnx',
+    key: 'UVR-MDX-NET-Inst_HQ_3.onnx',
+    name: 'MDX-Net Balanced (Inst HQ 3)',
+    type: 'separation',
+    category: 'Audio Stem Separation',
+    description: 'Default primary separation model: high fidelity vocals & instrumentals (~67 MB)',
+    approxSize: '67 MB',
+    files: ['UVR-MDX-NET-Inst_HQ_3.onnx'],
+    dir: SEPARATION_CACHE_DIR
+  },
+  {
+    id: 'sep:5_HP-Karaoke-UVR.pth',
+    key: '5_HP-Karaoke-UVR.pth',
+    name: 'VR Arch Karaoke (Lead & Back Vocals)',
+    type: 'separation',
+    category: 'Audio Stem Separation',
+    description: 'Stage 2 separator isolating lead vocals from backing vocals & harmonies (~127 MB)',
+    approxSize: '127 MB',
+    files: ['5_HP-Karaoke-UVR.pth'],
+    dir: SEPARATION_CACHE_DIR
+  },
+  {
+    id: 'sep:UVR-MDX-NET-Inst_1.onnx',
+    key: 'UVR-MDX-NET-Inst_1.onnx',
+    name: 'MDX-Net Fast (Inst 1)',
+    type: 'separation',
+    category: 'Audio Stem Separation',
+    description: 'High-speed model optimized for rapid separation with low resource usage (~45 MB)',
+    approxSize: '45 MB',
+    files: ['UVR-MDX-NET-Inst_1.onnx'],
+    dir: SEPARATION_CACHE_DIR
+  },
+  {
+    id: 'sep:MDX23C-8KFFT-InstVoc_HQ.ckpt',
+    key: 'MDX23C-8KFFT-InstVoc_HQ.ckpt',
+    name: 'MDX23C High Precision (InstVoc HQ)',
+    type: 'separation',
+    category: 'Audio Stem Separation',
+    description: 'MDX23C architecture for superior vocal clarity and reduced artifacting (~120 MB)',
+    approxSize: '120 MB',
+    files: ['MDX23C-8KFFT-InstVoc_HQ.ckpt', 'model_2_stem_full_band_8k.yaml'],
+    dir: SEPARATION_CACHE_DIR
+  },
+  {
+    id: 'sep:model_bs_roformer_ep_317_sdr_12.9755.ckpt',
+    key: 'model_bs_roformer_ep_317_sdr_12.9755.ckpt',
+    name: 'BS-Roformer Ultra (Viperx 1297)',
+    type: 'separation',
+    category: 'Audio Stem Separation',
+    description: 'State-of-the-art Roformer model for studio-grade vocal separation (~160 MB)',
+    approxSize: '160 MB',
+    files: ['model_bs_roformer_ep_317_sdr_12.9755.ckpt', 'model_bs_roformer_ep_317_sdr_12.9755.yaml'],
+    dir: SEPARATION_CACHE_DIR
+  }
+];
+
+const activeModelDownloads = new Map();
+
+function formatBytes(bytes, decimals = 1) {
+  if (!bytes || bytes <= 0) return '0 B';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
+
+function readModelUsage() {
+  try {
+    if (fs.existsSync(MODEL_USAGE_FILE)) {
+      return JSON.parse(fs.readFileSync(MODEL_USAGE_FILE, 'utf8'));
+    }
+  } catch (err) {
+    console.error('Error reading model_usage.json:', err);
+  }
+  return {};
+}
+
+function recordModelUsage(modelId) {
+  try {
+    const usage = readModelUsage();
+    usage[modelId] = (usage[modelId] || 0) + 1;
+    fs.mkdirSync(path.dirname(MODEL_USAGE_FILE), { recursive: true });
+    fs.writeFileSync(MODEL_USAGE_FILE, JSON.stringify(usage, null, 2), 'utf8');
+  } catch (err) {
+    console.error(`Error saving model usage for ${modelId}:`, err);
+  }
+}
+
+function getAggregatedUsageCounts() {
+  const usage = readModelUsage();
+  const counts = { ...usage };
+
+  try {
+    const history = readHistory();
+    for (const item of history) {
+      if (item.stems && (item.stems.inst || item.stems.lead)) {
+        counts['sep:5_HP-Karaoke-UVR.pth'] = (counts['sep:5_HP-Karaoke-UVR.pth'] || 0) + 1;
+
+        const primary = item.separationInfo?.primaryModel;
+        if (primary) {
+          if (primary.includes('Inst_1')) {
+            counts['sep:UVR-MDX-NET-Inst_1.onnx'] = (counts['sep:UVR-MDX-NET-Inst_1.onnx'] || 0) + 1;
+          } else if (primary.includes('Inst_HQ_3')) {
+            counts['sep:UVR-MDX-NET-Inst_HQ_3.onnx'] = (counts['sep:UVR-MDX-NET-Inst_HQ_3.onnx'] || 0) + 1;
+          } else if (primary.includes('Roformer') || primary.includes('1297')) {
+            counts['sep:model_bs_roformer_ep_317_sdr_12.9755.ckpt'] = (counts['sep:model_bs_roformer_ep_317_sdr_12.9755.ckpt'] || 0) + 1;
+          } else if (primary.includes('MDX23C')) {
+            counts['sep:MDX23C-8KFFT-InstVoc_HQ.ckpt'] = (counts['sep:MDX23C-8KFFT-InstVoc_HQ.ckpt'] || 0) + 1;
+          }
+        } else {
+          const mode = item.engineSettings?.mode || 'balanced';
+          if (mode === 'fast') {
+            counts['sep:UVR-MDX-NET-Inst_1.onnx'] = (counts['sep:UVR-MDX-NET-Inst_1.onnx'] || 0) + 1;
+          } else if (mode === 'ultra') {
+            counts['sep:model_bs_roformer_ep_317_sdr_12.9755.ckpt'] = (counts['sep:model_bs_roformer_ep_317_sdr_12.9755.ckpt'] || 0) + 1;
+          } else if (mode === 'high') {
+            counts['sep:MDX23C-8KFFT-InstVoc_HQ.ckpt'] = (counts['sep:MDX23C-8KFFT-InstVoc_HQ.ckpt'] || 0) + 1;
+          } else {
+            counts['sep:UVR-MDX-NET-Inst_HQ_3.onnx'] = (counts['sep:UVR-MDX-NET-Inst_HQ_3.onnx'] || 0) + 1;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Error scanning history for model counts:', e);
+  }
+
+  return counts;
+}
+
+router.get('/models', (req, res) => {
+  const usageCounts = getAggregatedUsageCounts();
+  let totalSizeBytes = 0;
+  let whisperSizeBytes = 0;
+  let separationSizeBytes = 0;
+  let installedCount = 0;
+  let totalUses = 0;
+
+  const models = REGISTERED_MODELS.map(m => {
+    let sizeBytes = 0;
+    let isInstalled = false;
+    const fileDetails = [];
+
+    for (const f of m.files) {
+      const filePath = path.join(m.dir, f);
+      let exists = false;
+      let fSize = 0;
+      try {
+        if (fs.existsSync(filePath)) {
+          const stat = fs.statSync(filePath);
+          if (stat.size > 0) {
+            exists = true;
+            fSize = stat.size;
+            sizeBytes += stat.size;
+          }
+        }
+      } catch (e) {}
+      fileDetails.push({ name: f, path: filePath, sizeBytes: fSize, exists });
+    }
+
+    const primaryFile = fileDetails[0];
+    if (primaryFile && primaryFile.exists && primaryFile.sizeBytes > 1024 * 1024) {
+      isInstalled = true;
+      totalSizeBytes += sizeBytes;
+      if (m.type === 'whisper') whisperSizeBytes += sizeBytes;
+      else if (m.type === 'separation') separationSizeBytes += sizeBytes;
+      installedCount++;
+    }
+
+    const timesUsed = usageCounts[m.id] || usageCounts[m.key] || 0;
+    totalUses += timesUsed;
+
+    const activeDl = activeModelDownloads.get(m.id);
+
+    return {
+      id: m.id,
+      key: m.key,
+      name: m.name,
+      type: m.type,
+      category: m.category,
+      description: m.description,
+      approxSize: m.approxSize,
+      files: m.files,
+      dir: m.dir,
+      fileDetails,
+      isInstalled,
+      sizeBytes,
+      sizeFormatted: isInstalled ? formatBytes(sizeBytes) : m.approxSize,
+      timesUsed,
+      isDownloading: Boolean(activeDl),
+      downloadProgress: activeDl ? activeDl.progress : 0,
+      downloadStatus: activeDl ? activeDl.status : null,
+      downloadMessage: activeDl ? activeDl.message : null
+    };
+  });
+
+  res.json({
+    models,
+    summary: {
+      totalSizeBytes,
+      totalSizeFormatted: formatBytes(totalSizeBytes),
+      whisperSizeBytes,
+      whisperSizeFormatted: formatBytes(whisperSizeBytes),
+      separationSizeBytes,
+      separationSizeFormatted: formatBytes(separationSizeBytes),
+      installedCount,
+      totalCount: REGISTERED_MODELS.length,
+      totalUses
+    }
+  });
+});
+
+router.post('/models/delete', (req, res) => {
+  const { id } = req.body || {};
+  const model = REGISTERED_MODELS.find(m => m.id === id || m.key === id);
+  if (!model) {
+    return res.status(404).json({ error: 'Model not found' });
+  }
+
+  // Abort any active download
+  const activeDl = activeModelDownloads.get(model.id);
+  if (activeDl && typeof activeDl.cancel === 'function') {
+    activeDl.cancel();
+    activeModelDownloads.delete(model.id);
+  }
+
+  let freedBytes = 0;
+  for (const f of model.files) {
+    const filePath = path.join(model.dir, f);
+    const downloadingPath = path.join(model.dir, `${f}.downloading`);
+    for (const p of [filePath, downloadingPath]) {
+      try {
+        if (fs.existsSync(p)) {
+          const stat = fs.statSync(p);
+          freedBytes += stat.size;
+          fs.unlinkSync(p);
+        }
+      } catch (err) {
+        console.warn(`Could not delete ${p}:`, err);
+      }
+    }
+  }
+
+  const io = req.app.get('io');
+  if (io) {
+    io.emit('models_updated');
+  }
+
+  res.json({
+    success: true,
+    id: model.id,
+    freedBytes,
+    freedFormatted: formatBytes(freedBytes)
+  });
+});
+
+router.post('/models/download', (req, res) => {
+  const { id } = req.body || {};
+  const model = REGISTERED_MODELS.find(m => m.id === id || m.key === id);
+  if (!model) {
+    return res.status(404).json({ error: 'Model not found' });
+  }
+
+  if (activeModelDownloads.has(model.id)) {
+    return res.json({ success: true, message: 'Download already in progress', id: model.id });
+  }
+
+  const io = req.app.get('io');
+  const pythonBin = getPythonExecutablePath();
+
+  let child;
+  if (model.type === 'whisper') {
+    const scriptPath = path.join(__dirname, 'auto_lyrics.py');
+    child = spawn(pythonBin, [scriptPath, '--action', 'download', '--model', model.key]);
+  } else {
+    const scriptPath = path.join(__dirname, 'separate.py');
+    child = spawn(pythonBin, [scriptPath, '--download_model', model.key]);
+  }
+
+  let wasCancelled = false;
+  activeModelDownloads.set(model.id, {
+    id: model.id,
+    progress: 1,
+    status: 'starting',
+    message: `Starting download for ${model.name}...`,
+    child,
+    cancel: () => {
+      wasCancelled = true;
+      try { child.kill('SIGTERM'); } catch (e) {}
+    }
+  });
+
+  if (io) {
+    io.emit('model_download_progress', {
+      id: model.id,
+      progress: 1,
+      status: 'starting',
+      message: `Starting download for ${model.name}...`
+    });
+  }
+
+  let stdoutData = '';
+  let stderrData = '';
+
+  child.stdout.on('data', (chunk) => {
+    const str = chunk.toString();
+    stdoutData += str;
+    const lines = str.split('\n');
+    for (const line of lines) {
+      if (line.startsWith('PROGRESS:')) {
+        try {
+          const payload = JSON.parse(line.replace('PROGRESS:', '').trim());
+          const progress = typeof payload.progress === 'number' ? payload.progress : (typeof payload.percent === 'number' ? payload.percent : 0);
+          const status = payload.status || payload.stage || 'downloading';
+          const message = payload.message || '';
+
+          const entry = activeModelDownloads.get(model.id);
+          if (entry) {
+            entry.progress = progress;
+            entry.status = status;
+            entry.message = message;
+          }
+
+          if (io) {
+            io.emit('model_download_progress', {
+              id: model.id,
+              progress,
+              status,
+              message
+            });
+          }
+        } catch (e) {}
+      }
+    }
+  });
+
+  child.stderr.on('data', (chunk) => {
+    stderrData += chunk.toString();
+  });
+
+  child.on('close', (code) => {
+    activeModelDownloads.delete(model.id);
+
+    if (wasCancelled) {
+      if (io) {
+        io.emit('model_download_progress', {
+          id: model.id,
+          progress: 0,
+          status: 'cancelled',
+          message: 'Download cancelled'
+        });
+        io.emit('models_updated');
+      }
+      return;
+    }
+
+    if (code === 0) {
+      if (io) {
+        io.emit('model_download_progress', {
+          id: model.id,
+          progress: 100,
+          status: 'done',
+          message: `${model.name} downloaded and verified.`
+        });
+        io.emit('models_updated');
+      }
+    } else {
+      const err = stderrData.trim() || stdoutData.trim() || `Exit code ${code}`;
+      if (io) {
+        io.emit('model_download_progress', {
+          id: model.id,
+          progress: 0,
+          status: 'error',
+          message: `Download failed: ${err.substring(0, 150)}`
+        });
+        io.emit('models_updated');
+      }
+    }
+  });
+
+  res.json({
+    success: true,
+    id: model.id,
+    message: 'Download started'
+  });
+});
+
+router.post('/models/cancel_download', (req, res) => {
+  const { id } = req.body || {};
+  const model = REGISTERED_MODELS.find(m => m.id === id || m.key === id);
+  if (!model) {
+    return res.status(404).json({ error: 'Model not found' });
+  }
+
+  const activeDl = activeModelDownloads.get(model.id);
+  if (activeDl && typeof activeDl.cancel === 'function') {
+    activeDl.cancel();
+    activeModelDownloads.delete(model.id);
+  }
+
+  for (const f of model.files) {
+    const downloadingPath = path.join(model.dir, `${f}.downloading`);
+    try {
+      if (fs.existsSync(downloadingPath)) {
+        fs.unlinkSync(downloadingPath);
+      }
+    } catch (e) {}
+  }
+
+  const io = req.app.get('io');
+  if (io) {
+    io.emit('models_updated');
+  }
+
+  res.json({ success: true, id: model.id });
+});
+
+
 router.get('/history', (req, res) => {
   cleanupOrphanedDownloads();
   const history = readHistory();
@@ -1760,6 +2267,12 @@ async function splitSongAudio(song) {
   let splitErrorMsg = null;
 
   try {
+    recordModelUsage('sep:5_HP-Karaoke-UVR.pth');
+    if (mode === 'fast') recordModelUsage('sep:UVR-MDX-NET-Inst_1.onnx');
+    else if (mode === 'ultra') recordModelUsage('sep:model_bs_roformer_ep_317_sdr_12.9755.ckpt');
+    else if (mode === 'high') recordModelUsage('sep:MDX23C-8KFFT-InstVoc_HQ.ckpt');
+    else recordModelUsage('sep:UVR-MDX-NET-Inst_HQ_3.onnx');
+
     const separateCmd = `${activatePrefix}python "${path.join(__dirname, 'separate.py')}" --input "${audioPath}" --output_dir "${songDir}" --mode "${mode}" --format "${format}" --bitrate "${bitrate}"`;
     await execPromise(separateCmd, { shell: '/bin/bash' });
   } catch (e) {
@@ -2492,6 +3005,7 @@ function getBestAudioPathForLyrics(songId) {
 }
 
 async function runAutoLyricsJob({ action, song, audioPath, model = 'small', language = null, lyricsLines = null, io = null }) {
+  recordModelUsage(`whisper:${model || 'small'}`);
   const songDir = path.join(DOWNLOADS_DIR, song.id);
   const pythonBin = getPythonExecutablePath();
   const scriptPath = path.join(__dirname, 'auto_lyrics.py');

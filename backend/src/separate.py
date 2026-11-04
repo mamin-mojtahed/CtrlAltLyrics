@@ -150,12 +150,63 @@ def separate_audio(input_file, output_dir, mode="balanced", output_format="MP3",
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", required=True, help="Input audio file")
-    parser.add_argument("--output_dir", required=True, help="Output directory")
+    parser.add_argument("--input", default=None, help="Input audio file")
+    parser.add_argument("--output_dir", default=None, help="Output directory")
     parser.add_argument("--mode", default="balanced", choices=["fast", "balanced", "high", "ultra"], help="Separation mode")
     parser.add_argument("--format", default="MP3", help="Output audio format (MP3, M4A, WAV)")
     parser.add_argument("--bitrate", default="192k", help="Output bitrate for compressed formats (e.g. 192k, 320k)")
+    parser.add_argument("--download_model", default=None, help="Download model and exit")
     args = parser.parse_args()
+
+    if args.download_model:
+        model_target = args.download_model.strip()
+        import json
+        import time
+        import requests
+
+        class ProgressSeparator(Separator):
+            def download_file_if_not_exists(self, url, output_path):
+                if os.path.isfile(output_path):
+                    self.logger.debug(f"File already exists at {output_path}, skipping download")
+                    return
+
+                print(f"PROGRESS: {json.dumps({'progress': 1, 'status': 'downloading', 'message': f'Starting download for {os.path.basename(output_path)}...'})}", flush=True)
+                response = requests.get(url, stream=True, timeout=300)
+                if response.status_code == 200:
+                    total_size = int(response.headers.get("content-length", 0))
+                    downloaded = 0
+                    last_time = 0
+                    with open(output_path, "wb") as f:
+                        for chunk in response.iter_content(chunk_size=1024 * 64):
+                            if chunk:
+                                f.write(chunk)
+                                downloaded += len(chunk)
+                                now = time.time()
+                                if now - last_time > 0.4:
+                                    last_time = now
+                                    pct = int((downloaded / total_size) * 100) if total_size > 0 else 50
+                                    mb = round(downloaded / (1024 * 1024), 1)
+                                    tot_mb = round(total_size / (1024 * 1024), 1) if total_size > 0 else "?"
+                                    print(f"PROGRESS: {json.dumps({'progress': pct, 'status': 'downloading', 'message': f'Downloading {os.path.basename(output_path)}: {mb}/{tot_mb} MB ({pct}%)'})}", flush=True)
+                    print(f"PROGRESS: {json.dumps({'progress': 100, 'status': 'verifying', 'message': f'Verified {os.path.basename(output_path)}'})}", flush=True)
+                else:
+                    raise RuntimeError(f"Failed to download file from {url}, response code: {response.status_code}")
+
+        try:
+            print(f"PROGRESS: {json.dumps({'progress': 0, 'status': 'starting', 'message': f'Preparing to download {model_target}...'})}", flush=True)
+            sep = ProgressSeparator(log_level=logging.WARNING)
+            sep.download_model_and_data(model_target)
+            print(f"PROGRESS: {json.dumps({'progress': 100, 'status': 'done', 'message': f'Model {model_target} downloaded successfully'})}", flush=True)
+            print(json.dumps({"success": True, "action": "download", "model": model_target}), flush=True)
+            sys.exit(0)
+        except Exception as err:
+            print(f"PROGRESS: {json.dumps({'progress': 0, 'status': 'error', 'message': str(err)})}", flush=True)
+            print(json.dumps({"success": False, "error": str(err)}), flush=True)
+            sys.exit(1)
+
+    if not args.input or not args.output_dir:
+        print("Error: --input and --output_dir are required for separation.", file=sys.stderr)
+        sys.exit(1)
 
     separate_audio(args.input, args.output_dir, mode=args.mode, output_format=args.format, output_bitrate=args.bitrate)
 

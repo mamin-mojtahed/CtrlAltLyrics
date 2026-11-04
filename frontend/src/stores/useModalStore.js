@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 
 function getActiveModalDescriptor(state) {
+  if (state.modelsManagerModalOpen) {
+    return { type: 'modelsManager', payload: true };
+  }
   if (state.lyricsSyncModalSong) {
     return { type: 'lyricsSync', payload: state.lyricsSyncModalSong };
   }
@@ -34,6 +37,7 @@ function popAndRestore(state) {
   if (history.length === 0) {
     return {
       uploadModalOpen: false,
+      modelsManagerModalOpen: false,
       metadataModalSong: null,
       lyricsSyncModalSong: null,
       componentManagerSongId: null,
@@ -45,6 +49,7 @@ function popAndRestore(state) {
   const previous = history.pop();
   return {
     uploadModalOpen: previous.type === 'upload',
+    modelsManagerModalOpen: previous.type === 'modelsManager',
     metadataModalSong: previous.type === 'metadata' ? previous.payload : null,
     lyricsSyncModalSong: previous.type === 'lyricsSync' ? previous.payload : null,
     componentManagerSongId: previous.type === 'componentManager' ? previous.payload : null,
@@ -67,6 +72,7 @@ function pushAndOpen(state, nextModalState, descriptor) {
 
   return {
     uploadModalOpen: false,
+    modelsManagerModalOpen: false,
     metadataModalSong: null,
     lyricsSyncModalSong: null,
     componentManagerSongId: null,
@@ -78,11 +84,15 @@ function pushAndOpen(state, nextModalState, descriptor) {
 
 export const useModalStore = create((set) => ({
   uploadModalOpen: false,
+  modelsManagerModalOpen: false,
   metadataModalSong: null,
   lyricsSyncModalSong: null,
   componentManagerSongId: null,
   stemEditorModalSong: null,
   modalHistory: [],
+
+  openModelsManagerModal: () => set((state) => pushAndOpen(state, { modelsManagerModalOpen: true }, { type: 'modelsManager', payload: true })),
+  closeModelsManagerModal: () => set((state) => popAndRestore(state)),
 
   openUploadModal: () => set((state) => pushAndOpen(state, { uploadModalOpen: true }, { type: 'upload', payload: true })),
   closeUploadModal: () => set((state) => popAndRestore(state)),
@@ -103,6 +113,7 @@ export const useModalStore = create((set) => ({
 
   closeAllModals: () => set({
     uploadModalOpen: false,
+    modelsManagerModalOpen: false,
     metadataModalSong: null,
     lyricsSyncModalSong: null,
     componentManagerSongId: null,

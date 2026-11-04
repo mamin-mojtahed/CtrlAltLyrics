@@ -291,4 +291,51 @@ export async function saveSpotifyCookie(cookie) {
   return res.json();
 }
 
+// External AI Models Management
+export async function fetchModelsStatus() {
+  const res = await fetch('/api/models');
+  if (!res.ok) throw new Error(`Failed to fetch models: ${res.statusText}`);
+  return res.json();
+}
+
+export async function deleteModel(id) {
+  const res = await fetch('/api/models/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id })
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Failed to delete model: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function downloadModel(id) {
+  const res = await fetch('/api/models/download', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id })
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Failed to start model download: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function cancelModelDownload(id) {
+  const res = await fetch('/api/models/cancel_download', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id })
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Failed to cancel model download: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+
 

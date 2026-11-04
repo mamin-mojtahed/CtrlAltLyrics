@@ -19,6 +19,7 @@ import ComponentManagerModal from './components/modals/ComponentManagerModal';
 import MetadataModal from './components/modals/MetadataModal';
 import LyricsSyncModal from './components/modals/LyricsSyncModal';
 import StemEditorModal from './components/modals/StemEditorModal';
+import ModelsManagerModal from './components/modals/ModelsManagerModal';
 import { extractYoutubeId } from './utils/youtube';
 
 export default function DashboardApp() {
@@ -50,6 +51,7 @@ export default function DashboardApp() {
   const metadataModalSong = useModalStore((state) => state.metadataModalSong);
   const componentManagerSongId = useModalStore((state) => state.componentManagerSongId);
   const uploadModalOpen = useModalStore((state) => state.uploadModalOpen);
+  const modelsManagerModalOpen = useModalStore((state) => state.modelsManagerModalOpen);
 
   // Hook for all dashboard border dividers and persistent CSS variables
   useDashboardResizers();
@@ -253,7 +255,7 @@ export default function DashboardApp() {
   useEffect(() => {
     const handleKeyDown = (e) => {
       // If a modal is open, let that modal handle shortcuts (including Escape and Space)
-      if (lyricsSyncModalSong || stemEditorModalSong || metadataModalSong || componentManagerSongId || uploadModalOpen) {
+      if (lyricsSyncModalSong || stemEditorModalSong || metadataModalSong || componentManagerSongId || uploadModalOpen || modelsManagerModalOpen) {
         return;
       }
 
@@ -412,6 +414,7 @@ export default function DashboardApp() {
       <MetadataModal />
       <LyricsSyncModal />
       <StemEditorModal />
+      <ModelsManagerModal />
     </div>
   );
 }
