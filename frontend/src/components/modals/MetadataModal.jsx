@@ -6,6 +6,7 @@ import { useQueueStore } from '../../stores/useQueueStore';
 import socket, { emitUpdateState } from '../../services/socket';
 import { extractColorsFromSongCover, getHighResAlbumArt } from '../../utils/themeColors';
 import ScrollShadowWrapper from '../common/ScrollShadowWrapper';
+import { WHISPER_LANGUAGES } from '../../utils/whisperLanguages';
 
 function extractYoutubeId(urlOrId) {
   if (!urlOrId || typeof urlOrId !== 'string') return null;
@@ -25,6 +26,7 @@ export default function MetadataModal() {
 
   const [title, setTitle] = useState('');
   const [artist, setArtist] = useState('');
+  const [language, setLanguage] = useState('auto');
   const [coverUrl, setCoverUrl] = useState('');
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [youtubeId, setYoutubeId] = useState('');
@@ -56,6 +58,7 @@ export default function MetadataModal() {
     if (song) {
       setTitle(song.title || '');
       setArtist(song.artist || '');
+      setLanguage(song.language || 'auto');
       setCoverUrl(song.albumArt || '');
       const ytId = song.youtubeId || extractYoutubeId(song.youtubeUrl) || '';
       setYoutubeId(ytId);
@@ -424,6 +427,7 @@ export default function MetadataModal() {
     formData.append('songId', song.id);
     formData.append('title', title);
     formData.append('artist', artist);
+    formData.append('language', language);
     formData.append('coverUrl', coverUrl);
     formData.append('youtubeUrl', youtubeUrl.trim());
     formData.append('videoOffset', videoOffset !== undefined && videoOffset !== null ? videoOffset : 0);
@@ -448,6 +452,7 @@ export default function MetadataModal() {
             ...currentSong,
             title,
             artist,
+            language: language === 'auto' ? null : language,
             albumArt: coverUrl || currentSong.albumArt,
             youtubeUrl: youtubeUrl.trim() || null,
             youtubeId: ytId || null,
@@ -569,6 +574,22 @@ export default function MetadataModal() {
                 placeholder="Artist name"
                 style={{ width: '100%' }}
               />
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.2rem' }}>Song Language (Whisper AI):</label>
+              <select
+                className="select-input"
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                style={{ width: '100%' }}
+              >
+                {WHISPER_LANGUAGES.map((l) => (
+                  <option key={l.code} value={l.code}>
+                    {l.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* YouTube Music Video (Online Stream) Section */}

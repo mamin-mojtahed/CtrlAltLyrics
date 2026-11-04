@@ -6,3 +6,4 @@ filetype
 requests
 pykakasi
 unidecode
+stable-ts

@@ -112,6 +112,7 @@
     "id": "1745532745",
     "title": "Parvardamat",
     "artist": "Mohsen Namjoo",
+    "language": "fa",
     "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/b3/98/49/b39849a7-61fa-27bf-a14d-4b52ffa7c690/198500863246.jpg/100x100bb.jpg",
     "query": "Parvardamat Mohsen Namjoo",
     "status": "ready",
@@ -125,14 +126,19 @@
     "downloadAttempts": [],
     "engineSettings": null,
     "separationInfo": null,
-    "lyricsProvider": null,
-    "isSynced": true,
-    "hasLyrics": false,
+    "lyricsProvider": "Manual Import",
+    "isSynced": false,
+    "hasLyrics": true,
     "spotifyUrl": null,
     "spotifyTrackId": null,
     "isSpotify": false,
     "isUploaded": false,
-    "lyricsError": "No lyrics found across any provider."
+    "youtubeId": "caQ0Caj34Mw",
+    "youtubeUrl": "https://www.youtube.com/watch?v=caQ0Caj34Mw",
+    "videoStatus": "ready",
+    "videoError": null,
+    "videoDuration": 239,
+    "videoOffset": -0.05
   },
   {
     "id": "291562966",
@@ -215,7 +221,13 @@
     "spotifyUrl": null,
     "spotifyTrackId": null,
     "isSpotify": false,
-    "isUploaded": false
+    "isUploaded": false,
+    "youtubeId": "JSveTuCclRc",
+    "youtubeUrl": "https://www.youtube.com/watch?v=JSveTuCclRc",
+    "videoStatus": "ready",
+    "videoError": null,
+    "videoDuration": 356,
+    "videoOffset": -25.73
   },
   {
     "id": "1441409718",
@@ -345,6 +357,7 @@
     "id": "1860037168",
     "title": "Che Daanestam",
     "artist": "Mohsen Namjoo & Kābin",
+    "language": "fa",
     "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/e3/88/ae/e388ae02-4df4-3fd6-9c10-605df64dac5c/199900302564.jpg/100x100bb.jpg",
     "query": "Che Daanestam Mohsen Namjoo & Kābin",
     "status": "ready",
@@ -358,14 +371,19 @@
     "downloadAttempts": [],
     "engineSettings": null,
     "separationInfo": null,
-    "lyricsProvider": "Manual Import",
+    "lyricsProvider": "AI Whisper Auto-Synced (medium)",
     "isSynced": true,
-    "hasLyrics": false,
+    "hasLyrics": true,
     "spotifyUrl": null,
     "spotifyTrackId": null,
     "isSpotify": false,
     "isUploaded": false,
-    "lyricsError": "No lyrics found across any provider."
+    "youtubeId": "UmqBnOJswVw",
+    "youtubeUrl": "https://www.youtube.com/watch?v=UmqBnOJswVw",
+    "videoStatus": "ready",
+    "videoError": null,
+    "videoDuration": 305,
+    "videoOffset": 0
   },
   {
     "id": "1860037158",
@@ -391,6 +409,12 @@
     "spotifyTrackId": null,
     "isSpotify": false,
     "isUploaded": false,
+    "youtubeId": "3pT_Bzrr-VI",
+    "youtubeUrl": "https://www.youtube.com/watch?v=3pT_Bzrr-VI",
+    "videoStatus": "ready",
+    "videoError": null,
+    "videoDuration": 295,
+    "videoOffset": 119.78,
     "lyricsError": "No lyrics found across any provider."
   },
   {
@@ -907,6 +931,7 @@
     "id": "upload_1787439244332",
     "title": "Mitra (Hamkhooneh)",
     "artist": "Mohsen Namjoo",
+    "language": null,
     "albumArt": "/audio/upload_1787439244332/cover.jpg",
     "query": "Mitra Mohsen Namjoo",
     "status": "ready",
@@ -948,7 +973,9 @@
     "youtubeId": null,
     "youtubeUrl": null,
     "videoStatus": "error",
-    "videoError": "No matching YouTube music video found"
+    "videoError": "No matching YouTube music video found",
+    "videoDuration": null,
+    "videoOffset": 0
   },
   {
     "id": "1377813701",
@@ -995,13 +1022,20 @@
       "karaokeModel": "5_HP-Karaoke-UVR.pth",
       "isCustom": false
     },
-    "lyricsProvider": "LRCLIB (Synced)",
+    "lyricsProvider": "Manual Import",
     "isSynced": true,
     "hasLyrics": true,
     "spotifyUrl": null,
     "spotifyTrackId": null,
     "isSpotify": false,
-    "isUploaded": false
+    "isUploaded": false,
+    "youtubeId": null,
+    "youtubeUrl": null,
+    "videoStatus": null,
+    "videoError": null,
+    "videoDuration": null,
+    "videoOffset": 0,
+    "language": "en"
   },
   {
     "id": "1736816483",
@@ -1351,5 +1385,64 @@
     "videoStatus": "ready",
     "videoError": null,
     "lyricsError": "No lyrics found across any provider."
+  },
+  {
+    "id": "1621835387",
+    "title": "Zendan",
+    "artist": "Mohsen Chavoshi",
+    "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/56/4b/c0/564bc0f8-5eac-7319-6a34-b2257a1c6c27/8720766309002.png/100x100bb.jpg",
+    "query": "Zendan Mohsen Chavoshi",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/1621835387/instrumental.mp3",
+      "lead": "/audio/1621835387/lead_vocal.mp3",
+      "back": "/audio/1621835387/back_vocal.mp3",
+      "full": "/audio/1621835387/audio.mp3"
+    },
+    "downloadMethod": "yt-dlp Direct (Title + Artist)",
+    "downloadAttempts": [
+      {
+        "provider": "SpotDL",
+        "status": "failed",
+        "detail": "SpotDL verified search failed on Spotify catalog for \"Zendan Mohsen Chavoshi\""
+      },
+      {
+        "provider": "yt-dlp Direct (Title + Artist)",
+        "status": "success",
+        "detail": "Audio extracted via YouTube audio search for \"Zendan Mohsen Chavoshi\""
+      },
+      {
+        "provider": "yt-dlp Title Fallback",
+        "status": "skipped",
+        "detail": "Not needed (acquired via yt-dlp Direct)"
+      }
+    ],
+    "engineSettings": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "isCustom": false
+    },
+    "separationInfo": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "primaryModel": "UVR-MDX-NET-Inst_HQ_3.onnx",
+      "karaokeModel": "5_HP-Karaoke-UVR.pth",
+      "isCustom": false
+    },
+    "lyricsProvider": "LRCLIB (Synced)",
+    "isSynced": true,
+    "hasLyrics": true,
+    "spotifyUrl": null,
+    "spotifyTrackId": null,
+    "isSpotify": false,
+    "isUploaded": false,
+    "youtubeId": "eOFsl6w0CcY",
+    "youtubeUrl": "https://www.youtube.com/watch?v=eOFsl6w0CcY",
+    "videoStatus": "ready",
+    "videoError": null,
+    "videoDuration": 299,
+    "videoOffset": 0
   }
 ]

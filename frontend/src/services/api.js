@@ -155,9 +155,12 @@ export async function importManualLyrics(id, lyricsText) {
   const res = await fetch(`/api/import_lyrics/${id}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ lyricsText })
+    body: JSON.stringify({ lyricsText, text: lyricsText })
   });
-  if (!res.ok) throw new Error(`Import lyrics failed: ${res.statusText}`);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Import lyrics failed: ${res.statusText}`);
+  }
   return res.json();
 }
 
@@ -168,6 +171,63 @@ export async function editLyrics(id, lyrics) {
     body: JSON.stringify({ id, lyrics })
   });
   if (!res.ok) throw new Error(`Save lyrics failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function autoSyncLyrics(id, options = {}) {
+  const res = await fetch(`/api/auto_sync_lyrics/${id}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(options)
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Auto-sync failed: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function autoGenerateLyrics(id, options = {}) {
+  const res = await fetch(`/api/auto_generate_lyrics/${id}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(options)
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Auto-generate failed: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function cancelAutoLyrics(id) {
+  const res = await fetch(`/api/cancel_auto_lyrics/${id}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Cancel auto-lyrics failed: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function getSongAudioStatus(id) {
+  const res = await fetch(`/api/song_audio_status/${id}`);
+  if (!res.ok) throw new Error(`Failed to get audio status: ${res.statusText}`);
+  return res.json();
+}
+
+export async function updateSongLanguage(id, language) {
+  const res = await fetch(`/api/song_language/${id}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ language })
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Update song language failed: ${res.statusText}`);
+  }
   return res.json();
 }
 

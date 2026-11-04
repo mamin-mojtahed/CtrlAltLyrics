@@ -113,6 +113,9 @@ function getActiveCurrentState(io = null) {
   return null;
 }
 
+// Active AI Auto-Lyrics execution map: songId -> ChildProcess
+const activeAutoLyricsJobs = new Map();
+
 function syncSongAcrossQueue(updatedSong) {
   if (!updatedSong || !updatedSong.id) return;
   const lyricsData = readSongLyrics(updatedSong.id);
@@ -189,6 +192,7 @@ function writeSongLyrics(songId, data) {
       id: songId,
       title: data.title || existing.title || '',
       artist: data.artist || existing.artist || '',
+      language: data.language !== undefined ? data.language : (existing.language || null),
       lyricsProvider: data.lyricsProvider || existing.lyricsProvider || null,
       isSynced: data.isSynced !== undefined ? data.isSynced : (existing.isSynced !== undefined ? existing.isSynced : true),
       lyricsAttempts: (Array.isArray(data.lyricsAttempts) && data.lyricsAttempts.length > 0) ? data.lyricsAttempts : (existing.lyricsAttempts || []),
@@ -229,6 +233,7 @@ function saveLightweightHistoryItem(song) {
     id: song.id,
     title: song.title,
     artist: song.artist,
+    language: song.language !== undefined ? song.language : (lyricsOnDisk.language || null),
     albumArt: song.albumArt,
     query: song.query,
     status: song.status,
@@ -2330,7 +2335,10 @@ router.post('/retry_lyrics/:id', async (req, res) => {
 
 router.post('/import_lyrics/:id', async (req, res) => {
   const songId = req.params.id;
-  const { text = '' } = req.body || {};
+  const rawInput = typeof req.body.text === 'string'
+    ? req.body.text
+    : (typeof req.body.lyricsText === 'string' ? req.body.lyricsText : '');
+  const trimmedInput = rawInput.trim();
 
   let song = queue.find(s => s.id === songId);
   const history = readHistory();
@@ -2346,26 +2354,52 @@ router.post('/import_lyrics/:id', async (req, res) => {
     return res.status(404).json({ error: 'Song not found' });
   }
 
-  const lines = text
-    .split(/\r?\n/)
-    .map(line => line.trim())
-    .filter(line => line.length > 0);
-
-  if (lines.length === 0) {
+  if (!trimmedInput) {
     return res.status(400).json({ error: 'No lyric lines provided. Please paste lyrics with at least one non-empty line.' });
   }
 
-  const defaultGap = 4.0; // 4 seconds default gap per line for unsynced lyrics
-  const rawLyrics = lines.map((line, idx) => ({
-    time: parseFloat((idx * defaultGap).toFixed(1)),
-    text: line
-  }));
-  const processedLyrics = await fetchLyricsTranslationAndPronunciation(rawLyrics);
+  const hasTimestamps = /\[\d{2}:\d{2}/.test(trimmedInput);
+  let rawLyrics = [];
 
+  if (hasTimestamps) {
+    rawLyrics = parseLrc(trimmedInput);
+  } else {
+    const lines = trimmedInput
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
+
+    if (lines.length === 0) {
+      return res.status(400).json({ error: 'No lyric lines provided. Please paste lyrics with at least one non-empty line.' });
+    }
+
+    const defaultGap = 4.0; // 4 seconds default gap per line for unsynced lyrics
+    rawLyrics = lines.map((line, idx) => ({
+      time: parseFloat((idx * defaultGap).toFixed(1)),
+      text: line,
+      translation: '',
+      transliteration: ''
+    }));
+  }
+
+  if (rawLyrics.length === 0) {
+    return res.status(400).json({ error: 'Failed to parse any valid lyric lines from the provided input.' });
+  }
+
+  let processedLyrics = rawLyrics;
+  try {
+    processedLyrics = await fetchLyricsTranslationAndPronunciation(rawLyrics);
+  } catch (te) {
+    console.warn('Subtitles processing failed on manual import:', te);
+  }
+
+  const isSynced = hasTimestamps;
   const attemptsLog = [{
     provider: 'Manual Import',
     status: 'success',
-    detail: `Imported ${lines.length} lines (unsynced, 4s gap)`
+    detail: isSynced
+      ? `Imported ${processedLyrics.length} lines (LRC Synced)`
+      : `Imported ${processedLyrics.length} lines (unsynced, 4s gap)`
   }];
 
   writeSongLyrics(songId, {
@@ -2373,7 +2407,7 @@ router.post('/import_lyrics/:id', async (req, res) => {
     title: song.title,
     artist: song.artist,
     lyricsProvider: 'Manual Import',
-    isSynced: false,
+    isSynced: isSynced,
     lyricsAttempts: attemptsLog,
     lyricsError: null,
     lyrics: processedLyrics
@@ -2381,7 +2415,7 @@ router.post('/import_lyrics/:id', async (req, res) => {
 
   song.hasLyrics = true;
   song.lyricsProvider = 'Manual Import';
-  song.isSynced = false;
+  song.isSynced = isSynced;
   song.lyrics = processedLyrics;
   song.lyricsAttempts = attemptsLog;
   delete song.lyricsError;
@@ -2393,27 +2427,431 @@ router.post('/import_lyrics/:id', async (req, res) => {
   if (io) {
     io.emit('queue_updated', queue);
     io.emit('library_updated', readHistory());
+    io.emit('lyrics_report', {
+      songId: song.id,
+      songTitle: song.title,
+      attempts: attemptsLog,
+      provider: song.lyricsProvider,
+      lyricsCount: song.lyrics.length,
+      lyricsError: null
+    });
     const cur = getActiveCurrentState(io);
     if (cur && cur.songId === song.id) {
       const updatedActive = { ...cur.songData, ...song };
       if (typeof io.updateCurrentState === 'function') io.updateCurrentState({ songData: updatedActive });
       io.emit('sync_state', { songId: song.id, songData: updatedActive });
-      io.emit('lyrics_updated', {
-        songId: song.id,
-        lyrics: song.lyrics,
-        lyricsProvider: song.lyricsProvider,
-        isSynced: song.isSynced
-      });
     }
+    io.emit('lyrics_updated', {
+      songId: song.id,
+      lyrics: song.lyrics,
+      lyricsProvider: song.lyricsProvider,
+      isSynced: song.isSynced
+    });
   }
 
   res.json({
     success: true,
     song,
-    count: lines.length,
+    count: processedLyrics.length,
     attempts: attemptsLog,
-    provider: 'Manual Import'
+    provider: 'Manual Import',
+    isSynced
   });
+});
+
+// --- AI Auto-Lyrics Helpers & Endpoints (Whisper Engine) ---
+
+function getBestAudioPathForLyrics(songId) {
+  const songDir = path.join(DOWNLOADS_DIR, songId);
+  if (!fs.existsSync(songDir)) return null;
+
+  // 1. Try separated lead_vocal first
+  for (const ext of ['.mp3', '.m4a', '.wav', '.flac', '.aac', '.ogg']) {
+    const leadPath = path.join(songDir, `lead_vocal${ext}`);
+    if (fs.existsSync(leadPath) && fs.statSync(leadPath).size > 0) {
+      return { path: leadPath, isVocalStem: true };
+    }
+  }
+
+  // 2. Fall back to main audio track
+  for (const ext of ['.mp3', '.m4a', '.wav', '.flac', '.aac', '.ogg']) {
+    const audioPath = path.join(songDir, `audio${ext}`);
+    if (fs.existsSync(audioPath) && fs.statSync(audioPath).size > 0) {
+      return { path: audioPath, isVocalStem: false };
+    }
+  }
+
+  // 3. Search directory for any audio file
+  const files = fs.readdirSync(songDir);
+  const audioFile = files.find(f => /\.(mp3|m4a|wav|flac|aac|ogg)$/i.test(f) && !f.startsWith('instrumental') && !f.startsWith('back_vocal'));
+  if (audioFile) {
+    return { path: path.join(songDir, audioFile), isVocalStem: audioFile.includes('lead_vocal') };
+  }
+
+  return null;
+}
+
+async function runAutoLyricsJob({ action, song, audioPath, model = 'small', language = null, lyricsLines = null, io = null }) {
+  const songDir = path.join(DOWNLOADS_DIR, song.id);
+  const pythonBin = getPythonExecutablePath();
+  const scriptPath = path.join(__dirname, 'auto_lyrics.py');
+
+  let tempLyricsPath = null;
+  if (action === 'align' && Array.isArray(lyricsLines)) {
+    tempLyricsPath = path.join(songDir, `temp_align_${Date.now()}.json`);
+    fs.writeFileSync(tempLyricsPath, JSON.stringify(lyricsLines, null, 2), 'utf-8');
+  }
+
+  const args = [
+    scriptPath,
+    '--action', action,
+    '--audio', audioPath,
+    '--model', model || 'small'
+  ];
+
+  const targetLang = (language && language !== 'auto') ? language : (song.language && song.language !== 'auto' ? song.language : null);
+  if (targetLang) {
+    args.push('--language', targetLang);
+  }
+
+  if (tempLyricsPath) {
+    args.push('--lyrics_json', tempLyricsPath);
+  }
+
+  return new Promise((resolve, reject) => {
+    let wasCancelled = false;
+    const child = spawn(pythonBin, args);
+    activeAutoLyricsJobs.set(song.id, {
+      child,
+      cancel: () => {
+        wasCancelled = true;
+        try { child.kill('SIGTERM'); } catch (e) {}
+      }
+    });
+
+    let stdoutData = '';
+    let stderrData = '';
+
+    child.stdout.on('data', (chunk) => {
+      const str = chunk.toString();
+      stdoutData += str;
+      const lines = str.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('PROGRESS:')) {
+          try {
+            const payload = JSON.parse(line.replace('PROGRESS:', '').trim());
+            if (io) {
+              io.emit('auto_lyrics_progress', {
+                songId: song.id,
+                action,
+                ...payload
+              });
+            }
+          } catch (e) {}
+        }
+      }
+    });
+
+    child.stderr.on('data', (chunk) => {
+      stderrData += chunk.toString();
+    });
+
+    child.on('close', async (code) => {
+      activeAutoLyricsJobs.delete(song.id);
+      if (tempLyricsPath && fs.existsSync(tempLyricsPath)) {
+        try { fs.unlinkSync(tempLyricsPath); } catch (e) {}
+      }
+
+      if (wasCancelled) {
+        return resolve({ cancelled: true });
+      }
+
+      if (code !== 0) {
+        const errLines = stderrData.trim() || stdoutData.trim();
+        return reject(new Error(`AI Auto-Lyrics (${action}) failed: ${errLines || `exit code ${code}`}`));
+      }
+
+      try {
+        const outLines = stdoutData.trim().split('\n').filter(l => l.trim() && !l.startsWith('PROGRESS:'));
+        const jsonStr = outLines[outLines.length - 1] || '{}';
+        const resData = JSON.parse(jsonStr);
+
+        if (!resData.success) {
+          return reject(new Error(resData.error || 'Unknown auto-lyrics engine error'));
+        }
+
+        let lines = resData.lines || [];
+        if (action === 'generate') {
+          try {
+            lines = await fetchLyricsTranslationAndPronunciation(lines);
+          } catch (pe) {
+            console.warn('Post-processing generated lyrics transliteration failed:', pe);
+          }
+        }
+
+        song.hasLyrics = true;
+        song.isSynced = true;
+        song.lyrics = lines;
+        const resolvedLanguage = targetLang || resData.language || null;
+        if (resolvedLanguage) {
+          song.language = resolvedLanguage;
+        }
+        song.lyricsProvider = action === 'generate'
+          ? `AI Whisper (${resData.model || model})`
+          : `AI Whisper Auto-Synced (${resData.model || model})`;
+        delete song.lyricsError;
+
+        const attemptEntry = {
+          provider: song.lyricsProvider,
+          status: 'success',
+          detail: `${action === 'generate' ? 'Generated' : 'Synced'} ${lines.length} lines (${resolvedLanguage || 'auto'})`
+        };
+        if (!Array.isArray(song.lyricsAttempts)) song.lyricsAttempts = [];
+        song.lyricsAttempts.unshift(attemptEntry);
+
+        writeSongLyrics(song.id, song);
+        saveLightweightHistoryItem(song);
+        syncSongAcrossQueue(song);
+
+        if (io) {
+          io.emit('queue_updated', queue);
+          io.emit('library_updated', readHistory());
+          io.emit('lyrics_report', {
+            songId: song.id,
+            songTitle: song.title,
+            attempts: song.lyricsAttempts,
+            provider: song.lyricsProvider,
+            lyricsCount: song.lyrics.length,
+            lyricsError: null
+          });
+          const cur = getActiveCurrentState(io);
+          if (cur && cur.songId === song.id) {
+            const updatedActive = { ...cur.songData, ...song };
+            if (typeof io.updateCurrentState === 'function') io.updateCurrentState({ songData: updatedActive });
+            io.emit('sync_state', { songId: song.id, songData: updatedActive });
+            io.emit('lyrics_updated', {
+              songId: song.id,
+              lyrics: song.lyrics,
+              lyricsProvider: song.lyricsProvider,
+              isSynced: true
+            });
+          } else {
+            io.emit('lyrics_updated', {
+              songId: song.id,
+              lyrics: song.lyrics,
+              lyricsProvider: song.lyricsProvider,
+              isSynced: true
+            });
+          }
+        }
+
+        resolve({
+          success: true,
+          action,
+          song,
+          lines: song.lyrics,
+          language: resData.language,
+          model: resData.model || model
+        });
+      } catch (parseErr) {
+        reject(new Error(`Failed to parse AI Auto-Lyrics output: ${parseErr.message}`));
+      }
+    });
+
+    child.on('error', (err) => {
+      activeAutoLyricsJobs.delete(song.id);
+      if (tempLyricsPath && fs.existsSync(tempLyricsPath)) {
+        try { fs.unlinkSync(tempLyricsPath); } catch (e) {}
+      }
+      reject(err);
+    });
+  });
+}
+
+router.get('/song_audio_status/:id', (req, res) => {
+  const songId = req.params.id;
+  const audioInfo = getBestAudioPathForLyrics(songId);
+  res.json({
+    hasAudio: !!audioInfo,
+    isVocalStem: audioInfo ? audioInfo.isVocalStem : false,
+    audioPath: audioInfo ? path.basename(audioInfo.path) : null
+  });
+});
+
+router.post('/auto_sync_lyrics/:id', async (req, res) => {
+  const songId = req.params.id;
+  const { model = 'small', language = null } = req.body || {};
+
+  let song = queue.find(s => s.id === songId);
+  const history = readHistory();
+  if (!song) {
+    song = history.find(s => s.id === songId);
+    if (song) {
+      const lyricsData = readSongLyrics(songId);
+      song = { ...song, ...lyricsData };
+    }
+  }
+
+  if (!song) {
+    return res.status(404).json({ error: 'Song not found' });
+  }
+
+  if (!Array.isArray(song.lyrics) || song.lyrics.length === 0) {
+    return res.status(400).json({ error: 'No existing lyrics found to synchronize. Please fetch lyrics, import lyrics, or use Auto-Generate.' });
+  }
+
+  const audioInfo = getBestAudioPathForLyrics(songId);
+  if (!audioInfo) {
+    return res.status(400).json({ error: 'Audio file not found for this song. Please ensure audio has downloaded.' });
+  }
+
+  const io = req.app.get('io');
+  try {
+    const result = await runAutoLyricsJob({
+      action: 'align',
+      song,
+      audioPath: audioInfo.path,
+      model,
+      language,
+      lyricsLines: song.lyrics,
+      io
+    });
+
+    if (result.cancelled) {
+      return res.json({ success: false, cancelled: true, message: 'Auto-sync cancelled' });
+    }
+
+    res.json({
+      success: true,
+      action: 'align',
+      song: result.song,
+      lines: result.lines,
+      language: result.language,
+      isVocalStem: audioInfo.isVocalStem
+    });
+  } catch (err) {
+    console.error('Auto-sync lyrics error:', err);
+    res.status(500).json({ error: err.message || 'Auto-sync failed' });
+  }
+});
+
+router.post('/auto_generate_lyrics/:id', async (req, res) => {
+  const songId = req.params.id;
+  const { model = 'small', language = null } = req.body || {};
+
+  let song = queue.find(s => s.id === songId);
+  const history = readHistory();
+  if (!song) {
+    song = history.find(s => s.id === songId);
+    if (song) {
+      const lyricsData = readSongLyrics(songId);
+      song = { ...song, ...lyricsData };
+    }
+  }
+
+  if (!song) {
+    return res.status(404).json({ error: 'Song not found' });
+  }
+
+  const audioInfo = getBestAudioPathForLyrics(songId);
+  if (!audioInfo) {
+    return res.status(400).json({ error: 'Audio file not found for this song. Please ensure audio has downloaded.' });
+  }
+
+  const io = req.app.get('io');
+  try {
+    const result = await runAutoLyricsJob({
+      action: 'generate',
+      song,
+      audioPath: audioInfo.path,
+      model,
+      language,
+      io
+    });
+
+    if (result.cancelled) {
+      return res.json({ success: false, cancelled: true, message: 'Auto-generate cancelled' });
+    }
+
+    res.json({
+      success: true,
+      action: 'generate',
+      song: result.song,
+      lines: result.lines,
+      language: result.language,
+      isVocalStem: audioInfo.isVocalStem
+    });
+  } catch (err) {
+    console.error('Auto-generate lyrics error:', err);
+    res.status(500).json({ error: err.message || 'Auto-generate failed' });
+  }
+});
+
+router.post('/cancel_auto_lyrics/:id', (req, res) => {
+  const songId = req.params.id;
+  const job = activeAutoLyricsJobs.get(songId);
+  if (job) {
+    if (typeof job.cancel === 'function') {
+      job.cancel();
+    }
+    activeAutoLyricsJobs.delete(songId);
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('auto_lyrics_progress', {
+        songId,
+        cancelled: true,
+        message: 'Cancelled by user'
+      });
+    }
+    return res.json({ success: true, cancelled: true });
+  }
+  res.json({ success: true, message: 'No active job running' });
+});
+
+router.post('/song_language/:id', (req, res) => {
+  const songId = req.params.id;
+  const { language } = req.body || {};
+  const cleanLang = (typeof language === 'string' && language.trim() && language.trim().toLowerCase() !== 'auto')
+    ? language.trim().toLowerCase()
+    : null;
+
+  // 1. Update in history
+  const history = readHistory();
+  const idx = history.findIndex(s => s.id === songId);
+  let updatedSong = null;
+  if (idx !== -1) {
+    history[idx].language = cleanLang;
+    updatedSong = history[idx];
+    writeHistory(history);
+  }
+
+  // 2. Update in lyrics.json
+  const lyricsData = readSongLyrics(songId);
+  lyricsData.language = cleanLang;
+  writeSongLyrics(songId, lyricsData);
+
+  // 3. Update in queue
+  for (const item of queue) {
+    if (item.id === songId) {
+      item.language = cleanLang;
+      if (!updatedSong) updatedSong = item;
+    }
+  }
+
+  // 4. Broadcast via Socket.IO
+  const io = req.app.get('io');
+  if (io) {
+    io.emit('queue_updated', queue);
+    io.emit('library_updated', readHistory());
+    const cur = getActiveCurrentState(io);
+    if (cur && cur.songId === songId) {
+      const updatedActive = { ...cur.songData, language: cleanLang };
+      if (typeof io.updateCurrentState === 'function') io.updateCurrentState({ songData: updatedActive });
+      io.emit('sync_state', { songId, songData: updatedActive });
+    }
+  }
+
+  res.json({ success: true, songId, language: cleanLang, song: updatedSong });
 });
 
 router.get('/song_details/:id', (req, res) => {
@@ -2511,6 +2949,7 @@ router.get('/song_details/:id', (req, res) => {
       lyrics: {
         status: song.lyricsProvider ? 'success' : (song.lyricsError ? 'failed' : 'pending'),
         provider: song.lyricsProvider || null,
+        language: song.language || null,
         count: (song.lyrics || []).length,
         hasLyrics: !!song.hasLyrics,
         attempts: (song.lyricsAttempts && song.lyricsAttempts.length > 0) ? song.lyricsAttempts : defaultLyAttempts,
@@ -2787,9 +3226,13 @@ router.post('/edit_lyrics', (req, res) => {
 
 // Metadata editing endpoint
 router.post('/edit_metadata', upload.single('coverImage'), async (req, res) => {
-  const { songId, title, artist, coverUrl, youtubeUrl, triggerVideoSearch, videoOffset, videoDuration } = req.body;
+  const { songId, title, artist, coverUrl, youtubeUrl, triggerVideoSearch, videoOffset, videoDuration, language } = req.body;
   const history = readHistory();
   const idx = history.findIndex(s => s.id === songId);
+
+  const cleanLang = language !== undefined
+    ? ((typeof language === 'string' && language.trim() && language.trim().toLowerCase() !== 'auto') ? language.trim().toLowerCase() : null)
+    : undefined;
 
   const parsedOffset = (videoOffset !== undefined && videoOffset !== null && videoOffset !== '') ? parseFloat(videoOffset) : undefined;
   const resolvedOffset = (parsedOffset !== undefined && !isNaN(parsedOffset)) ? Number(parsedOffset.toFixed(2)) : undefined;
@@ -2832,6 +3275,7 @@ router.post('/edit_metadata', upload.single('coverImage'), async (req, res) => {
   const existingLyricsData = readSongLyrics(songId);
   if (title !== undefined) existingLyricsData.title = title;
   if (artist !== undefined) existingLyricsData.artist = artist;
+  if (cleanLang !== undefined) existingLyricsData.language = cleanLang;
   writeSongLyrics(songId, existingLyricsData);
 
   let updatedSong = null;
@@ -2842,6 +3286,7 @@ router.post('/edit_metadata', upload.single('coverImage'), async (req, res) => {
   if (idx !== -1) {
     if (title !== undefined) history[idx].title = title;
     if (artist !== undefined) history[idx].artist = artist;
+    if (cleanLang !== undefined) history[idx].language = cleanLang;
     if (newAlbumArt !== undefined && newAlbumArt.trim() !== '') history[idx].albumArt = newAlbumArt;
     if (resolvedOffset !== undefined) history[idx].videoOffset = resolvedOffset;
     if (resolvedDuration !== undefined) history[idx].videoDuration = resolvedDuration;
@@ -2867,6 +3312,7 @@ router.post('/edit_metadata', upload.single('coverImage'), async (req, res) => {
     if (item.id === songId) {
       if (title !== undefined) item.title = title;
       if (artist !== undefined) item.artist = artist;
+      if (cleanLang !== undefined) item.language = cleanLang;
       if (newAlbumArt !== undefined && newAlbumArt.trim() !== '') item.albumArt = newAlbumArt;
       if (resolvedOffset !== undefined) item.videoOffset = resolvedOffset;
       if (resolvedDuration !== undefined) item.videoDuration = resolvedDuration;

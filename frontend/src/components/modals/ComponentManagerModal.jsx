@@ -2,7 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useModalStore } from '../../stores/useModalStore';
 import { usePlaybackStore } from '../../stores/usePlaybackStore';
 import * as api from '../../services/api';
+import socket from '../../services/socket';
 import ScrollShadowWrapper from '../common/ScrollShadowWrapper';
+import { WHISPER_LANGUAGES, WHISPER_MODELS, getWhisperLanguageLabel } from '../../utils/whisperLanguages';
 
 const modeLabels = {
   balanced: 'Balanced (~30s)',
@@ -51,6 +53,14 @@ export default function ComponentManagerModal() {
   const [lyLoading, setLyLoading] = useState(false);
   const [lyStatusMsg, setLyStatusMsg] = useState(null);
 
+  // AI Auto-Lyrics state (Whisper Engine)
+  const [aiProcessing, setAiProcessing] = useState(null); // 'sync' | 'generate' | null
+  const [aiProgress, setAiProgress] = useState({ percent: 0, stage: '', message: '' });
+  const [whisperModel, setWhisperModel] = useState('small');
+  const [whisperLanguage, setWhisperLanguage] = useState('auto');
+  const [isSavingLang, setIsSavingLang] = useState(false);
+  const [langSavedFeedback, setLangSavedFeedback] = useState(false);
+
   // Spotify session cookie options
   const [spotifyCookieStatus, setSpotifyCookieStatus] = useState({ configured: false, maskedCookie: null });
   const [showCookieInput, setShowCookieInput] = useState(false);
@@ -93,6 +103,11 @@ export default function ComponentManagerModal() {
       const data = await api.fetchSongDetails(songId);
       setSong(data.song);
       setComponents(data.components || {});
+      if (data.song?.language) {
+        setWhisperLanguage(data.song.language);
+      } else {
+        setWhisperLanguage('auto');
+      }
       if (data.song?.engineSettings) {
         setSepMode(data.song.engineSettings.mode || 'balanced');
         setSepFormat(data.song.engineSettings.format || 'MP3');
@@ -113,6 +128,41 @@ export default function ComponentManagerModal() {
       loadDetails();
       checkSpotifyCookie();
     }
+  }, [songId]);
+
+  // Socket listener for AI Auto-Lyrics progress and completion
+  useEffect(() => {
+    if (!songId) return;
+
+    const handleAutoProgress = (data) => {
+      if (data && data.songId === songId) {
+        if (data.cancelled) {
+          setAiProcessing(null);
+          setAiProgress({ percent: 0, stage: '', message: 'Cancelled' });
+        } else {
+          setAiProgress({
+            percent: data.percent !== undefined ? data.percent : 0,
+            stage: data.stage || '',
+            message: data.message || ''
+          });
+        }
+      }
+    };
+
+    const handleLyricsUpdated = (data) => {
+      if (data && data.songId === songId) {
+        loadDetails();
+        setAiProcessing(null);
+      }
+    };
+
+    socket.on('auto_lyrics_progress', handleAutoProgress);
+    socket.on('lyrics_updated', handleLyricsUpdated);
+
+    return () => {
+      socket.off('auto_lyrics_progress', handleAutoProgress);
+      socket.off('lyrics_updated', handleLyricsUpdated);
+    };
   }, [songId]);
 
   if (!songId) return null;
@@ -221,14 +271,81 @@ export default function ComponentManagerModal() {
     setLyLoading(true);
     setLyStatusMsg('Importing lyrics lines... please wait...');
     try {
-      await api.importManualLyrics(songId, manualLyrics);
+      const res = await api.importManualLyrics(songId, manualLyrics);
       await loadDetails();
+      if (res && res.song) {
+        setSong(res.song);
+        if (currentSong && currentSong.id === songId) {
+          usePlaybackStore.setState({ currentSong: { ...currentSong, ...res.song } });
+        }
+      }
       setLyStatusMsg(null);
       setManualLyrics('');
     } catch (err) {
       setLyStatusMsg(`Manual import failed: ${err.message}`);
     } finally {
       setLyLoading(false);
+    }
+  };
+
+  const handleWhisperLanguageChange = async (e) => {
+    const val = e.target.value;
+    setWhisperLanguage(val);
+    const cleanLang = val === 'auto' ? null : val;
+    // Optimistic state updates
+    setSong((prev) => (prev ? { ...prev, language: cleanLang } : prev));
+    if (currentSong && currentSong.id === songId) {
+      usePlaybackStore.setState({ currentSong: { ...currentSong, language: cleanLang } });
+    }
+    setIsSavingLang(true);
+    try {
+      await api.updateSongLanguage(songId, cleanLang);
+      setLangSavedFeedback(true);
+      setTimeout(() => setLangSavedFeedback(false), 2000);
+    } catch (err) {
+      console.error('Failed to update song language:', err);
+    } finally {
+      setIsSavingLang(false);
+    }
+  };
+
+  const handleAutoSync = async () => {
+    if (!songId || aiProcessing) return;
+    setAiProcessing('sync');
+    setAiProgress({ percent: 5, stage: 'starting', message: 'Initializing AI alignment...' });
+    try {
+      await api.autoSyncLyrics(songId, { model: whisperModel, language: whisperLanguage });
+      await loadDetails();
+    } catch (err) {
+      alert(`AI Auto-Sync failed: ${err.message}`);
+    } finally {
+      setAiProcessing(null);
+    }
+  };
+
+  const handleAutoGenerate = async () => {
+    if (!songId || aiProcessing) return;
+    setAiProcessing('generate');
+    setAiProgress({ percent: 5, stage: 'starting', message: 'Initializing Whisper speech-to-text...' });
+    try {
+      await api.autoGenerateLyrics(songId, { model: whisperModel, language: whisperLanguage });
+      await loadDetails();
+    } catch (err) {
+      alert(`AI Auto-Generate failed: ${err.message}`);
+    } finally {
+      setAiProcessing(null);
+    }
+  };
+
+  const handleCancelAutoLyrics = async () => {
+    if (!songId) return;
+    try {
+      await api.cancelAutoLyrics(songId);
+    } catch (err) {
+      console.error('Cancel failed:', err);
+    } finally {
+      setAiProcessing(null);
+      setAiProgress({ percent: 0, stage: '', message: 'Cancelled by user' });
     }
   };
 
@@ -576,6 +693,38 @@ export default function ComponentManagerModal() {
 
               {/* 3. Lyrics Fetching Card */}
               <div className="component-card component-card-lyrics">
+                {/* AI Lockout Overlay while Auto-Syncing or Auto-Generating */}
+                {aiProcessing && (
+                  <div className="card-lockout-overlay" onClick={(e) => e.stopPropagation()}>
+                    <div className="card-lockout-content">
+                      <div className="lockout-pulse-icon">
+                        <i className="icon-loader-2 icon-spin" style={{ fontSize: '1.8rem', color: '#c084fc' }}></i>
+                      </div>
+                      <h4 style={{ margin: '0.5rem 0 0.2rem', color: '#f3e8ff', fontSize: '1rem' }}>
+                        {aiProcessing === 'sync' ? 'AI Synchronizing Lyrics...' : 'AI Generating Lyrics...'}
+                      </h4>
+                      <p style={{ margin: '0 0 0.8rem', color: '#d8b4fe', fontSize: '0.8rem', lineHeight: 1.4 }}>
+                        {aiProgress.message || (aiProcessing === 'sync' ? 'Aligning lyric lines to vocal audio...' : 'Transcribing singing vocals with Whisper...')}
+                      </p>
+                      
+                      <div className="ai-progress-bar-wrap">
+                        <div className="ai-progress-bar-fill" style={{ width: `${Math.max(5, aiProgress.percent)}%` }}></div>
+                      </div>
+                      <span style={{ fontSize: '0.75rem', color: '#cbd5e1', marginTop: '0.4rem', display: 'block' }}>
+                        {aiProgress.percent > 0 ? `${aiProgress.percent}%` : 'Starting...'}
+                      </span>
+
+                      <button
+                        type="button"
+                        className="btn btn-lockout-cancel"
+                        onClick={handleCancelAutoLyrics}
+                      >
+                        <i className="icon-x" style={{ marginRight: '0.3rem' }}></i> Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="component-card-header">
                   <div className="component-title">
                     <i className="icon-file-text"></i> 3. Lyrics
@@ -599,6 +748,9 @@ export default function ComponentManagerModal() {
                   <div className="component-meta-list">
                     <div>
                       Loaded <strong>{lyLineCount}</strong> lines via <strong>{ly.provider || song?.lyricsProvider || 'Auto'}</strong> {lyIsSynced ? '(Synced)' : '(Unsynced)'}
+                      {song?.language && (
+                        <span> • Language: <strong>{getWhisperLanguageLabel(song.language)}</strong> ({song.language.toUpperCase()})</span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -628,7 +780,7 @@ export default function ComponentManagerModal() {
                       <option value="refetch_both">Re-fetch Both</option>
                     </optgroup>
                   </select>
-                  {lyricsProvider !== 'manual' && (
+                  {lyricsProvider !== 'manual' ? (
                     <button
                       type="button"
                       className="btn btn-retry-component"
@@ -646,6 +798,18 @@ export default function ComponentManagerModal() {
                             : lyricsProvider === 'refetch_both'
                               ? 'Re-fetch Both'
                               : 'Retry Lyrics'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
+                      onClick={handleImportManual}
+                      disabled={lyLoading || !manualLyrics.trim()}
+                      title={!manualLyrics.trim() ? "Type or paste lyrics in the box below first" : "Import and overwrite lyrics"}
+                    >
+                      <i className={lyLoading ? "icon-loader-2 icon-spin" : "icon-pencil"}></i>
+                      {lyLoading ? 'Importing...' : 'Import Lyrics'}
                     </button>
                   )}
                 </div>
@@ -749,6 +913,93 @@ export default function ComponentManagerModal() {
                   </div>
                 )}
 
+                {/* AI Whisper Engine (Auto-Sync & Auto-Generate) */}
+                <div className="component-sub-actions-row lyrics-ai-actions-row">
+                  {/* Single-line Engine Label & Selectors */}
+                  <div className="ai-engine-config-row">
+                    <div className="ai-engine-badge" title="Local speech-to-text & forced alignment engine">
+                      <i className="icon-cpu"></i>
+                      <span>Engine</span>
+                    </div>
+
+                    <div className="ai-engine-field ai-engine-field-model">
+                      <label className="ai-engine-field-label" htmlFor="whisper-model-select">Model:</label>
+                      <select
+                        id="whisper-model-select"
+                        className="ai-engine-select"
+                        value={whisperModel}
+                        onChange={(e) => setWhisperModel(e.target.value)}
+                        disabled={aiProcessing !== null}
+                        title="Whisper AI model architecture and capacity"
+                      >
+                        {WHISPER_MODELS.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="ai-engine-field ai-engine-field-lang">
+                      <label className="ai-engine-field-label" htmlFor="whisper-lang-select">Lang:</label>
+                      <select
+                        id="whisper-lang-select"
+                        className="ai-engine-select"
+                        value={whisperLanguage}
+                        onChange={handleWhisperLanguageChange}
+                        disabled={aiProcessing !== null || isSavingLang}
+                        title="Language for Whisper recognition (saved to song info)"
+                      >
+                        {WHISPER_LANGUAGES.map((lang) => (
+                          <option key={lang.code} value={lang.code}>
+                            {lang.name}
+                          </option>
+                        ))}
+                      </select>
+                      {langSavedFeedback && (
+                        <span className="ai-lang-saved-indicator" title="Saved to song info!">
+                          <i className="icon-check"></i>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Vocal Stem Indicator */}
+                  <div className={`ai-engine-stem-pill ${sp.status === 'separated' ? 'separated' : 'fallback'}`}>
+                    <i className={sp.status === 'separated' ? "icon-check-circle" : "icon-info"}></i>
+                    <span>
+                      {sp.status === 'separated'
+                        ? 'Using isolated lead vocal stem for optimal accuracy'
+                        : 'Using full audio track (recommend vocal separation first)'}
+                    </span>
+                  </div>
+
+                  <div className="sub-actions-buttons" style={{ display: 'flex', gap: '0.45rem', width: '100%' }}>
+                    <button
+                      type="button"
+                      className="btn btn-ai-action btn-ai-auto-sync"
+                      onClick={handleAutoSync}
+                      disabled={aiProcessing !== null || lyLineCount === 0 || dl.status !== 'success'}
+                      title={lyLineCount === 0 ? "No existing lyrics to synchronize. Use Auto-Generate first." : "Align existing lyrics text to vocal audio timestamps"}
+                      style={{ flex: 1 }}
+                    >
+                      <i className="icon-timer"></i>
+                      <span>AI Auto-Sync</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ai-action btn-ai-auto-generate"
+                      onClick={handleAutoGenerate}
+                      disabled={aiProcessing !== null || dl.status !== 'success'}
+                      title="Transcribe audio into new timestamped lyrics with Whisper"
+                      style={{ flex: 1 }}
+                    >
+                      <i className="icon-mic"></i>
+                      <span>AI Auto-Generate</span>
+                    </button>
+                  </div>
+                </div>
+
                 {/* Subtitle Re-fetch Actions Row */}
                 <div className="component-sub-actions-row">
                   <span className="sub-actions-label">Subtitles:</span>
@@ -791,7 +1042,7 @@ export default function ComponentManagerModal() {
                   <div style={{ marginTop: '0.75rem' }}>
                     <textarea
                       className="manual-lyrics-textarea"
-                      placeholder="Paste song lyrics here... Each line will be split into unsynced lyrics."
+                      placeholder="Paste song lyrics here (plain text or [mm:ss.xx] timestamped LRC)... Clicking 'Import Lyrics' will overwrite the song's lyrics."
                       rows={5}
                       value={manualLyrics}
                       onChange={(e) => setManualLyrics(e.target.value)}
