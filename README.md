@@ -109,10 +109,4 @@ CtrlAltLyrics/
 *Dashboard controls (left) and display view (right) running in real-time sync.*
 
 ![edit pop-up demo](media/Ctrlaltlyrics-demo-edit-popup.webp)
-*Panel to edit each component per song: meta-data, split audio stems, and synced lyrics.*
-
----
-
-## 📄 License
-
-ISC License
+*Panel to edit each component per song: meta-data, split audio stems, and synced lyrics.
