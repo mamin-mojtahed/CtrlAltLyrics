@@ -54,8 +54,11 @@ export default function ComponentManagerModal() {
   const [lyStatusMsg, setLyStatusMsg] = useState(null);
 
   // AI Auto-Lyrics state (Whisper Engine)
-  const [aiProcessing, setAiProcessing] = useState(null); // 'sync' | 'generate' | null
-  const [aiProgress, setAiProgress] = useState({ percent: 0, stage: '', message: '' });
+  const [aiProcessingMap, setAiProcessingMap] = useState({}); // { [songId]: 'sync' | 'generate' }
+  const [aiProgressMap, setAiProgressMap] = useState({}); // { [songId]: { percent, stage, message } }
+  const aiProcessing = (songId && aiProcessingMap[songId]) || null;
+  const aiProgress = (songId && aiProgressMap[songId]) || { percent: 0, stage: '', message: '' };
+
   const [whisperModel, setWhisperModel] = useState('small');
   const [whisperLanguage, setWhisperLanguage] = useState('auto');
   const [isSavingLang, setIsSavingLang] = useState(false);
@@ -103,6 +106,27 @@ export default function ComponentManagerModal() {
       const data = await api.fetchSongDetails(songId);
       setSong(data.song);
       setComponents(data.components || {});
+      if (data.components?.lyrics?.activeJob) {
+        const job = data.components.lyrics.activeJob;
+        setAiProcessingMap(prev => ({ ...prev, [songId]: job.action || 'sync' }));
+        if (job.progress) {
+          setAiProgressMap(prev => ({
+            ...prev,
+            [songId]: {
+              percent: job.progress.percent !== undefined ? job.progress.percent : 0,
+              stage: job.progress.stage || '',
+              message: job.progress.message || ''
+            }
+          }));
+        }
+      } else {
+        setAiProcessingMap(prev => {
+          if (!prev[songId]) return prev;
+          const updated = { ...prev };
+          delete updated[songId];
+          return updated;
+        });
+      }
       if (data.song?.language) {
         setWhisperLanguage(data.song.language);
       } else {
@@ -132,27 +156,44 @@ export default function ComponentManagerModal() {
 
   // Socket listener for AI Auto-Lyrics progress and completion
   useEffect(() => {
-    if (!songId) return;
-
     const handleAutoProgress = (data) => {
-      if (data && data.songId === songId) {
+      if (data && data.songId) {
         if (data.cancelled) {
-          setAiProcessing(null);
-          setAiProgress({ percent: 0, stage: '', message: 'Cancelled' });
-        } else {
-          setAiProgress({
-            percent: data.percent !== undefined ? data.percent : 0,
-            stage: data.stage || '',
-            message: data.message || ''
+          setAiProcessingMap(prev => {
+            const next = { ...prev };
+            delete next[data.songId];
+            return next;
           });
+          setAiProgressMap(prev => ({
+            ...prev,
+            [data.songId]: { percent: 0, stage: '', message: 'Cancelled' }
+          }));
+        } else {
+          if (data.action) {
+            setAiProcessingMap(prev => ({ ...prev, [data.songId]: data.action }));
+          }
+          setAiProgressMap(prev => ({
+            ...prev,
+            [data.songId]: {
+              percent: data.percent !== undefined ? data.percent : 0,
+              stage: data.stage || '',
+              message: data.message || ''
+            }
+          }));
         }
       }
     };
 
     const handleLyricsUpdated = (data) => {
-      if (data && data.songId === songId) {
-        loadDetails();
-        setAiProcessing(null);
+      if (data && data.songId) {
+        setAiProcessingMap(prev => {
+          const next = { ...prev };
+          delete next[data.songId];
+          return next;
+        });
+        if (data.songId === songId) {
+          loadDetails();
+        }
       }
     };
 
@@ -317,41 +358,65 @@ export default function ComponentManagerModal() {
 
   const handleAutoSync = async () => {
     if (!songId || aiProcessing) return;
-    setAiProcessing('sync');
-    setAiProgress({ percent: 5, stage: 'starting', message: 'Initializing AI alignment...' });
+    const targetSongId = songId;
+    setAiProcessingMap(prev => ({ ...prev, [targetSongId]: 'sync' }));
+    setAiProgressMap(prev => ({
+      ...prev,
+      [targetSongId]: { percent: 5, stage: 'starting', message: 'Initializing AI alignment...' }
+    }));
     try {
-      await api.autoSyncLyrics(songId, { model: whisperModel, language: whisperLanguage });
+      await api.autoSyncLyrics(targetSongId, { model: whisperModel, language: whisperLanguage });
       await loadDetails();
     } catch (err) {
       alert(`AI Auto-Sync failed: ${err.message}`);
     } finally {
-      setAiProcessing(null);
+      setAiProcessingMap(prev => {
+        const next = { ...prev };
+        delete next[targetSongId];
+        return next;
+      });
     }
   };
 
   const handleAutoGenerate = async () => {
     if (!songId || aiProcessing) return;
-    setAiProcessing('generate');
-    setAiProgress({ percent: 5, stage: 'starting', message: 'Initializing Whisper speech-to-text...' });
+    const targetSongId = songId;
+    setAiProcessingMap(prev => ({ ...prev, [targetSongId]: 'generate' }));
+    setAiProgressMap(prev => ({
+      ...prev,
+      [targetSongId]: { percent: 5, stage: 'starting', message: 'Initializing Whisper speech-to-text...' }
+    }));
     try {
-      await api.autoGenerateLyrics(songId, { model: whisperModel, language: whisperLanguage });
+      await api.autoGenerateLyrics(targetSongId, { model: whisperModel, language: whisperLanguage });
       await loadDetails();
     } catch (err) {
       alert(`AI Auto-Generate failed: ${err.message}`);
     } finally {
-      setAiProcessing(null);
+      setAiProcessingMap(prev => {
+        const next = { ...prev };
+        delete next[targetSongId];
+        return next;
+      });
     }
   };
 
   const handleCancelAutoLyrics = async () => {
     if (!songId) return;
+    const targetSongId = songId;
     try {
-      await api.cancelAutoLyrics(songId);
+      await api.cancelAutoLyrics(targetSongId);
     } catch (err) {
       console.error('Cancel failed:', err);
     } finally {
-      setAiProcessing(null);
-      setAiProgress({ percent: 0, stage: '', message: 'Cancelled by user' });
+      setAiProcessingMap(prev => {
+        const next = { ...prev };
+        delete next[targetSongId];
+        return next;
+      });
+      setAiProgressMap(prev => ({
+        ...prev,
+        [targetSongId]: { percent: 0, stage: '', message: 'Cancelled by user' }
+      }));
     }
   };
 
@@ -735,7 +800,11 @@ export default function ComponentManagerModal() {
                   <div className="component-title">
                     <i className="icon-file-text"></i> 3. Lyrics
                   </div>
-                  {ly.hasLyrics || (song?.lyrics && song.lyrics.length > 0) ? (
+                  {lyLoading || aiProcessing !== null || song?.status === 'fetching_lyrics' || song?.lyricsStatus || ly?.status === 'pending' ? (
+                    <span className="status-badge pending">
+                      <i className="icon-loader-2 icon-spin"></i> {aiProcessing === 'sync' ? 'Synchronizing' : (aiProcessing === 'generate' ? 'Generating' : (song?.lyricsStatus || 'Fetching'))}
+                    </span>
+                  ) : ly.hasLyrics || (song?.lyrics && song.lyrics.length > 0) ? (
                     !lyIsSynced ? (
                       <span className="status-badge success" style={{ background: 'rgba(147, 51, 234, 0.15)', color: '#c084fc', border: '1px solid rgba(147, 51, 234, 0.3)' }}>
                         <i className="icon-pencil"></i> Unsynced
@@ -743,8 +812,6 @@ export default function ComponentManagerModal() {
                     ) : (
                       <span className="status-badge success"><i className="icon-check"></i> Synced Lyrics</span>
                     )
-                  ) : (lyLoading || song?.status === 'fetching_lyrics' || song?.lyricsStatus) ? (
-                    <span className="status-badge pending"><i className="icon-loader-2 icon-spin"></i> Fetching</span>
                   ) : (
                     <span className="status-badge error"><i className="icon-x"></i> Failed</span>
                   )}

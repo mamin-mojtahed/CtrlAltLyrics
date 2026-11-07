@@ -338,7 +338,8 @@ function saveLightweightHistoryItem(song) {
     videoStatus: song.videoStatus || (song.youtubeId ? 'ready' : null),
     videoError: song.videoError || null,
     videoDuration: typeof song.videoDuration === 'number' ? song.videoDuration : (parseFloat(song.videoDuration) || null),
-    videoOffset: typeof song.videoOffset === 'number' ? song.videoOffset : (parseFloat(song.videoOffset) || 0)
+    videoOffset: typeof song.videoOffset === 'number' ? song.videoOffset : (parseFloat(song.videoOffset) || 0),
+    lyricsStatus: song.lyricsStatus !== undefined ? song.lyricsStatus : null
   };
 
   if (song.downloadError && !hasAudio) lightItem.downloadError = song.downloadError;
@@ -2853,6 +2854,60 @@ async function fetchAndProcessLyrics(song, requestedProvider = 'auto', io = null
     updateLyricsStatus(null);
   }
 
+  // --- Automatic AI Fallback (Last resort when lyrics are missing or unsynced) ---
+  const hasLyricsNow = Array.isArray(song.lyrics) && song.lyrics.length > 0;
+  const isSyncedNow = hasLyricsNow && song.isSynced !== false;
+  const audioInfo = getBestAudioPathForLyrics(song.id);
+
+  if (audioInfo && audioInfo.path) {
+    if (hasLyricsNow && !isSyncedNow) {
+      // Case 1: Unsynced lyrics found, but no synced lyrics available -> Auto-Sync with Whisper
+      try {
+        updateLyricsStatus('Auto-syncing lyrics with Whisper AI...');
+        console.log(`[Auto-Lyrics Fallback] Triggering AI Auto-Sync for "${song.title}" (${song.id})`);
+        await runAutoLyricsJob({
+          action: 'align',
+          song,
+          audioPath: audioInfo.path,
+          model: 'small',
+          language: song.language || null,
+          lyricsLines: song.lyrics,
+          io
+        });
+      } catch (err) {
+        console.warn(`[Auto-Lyrics Fallback] Auto-sync fallback failed for ${song.id}:`, err);
+        if (!Array.isArray(song.lyricsAttempts)) song.lyricsAttempts = [];
+        song.lyricsAttempts.unshift({
+          provider: 'AI Whisper Auto-Sync (Fallback)',
+          status: 'failed',
+          detail: err.message || 'Auto-sync fallback failed'
+        });
+      }
+    } else if (!hasLyricsNow) {
+      // Case 2: No lyrics found across any provider -> Auto-Generate with Whisper
+      try {
+        updateLyricsStatus('Transcribing vocals with Whisper AI...');
+        console.log(`[Auto-Lyrics Fallback] Triggering AI Auto-Generate for "${song.title}" (${song.id})`);
+        await runAutoLyricsJob({
+          action: 'generate',
+          song,
+          audioPath: audioInfo.path,
+          model: 'small',
+          language: song.language || null,
+          io
+        });
+      } catch (err) {
+        console.warn(`[Auto-Lyrics Fallback] Auto-generate fallback failed for ${song.id}:`, err);
+        if (!Array.isArray(song.lyricsAttempts)) song.lyricsAttempts = [];
+        song.lyricsAttempts.unshift({
+          provider: 'AI Whisper Auto-Generate (Fallback)',
+          status: 'failed',
+          detail: err.message || 'Auto-generate fallback failed'
+        });
+      }
+    }
+  }
+
   saveLightweightHistoryItem(song);
   syncSongAcrossQueue(song);
 
@@ -3212,6 +3267,26 @@ async function runAutoLyricsJob({ action, song, audioPath, model = 'small', lang
   const pythonBin = getPythonExecutablePath();
   const scriptPath = path.join(__dirname, 'auto_lyrics.py');
 
+  const updateLyricsStatus = (statusText) => {
+    song.lyricsStatus = statusText;
+    saveLightweightHistoryItem(song);
+
+    for (const item of queue) {
+      if (item.id === song.id) {
+        item.lyricsStatus = statusText;
+      }
+    }
+    if (io) {
+      io.emit('queue_updated', queue);
+      io.emit('library_updated', readHistory());
+    }
+  };
+
+  const initialStatus = action === 'align'
+    ? `AI Auto-Sync (aligning lyrics with Whisper ${model})...`
+    : `AI Auto-Generate (transcribing lyrics with Whisper ${model})...`;
+  updateLyricsStatus(initialStatus);
+
   let tempLyricsPath = null;
   if (action === 'align' && Array.isArray(lyricsLines)) {
     tempLyricsPath = path.join(songDir, `temp_align_${Date.now()}.json`);
@@ -3237,13 +3312,17 @@ async function runAutoLyricsJob({ action, song, audioPath, model = 'small', lang
   return new Promise((resolve, reject) => {
     let wasCancelled = false;
     const child = spawn(pythonBin, args);
-    activeAutoLyricsJobs.set(song.id, {
+    const jobEntry = {
+      action,
+      model,
+      lastProgress: { percent: 5, stage: 'starting', message: 'Starting Whisper process...' },
       child,
       cancel: () => {
         wasCancelled = true;
         try { child.kill('SIGTERM'); } catch (e) {}
       }
-    });
+    };
+    activeAutoLyricsJobs.set(song.id, jobEntry);
 
     let stdoutData = '';
     let stderrData = '';
@@ -3256,6 +3335,16 @@ async function runAutoLyricsJob({ action, song, audioPath, model = 'small', lang
         if (line.startsWith('PROGRESS:')) {
           try {
             const payload = JSON.parse(line.replace('PROGRESS:', '').trim());
+            const percentStr = payload.percent !== undefined ? ` (${payload.percent}%)` : '';
+            const msg = payload.message || payload.stage || '';
+            const actionLabel = action === 'align' ? 'AI Auto-Sync' : 'AI Auto-Generate';
+            jobEntry.lastProgress = {
+              percent: payload.percent !== undefined ? payload.percent : 0,
+              stage: payload.stage || '',
+              message: payload.message || ''
+            };
+            updateLyricsStatus(`${actionLabel}: ${msg}${percentStr}`);
+
             if (io) {
               io.emit('auto_lyrics_progress', {
                 songId: song.id,
@@ -3274,6 +3363,7 @@ async function runAutoLyricsJob({ action, song, audioPath, model = 'small', lang
 
     child.on('close', async (code) => {
       activeAutoLyricsJobs.delete(song.id);
+      updateLyricsStatus(null);
       if (tempLyricsPath && fs.existsSync(tempLyricsPath)) {
         try { fs.unlinkSync(tempLyricsPath); } catch (e) {}
       }
@@ -3297,12 +3387,11 @@ async function runAutoLyricsJob({ action, song, audioPath, model = 'small', lang
         }
 
         let lines = resData.lines || [];
-        if (action === 'generate') {
-          try {
-            lines = await fetchLyricsTranslationAndPronunciation(lines);
-          } catch (pe) {
-            console.warn('Post-processing generated lyrics transliteration failed:', pe);
-          }
+        // Automatically fetch translation and transliteration whenever lyrics lines are generated or aligned
+        try {
+          lines = await fetchLyricsTranslationAndPronunciation(lines, { refreshTranslation: true, refreshTransliteration: true });
+        } catch (pe) {
+          console.warn('Post-processing AI lyrics translation/transliteration failed:', pe);
         }
 
         song.hasLyrics = true;
@@ -3376,6 +3465,7 @@ async function runAutoLyricsJob({ action, song, audioPath, model = 'small', lang
 
     child.on('error', (err) => {
       activeAutoLyricsJobs.delete(song.id);
+      updateLyricsStatus(null);
       if (tempLyricsPath && fs.existsSync(tempLyricsPath)) {
         try { fs.unlinkSync(tempLyricsPath); } catch (e) {}
       }
@@ -3511,8 +3601,22 @@ router.post('/cancel_auto_lyrics/:id', (req, res) => {
       job.cancel();
     }
     activeAutoLyricsJobs.delete(songId);
+    let targetSong = queue.find(s => s.id === songId);
+    if (!targetSong) {
+      const history = readHistory();
+      targetSong = history.find(s => s.id === songId);
+    }
+    if (targetSong) {
+      targetSong.lyricsStatus = null;
+      saveLightweightHistoryItem(targetSong);
+    }
+    for (const item of queue) {
+      if (item.id === songId) item.lyricsStatus = null;
+    }
     const io = req.app.get('io');
     if (io) {
+      io.emit('queue_updated', queue);
+      io.emit('library_updated', readHistory());
       io.emit('auto_lyrics_progress', {
         songId,
         cancelled: true,
@@ -3640,9 +3744,12 @@ router.get('/song_details/:id', (req, res) => {
     defaultLyAttempts.push({ provider: 'All Providers', status: 'failed', detail: song.lyricsError || 'No lyrics found across any provider' });
   }
 
-  const lyricsComponentStatus = hasLyricsLoaded
-    ? 'success'
-    : (song.status === 'fetching_lyrics' ? 'pending' : 'failed');
+  const isAutoLyricsActive = activeAutoLyricsJobs.has(song.id);
+  const activeJobData = isAutoLyricsActive ? activeAutoLyricsJobs.get(song.id) : null;
+  const isLyricsLoading = song.status === 'fetching_lyrics' || !!song.lyricsStatus || isAutoLyricsActive;
+  const lyricsComponentStatus = isLyricsLoading
+    ? 'pending'
+    : (hasLyricsLoaded ? 'success' : 'failed');
 
   res.json({
     song,
@@ -3674,7 +3781,12 @@ router.get('/song_details/:id', (req, res) => {
         count: (song.lyrics || []).length,
         hasLyrics: hasLyricsLoaded,
         attempts: (Array.isArray(song.lyricsAttempts) && song.lyricsAttempts.length > 0) ? song.lyricsAttempts : defaultLyAttempts,
-        error: hasLyricsLoaded ? null : (song.lyricsError || 'No lyrics found across any provider.')
+        error: hasLyricsLoaded ? null : (song.lyricsError || 'No lyrics found across any provider.'),
+        activeJob: isAutoLyricsActive ? {
+          action: activeJobData?.action || 'align',
+          model: activeJobData?.model || 'small',
+          progress: activeJobData?.lastProgress || { percent: 0, stage: 'processing', message: 'Processing...' }
+        } : null
       }
     }
   });

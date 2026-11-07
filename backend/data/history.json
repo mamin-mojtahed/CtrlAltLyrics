@@ -1447,7 +1447,8 @@
     "videoStatus": "ready",
     "videoError": null,
     "videoDuration": 247,
-    "videoOffset": 0
+    "videoOffset": 0,
+    "lyricsStatus": null
   },
   {
     "id": "spotify_3IEWyapOdrISv930LrTvEe",
@@ -1495,8 +1496,8 @@
       "karaokeModel": "5_HP-Karaoke-UVR.pth",
       "isCustom": false
     },
-    "lyricsProvider": "Manual Import",
-    "isSynced": false,
+    "lyricsProvider": "AI Whisper Auto-Synced (small)",
+    "isSynced": true,
     "hasLyrics": true,
     "duration": 246,
     "spotifyUrl": "https://open.spotify.com/track/3IEWyapOdrISv930LrTvEe",
@@ -1509,6 +1510,7 @@
     "videoStatus": "ready",
     "videoError": null,
     "videoDuration": 246,
-    "videoOffset": 0
+    "videoOffset": 0,
+    "lyricsStatus": null
   }
 ]
