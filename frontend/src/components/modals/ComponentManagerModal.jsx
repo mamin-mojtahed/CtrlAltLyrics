@@ -206,6 +206,31 @@ export default function ComponentManagerModal() {
     };
   }, [songId]);
 
+  // Close modal on Escape key press
+  useEffect(() => {
+    if (!songId) return;
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        const isTextInput = e.target && (
+          (e.target.tagName === 'INPUT' && e.target.type !== 'range') ||
+          e.target.tagName === 'TEXTAREA' ||
+          e.target.isContentEditable
+        );
+        if (isTextInput) {
+          e.target.blur();
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        close();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [songId, close]);
+
   if (!songId) return null;
 
   const handleRetryDl = async () => {
@@ -279,7 +304,7 @@ export default function ComponentManagerModal() {
       : (mode === 'transliteration' ? 'romanized transliteration' : 'translation & transliteration');
     setLyStatusMsg(`Re-fetching ${modeDesc}... please wait...`);
     try {
-      await api.refetchLyricsSubtitles(songId, mode);
+      await api.refetchLyricsSubtitles(songId, mode, whisperLanguage);
       await loadDetails();
       setLyStatusMsg(null);
     } catch (err) {
@@ -298,7 +323,7 @@ export default function ComponentManagerModal() {
     const provLabel = lyricsProvider === 'auto' ? 'Auto providers' : lyricsProvider;
     setLyStatusMsg(`Fetching lyrics via ${provLabel}... please wait...`);
     try {
-      const res = await api.retryLyrics(songId, lyricsProvider);
+      const res = await api.retryLyrics(songId, lyricsProvider, whisperLanguage);
       await loadDetails();
       if (!res?.success || !res?.lyricsCount) {
         setLyStatusMsg(`Lyrics search failed: ${res?.lyricsError || 'No lyrics found across any provider.'}`);
@@ -318,7 +343,7 @@ export default function ComponentManagerModal() {
     setLyLoading(true);
     setLyStatusMsg('Importing lyrics lines... please wait...');
     try {
-      const res = await api.importManualLyrics(songId, manualLyrics);
+      const res = await api.importManualLyrics(songId, manualLyrics, whisperLanguage);
       await loadDetails();
       if (res && res.song) {
         setSong(res.song);

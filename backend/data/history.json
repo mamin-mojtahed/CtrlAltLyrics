@@ -820,6 +820,7 @@
     "id": "92286036",
     "title": "Cheshme Man",
     "artist": "Dariush",
+    "language": "fa",
     "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/63/fb/86/63fb86d5-cd27-b292-318b-641657fbac8f/dj.wjuvanei.jpg/100x100bb.jpg",
     "query": "Cheshme Man Dariush",
     "status": "ready",
@@ -864,13 +865,19 @@
     "lyricsProvider": "LRCLIB (Synced)",
     "isSynced": true,
     "hasLyrics": true,
+    "duration": null,
     "spotifyUrl": null,
     "spotifyTrackId": null,
+    "audioSourceId": null,
     "isSpotify": false,
     "isUploaded": false,
     "youtubeId": "jc69YieqcA8",
     "youtubeUrl": "https://www.youtube.com/watch?v=jc69YieqcA8",
-    "videoStatus": "ready"
+    "videoStatus": "ready",
+    "videoError": null,
+    "videoDuration": null,
+    "videoOffset": 0,
+    "lyricsStatus": null
   },
   {
     "id": "6792690860",
@@ -1217,6 +1224,7 @@
     "id": "6793106997",
     "title": "Kabootare Del",
     "artist": "Susan Roshan",
+    "language": null,
     "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/51/c2/01/51c201b8-ee51-38fb-d807-f96ff03af846/26UMGIM89551.rgb.jpg/100x100bb.jpg",
     "query": "Kabootare Del Susan Roshan",
     "status": "ready",
@@ -1261,15 +1269,19 @@
     "lyricsProvider": "Spotify (Color Lyrics)",
     "isSynced": true,
     "hasLyrics": true,
+    "duration": null,
     "spotifyUrl": null,
     "spotifyTrackId": null,
+    "audioSourceId": null,
     "isSpotify": false,
     "isUploaded": false,
     "youtubeId": "JYOV3ye28ng",
     "youtubeUrl": "https://www.youtube.com/watch?v=JYOV3ye28ng",
     "videoStatus": "ready",
+    "videoError": null,
+    "videoDuration": 334,
     "videoOffset": 4.36,
-    "videoDuration": 334
+    "lyricsStatus": null
   },
   {
     "id": "1502162088",
@@ -1510,6 +1522,69 @@
     "videoStatus": "ready",
     "videoError": null,
     "videoDuration": 246,
+    "videoOffset": 0,
+    "lyricsStatus": null
+  },
+  {
+    "id": "spotify_1tMnHLRz7WReRvfbvpGo8W",
+    "title": "Akh Be To Cheh Ey Sanam",
+    "artist": "Velshodegan",
+    "language": null,
+    "albumArt": "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b2731c16dfa2074fe281f212a73e",
+    "query": "Akh Be To Cheh Ey Sanam Velshodegan",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/spotify_1tMnHLRz7WReRvfbvpGo8W/instrumental.mp3",
+      "lead": "/audio/spotify_1tMnHLRz7WReRvfbvpGo8W/lead_vocal.mp3",
+      "back": "/audio/spotify_1tMnHLRz7WReRvfbvpGo8W/back_vocal.mp3",
+      "full": "/audio/spotify_1tMnHLRz7WReRvfbvpGo8W/audio.mp3"
+    },
+    "downloadMethod": "yt-dlp Direct (Title + Artist)",
+    "downloadAttempts": [
+      {
+        "provider": "SpotDL (Spotify Link)",
+        "status": "failed",
+        "detail": "SpotDL verified match not found for Spotify link"
+      },
+      {
+        "provider": "yt-dlp Direct (Title + Artist)",
+        "status": "success",
+        "detail": "Audio extracted via verified match: \"Akh Be To Cheh Ey Sanam\""
+      },
+      {
+        "provider": "yt-dlp Title Fallback",
+        "status": "skipped",
+        "detail": "Not needed (acquired via yt-dlp Direct)"
+      }
+    ],
+    "engineSettings": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "isCustom": false
+    },
+    "separationInfo": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "primaryModel": "UVR-MDX-NET-Inst_HQ_3.onnx",
+      "karaokeModel": "5_HP-Karaoke-UVR.pth",
+      "isCustom": false
+    },
+    "lyricsProvider": "LRCLIB (Synced)",
+    "isSynced": true,
+    "hasLyrics": true,
+    "duration": 250,
+    "spotifyUrl": "https://open.spotify.com/track/1tMnHLRz7WReRvfbvpGo8W",
+    "spotifyTrackId": "1tMnHLRz7WReRvfbvpGo8W",
+    "audioSourceId": "QH0kT5TkfGc",
+    "isSpotify": true,
+    "isUploaded": false,
+    "youtubeId": "QH0kT5TkfGc",
+    "youtubeUrl": "https://www.youtube.com/watch?v=QH0kT5TkfGc",
+    "videoStatus": "ready",
+    "videoError": null,
+    "videoDuration": 250,
     "videoOffset": 0,
     "lyricsStatus": null
   }

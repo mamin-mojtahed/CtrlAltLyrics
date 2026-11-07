@@ -22,6 +22,30 @@ export default function UploadSongModal() {
 
   const fileInputRef = useRef(null);
 
+  React.useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        const isTextInput = e.target && (
+          (e.target.tagName === 'INPUT' && e.target.type !== 'range') ||
+          e.target.tagName === 'TEXTAREA' ||
+          e.target.isContentEditable
+        );
+        if (isTextInput) {
+          e.target.blur();
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        close();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, close]);
+
   if (!isOpen) return null;
 
   const handleFileSelect = (file) => {

@@ -128,21 +128,21 @@ export async function retrySplitting(id, engineSettings = null) {
   return res.json();
 }
 
-export async function retryLyrics(id, provider = 'auto') {
+export async function retryLyrics(id, provider = 'auto', language = null) {
   const res = await fetch(`/api/retry_lyrics/${id}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ provider })
+    body: JSON.stringify({ provider, language })
   });
   if (!res.ok) throw new Error(`Retry lyrics failed: ${res.statusText}`);
   return res.json();
 }
 
-export async function refetchLyricsSubtitles(id, mode = 'both') {
+export async function refetchLyricsSubtitles(id, mode = 'both', language = null) {
   const res = await fetch(`/api/refetch_lyrics_subtitles/${id}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mode })
+    body: JSON.stringify({ mode, language })
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -151,11 +151,11 @@ export async function refetchLyricsSubtitles(id, mode = 'both') {
   return res.json();
 }
 
-export async function importManualLyrics(id, lyricsText) {
+export async function importManualLyrics(id, lyricsText, language = null) {
   const res = await fetch(`/api/import_lyrics/${id}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ lyricsText, text: lyricsText })
+    body: JSON.stringify({ lyricsText, text: lyricsText, language })
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));

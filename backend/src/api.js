@@ -2625,7 +2625,11 @@ async function processSong(song, io) {
 }
 
 async function fetchLyricsTranslationAndPronunciation(parsedLines, options = {}) {
-  const { refreshTranslation = true, refreshTransliteration = true } = options;
+  const {
+    refreshTranslation = true,
+    refreshTransliteration = true,
+    sourceLanguage = null
+  } = options;
   if (!Array.isArray(parsedLines) || parsedLines.length === 0) {
     return parsedLines || [];
   }
@@ -2642,6 +2646,50 @@ async function fetchLyricsTranslationAndPronunciation(parsedLines, options = {})
       transliteration: refreshTransliteration ? '' : (l.transliteration || '')
     }));
   }
+
+  // Helper to query Google Translate gtx single endpoint
+  const fetchGtx = async (queryText, slCode) => {
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${slCode}&tl=en&dt=t&dt=rm&q=${encodeURIComponent(queryText)}`;
+    let data = null;
+    try {
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(4500)
+      });
+      if (resp.ok) {
+        data = await resp.json();
+      }
+    } catch (err) {
+      try {
+        const res = await axios.get(url, {
+          timeout: 4500,
+          headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        data = res.data;
+      } catch (e2) {}
+    }
+
+    let trans = '';
+    let translit = '';
+    if (data && Array.isArray(data[0])) {
+      const transChunks = data[0]
+        .filter(item => Array.isArray(item) && item[0])
+        .map(item => item[0]);
+      if (transChunks.length > 0) {
+        trans = transChunks.join('').trim();
+      }
+      for (const item of data[0]) {
+        if (Array.isArray(item) && item.length >= 4 && item[3]) {
+          translit = item[3].trim();
+          break;
+        } else if (Array.isArray(item) && item.length >= 3 && item[2] && typeof item[2] === 'string') {
+          translit = item[2].trim();
+          break;
+        }
+      }
+    }
+    return { trans, translit, detected: data?.[2] || null };
+  };
 
   // 2. Fetch translation & pronunciation using single-request (dt=t&dt=rm) in pool of 5 workers
   const poolSize = 5;
@@ -2672,32 +2720,38 @@ async function fetchLyricsTranslationAndPronunciation(parsedLines, options = {})
       let translation = refreshTranslation ? '' : (line.translation || '');
       let transliteration = refreshTransliteration ? '' : (line.transliteration || '');
 
-      try {
-        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&dt=rm&q=${encodeURIComponent(line.text)}`;
-        const res = await axios.get(url, { timeout: 4000 });
-        if (res.data && res.data[0]) {
-          if (Array.isArray(res.data[0])) {
-            if (refreshTranslation) {
-              const transChunks = res.data[0]
-                .filter(item => Array.isArray(item) && item[0])
-                .map(item => item[0]);
-              if (transChunks.length > 0) {
-                translation = transChunks.join('').trim();
-              }
-            }
+      // Normalize diacritics: Arabic/Persian vocalization diacritics (Harakat: Fatha, Damma, Kasra, Shadda, Sukun, Tanwin)
+      // frequently cause statistical misdetection (e.g. "گر سَر ننهم" misdetected as Arabic "ar" instead of Persian "fa").
+      const cleanText = line.text.replace(/[\u064B-\u065F\u0670]/g, '');
 
-            if (refreshTransliteration) {
-              for (const item of res.data[0]) {
-                if (Array.isArray(item) && item.length >= 4 && item[3]) {
-                  transliteration = item[3].trim();
-                  break;
-                } else if (Array.isArray(item) && item.length >= 3 && item[2] && typeof item[2] === 'string') {
-                  transliteration = item[2].trim();
-                  break;
-                }
-              }
+      // Resolve effective source language
+      let effectiveSl = (sourceLanguage && sourceLanguage !== 'auto') ? sourceLanguage : 'auto';
+      // If language was auto/unspecified, but the text contains distinctive Persian letters (گ, چ, پ, ژ), hint 'fa'
+      if (effectiveSl === 'auto' && /[\u06AF\u0686\u067E\u0698]/.test(cleanText)) {
+        effectiveSl = 'fa';
+      }
+
+      try {
+        let gtxRes = await fetchGtx(cleanText, effectiveSl);
+
+        // Sanity check: if translating to English, but Google Translate returned text that still contains
+        // Arabic/Persian/Urdu script (e.g. it echoed back "گر کر نیم" because of bad auto-detection),
+        // retry with explicit Persian 'fa'
+        if (refreshTranslation && gtxRes.trans && /[\u0600-\u06FF]/.test(gtxRes.trans)) {
+          try {
+            const fallbackSl = (effectiveSl === 'auto' || effectiveSl === 'ar') ? 'fa' : effectiveSl;
+            const retryRes = await fetchGtx(cleanText, fallbackSl);
+            if (retryRes.trans && !/[\u0600-\u06FF]/.test(retryRes.trans)) {
+              gtxRes = retryRes;
             }
-          }
+          } catch (e2) {}
+        }
+
+        if (refreshTranslation && gtxRes.trans) {
+          translation = gtxRes.trans;
+        }
+        if (refreshTransliteration && gtxRes.translit) {
+          transliteration = gtxRes.translit;
         }
       } catch (e) {
         if (!translation && line.translation) translation = line.translation;
@@ -2827,7 +2881,9 @@ async function fetchAndProcessLyrics(song, requestedProvider = 'auto', io = null
       let parsed = parseLrc(resData.lrc);
 
       try {
-        parsed = await fetchLyricsTranslationAndPronunciation(parsed);
+        parsed = await fetchLyricsTranslationAndPronunciation(parsed, {
+          sourceLanguage: song.language || null
+        });
       } catch (e) {
         console.warn("Translation/pronunciation processing failed", e);
       }
@@ -2942,7 +2998,7 @@ async function fetchAndProcessLyrics(song, requestedProvider = 'auto', io = null
 
 router.post('/refetch_lyrics_subtitles/:id', async (req, res) => {
   const songId = req.params.id;
-  const { mode = 'both' } = req.body || {}; // 'translation', 'transliteration', or 'both'
+  const { mode = 'both', language = null } = req.body || {}; // 'translation', 'transliteration', or 'both'
 
   let song = queue.find(s => s.id === songId);
   const history = readHistory();
@@ -2956,6 +3012,11 @@ router.post('/refetch_lyrics_subtitles/:id', async (req, res) => {
 
   if (!song) {
     return res.status(404).json({ error: 'Song not found' });
+  }
+
+  const selectedLang = (language && language !== 'auto') ? language : (song.language || null);
+  if (selectedLang) {
+    song.language = selectedLang;
   }
 
   if (!Array.isArray(song.lyrics) || song.lyrics.length === 0) {
@@ -2975,7 +3036,8 @@ router.post('/refetch_lyrics_subtitles/:id', async (req, res) => {
   try {
     song.lyrics = await fetchLyricsTranslationAndPronunciation(song.lyrics, {
       refreshTranslation,
-      refreshTransliteration
+      refreshTransliteration,
+      sourceLanguage: selectedLang
     });
 
     const targetDesc = mode === 'translation'
@@ -3037,7 +3099,7 @@ router.post('/refetch_lyrics_subtitles/:id', async (req, res) => {
 
 router.post('/retry_lyrics/:id', async (req, res) => {
   const songId = req.params.id;
-  const { provider = 'auto' } = req.body || {};
+  const { provider = 'auto', language = null } = req.body || {};
   
   let song = queue.find(s => s.id === songId);
   const history = readHistory();
@@ -3053,12 +3115,21 @@ router.post('/retry_lyrics/:id', async (req, res) => {
     return res.status(404).json({ error: 'Song not found' });
   }
 
+  const selectedLang = (language && language !== 'auto') ? language : (song.language || null);
+  if (selectedLang) {
+    song.language = selectedLang;
+  }
+
   const io = req.app.get('io');
   if (provider === 'current' || provider === 'translation' || provider === 'transliteration' || provider === 'both') {
     if (Array.isArray(song.lyrics) && song.lyrics.length > 0) {
       const refreshTranslation = provider === 'translation' || provider === 'both' || provider === 'current';
       const refreshTransliteration = provider === 'transliteration' || provider === 'both' || provider === 'current';
-      song.lyrics = await fetchLyricsTranslationAndPronunciation(song.lyrics, { refreshTranslation, refreshTransliteration });
+      song.lyrics = await fetchLyricsTranslationAndPronunciation(song.lyrics, {
+        refreshTranslation,
+        refreshTransliteration,
+        sourceLanguage: selectedLang
+      });
       writeSongLyrics(song.id, song);
       saveLightweightHistoryItem(song);
     }
@@ -3108,6 +3179,7 @@ router.post('/import_lyrics/:id', async (req, res) => {
   const rawInput = typeof req.body.text === 'string'
     ? req.body.text
     : (typeof req.body.lyricsText === 'string' ? req.body.lyricsText : '');
+  const { language = null } = req.body || {};
   const trimmedInput = rawInput.trim();
 
   let song = queue.find(s => s.id === songId);
@@ -3122,6 +3194,11 @@ router.post('/import_lyrics/:id', async (req, res) => {
 
   if (!song) {
     return res.status(404).json({ error: 'Song not found' });
+  }
+
+  const selectedLang = (language && language !== 'auto') ? language : (song.language || null);
+  if (selectedLang) {
+    song.language = selectedLang;
   }
 
   if (!trimmedInput) {
@@ -3158,7 +3235,9 @@ router.post('/import_lyrics/:id', async (req, res) => {
 
   let processedLyrics = rawLyrics;
   try {
-    processedLyrics = await fetchLyricsTranslationAndPronunciation(rawLyrics);
+    processedLyrics = await fetchLyricsTranslationAndPronunciation(rawLyrics, {
+      sourceLanguage: selectedLang
+    });
   } catch (te) {
     console.warn('Subtitles processing failed on manual import:', te);
   }

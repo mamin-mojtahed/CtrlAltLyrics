@@ -1,6 +1,6 @@
 {
-  "sep:5_HP-Karaoke-UVR.pth": 3,
-  "sep:UVR-MDX-NET-Inst_HQ_3.onnx": 3,
+  "sep:5_HP-Karaoke-UVR.pth": 7,
+  "sep:UVR-MDX-NET-Inst_HQ_3.onnx": 7,
   "whisper:small": 15,
   "whisper:medium": 2,
   "whisper:turbo": 2

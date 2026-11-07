@@ -52,6 +52,30 @@ export default function ModelsManagerModal() {
   useEffect(() => {
     if (!isOpen) return;
 
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        const isTextInput = e.target && (
+          (e.target.tagName === 'INPUT' && e.target.type !== 'range') ||
+          e.target.tagName === 'TEXTAREA' ||
+          e.target.isContentEditable
+        );
+        if (isTextInput) {
+          e.target.blur();
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        closeModal();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, closeModal]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
     const handleProgress = (data) => {
       if (!data || !data.id) return;
       setDownloadProgresses((prev) => ({
