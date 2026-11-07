@@ -106,6 +106,79 @@ function extractYoutubeId(urlOrId) {
   return match ? match[1] : null;
 }
 
+function scoreVideoCandidate(candidateTitle, candidateChannel, candidateDuration, songTitle, songArtist, targetDuration) {
+  const norm = (s) => (s || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s\u0600-\u06FF]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const nCandTitle = norm(candidateTitle);
+  const nCandChannel = norm(candidateChannel);
+  const nSongTitle = norm(songTitle);
+  const nSongArtist = norm(songArtist);
+
+  const titleWords = nSongTitle.split(' ').filter(w => w.length > 1);
+  if (titleWords.length === 0) return 0;
+
+  // Title match check: candidate title must contain target title words (as whole words/tokens)
+  const candWords = nCandTitle.split(' ').filter(Boolean);
+  let matchedWords = 0;
+  for (const word of titleWords) {
+    if (candWords.includes(word)) {
+      matchedWords += 1;
+    } else {
+      const variantMatch = candWords.some(cw => 
+        word.length >= 4 && cw.length >= 4 &&
+        Math.abs(cw.length - word.length) <= 1 &&
+        (cw.startsWith(word) || word.startsWith(cw))
+      );
+      if (variantMatch) matchedWords += 0.9;
+    }
+  }
+  const titleRatio = matchedWords / titleWords.length;
+  const minRatio = titleWords.length <= 2 ? 0.8 : 0.5;
+  if (titleRatio < minRatio) return 0; // Reject candidates missing critical title words
+
+  let score = titleRatio * 60; // Up to 60 for title match
+
+  // Artist check (up to 20 points)
+  const artistWords = nSongArtist.split(' ').filter(w => w.length > 2);
+  let artistMatch = false;
+  for (const word of artistWords) {
+    if (nCandTitle.includes(word) || nCandChannel.includes(word)) {
+      artistMatch = true;
+      break;
+    }
+  }
+  if (artistMatch) score += 20;
+
+  // Duration check (up to 20 points)
+  if (targetDuration && targetDuration > 0 && candidateDuration && candidateDuration > 0) {
+    const diff = Math.abs(candidateDuration - targetDuration);
+    if (diff <= 4) score += 20;
+    else if (diff <= 15) score += 15;
+    else if (diff <= 35) score += 10;
+    else if (diff > 90) score -= 40; // Massive duration mismatch
+  } else {
+    score += 10;
+  }
+
+  // Official / Topic / Vevo channel bonus
+  if (nCandChannel.includes(nSongArtist) || nCandChannel.includes('topic') || nCandChannel.includes('vevo')) {
+    score += 10;
+  }
+
+  // Official video / audio bonus in candidate title
+  if (/(?:official\s*(?:music\s*)?video|official\s*audio|visualizer)/i.test(candidateTitle || '')) {
+    score += 5;
+  }
+
+  return Math.max(0, score);
+}
+
 function getActiveCurrentState(io = null) {
   if (io && typeof io.getCurrentState === 'function') {
     return io.getCurrentState();
@@ -183,19 +256,25 @@ function writeSongLyrics(songId, data) {
     const filePath = getLyricsFilePath(songId);
     const existing = readSongLyrics(songId);
     
-    // Preserve existing lyrics array if data.lyrics is empty or not provided
-    const finalLyrics = (Array.isArray(data.lyrics) && data.lyrics.length > 0)
-      ? data.lyrics
-      : (Array.isArray(existing.lyrics) && existing.lyrics.length > 0 ? existing.lyrics : (data.lyrics || []));
+    // If data.lyrics is explicitly provided (including empty array []), adopt it; only fallback to existing if undefined
+    const finalLyrics = data.lyrics !== undefined
+      ? (Array.isArray(data.lyrics) ? data.lyrics : [])
+      : (Array.isArray(existing.lyrics) ? existing.lyrics : []);
+
+    const hasFinalLyrics = finalLyrics.length > 0;
 
     const payload = {
       id: songId,
       title: data.title || existing.title || '',
       artist: data.artist || existing.artist || '',
       language: data.language !== undefined ? data.language : (existing.language || null),
-      lyricsProvider: data.lyricsProvider || existing.lyricsProvider || null,
+      lyricsProvider: hasFinalLyrics
+        ? (data.lyricsProvider !== undefined ? data.lyricsProvider : (existing.lyricsProvider || null))
+        : null,
       isSynced: data.isSynced !== undefined ? data.isSynced : (existing.isSynced !== undefined ? existing.isSynced : true),
-      lyricsAttempts: (Array.isArray(data.lyricsAttempts) && data.lyricsAttempts.length > 0) ? data.lyricsAttempts : (existing.lyricsAttempts || []),
+      lyricsAttempts: (Array.isArray(data.lyricsAttempts) && data.lyricsAttempts.length > 0)
+        ? data.lyricsAttempts
+        : (existing.lyricsAttempts || []),
       lyricsError: data.lyricsError !== undefined ? data.lyricsError : (existing.lyricsError || null),
       lyrics: finalLyrics
     };
@@ -212,12 +291,12 @@ function writeSongLyrics(songId, data) {
 }
 
 function saveLightweightHistoryItem(song) {
-  // 1. Save lyrics to per-song folder only if lyrics are explicitly provided or file missing
-  if (Array.isArray(song.lyrics) && song.lyrics.length > 0) {
+  // 1. Save lyrics to per-song folder whenever lyrics, attempts, or error are explicitly touched or file missing
+  if (song.lyrics !== undefined || song.lyricsAttempts !== undefined || song.lyricsError !== undefined) {
     writeSongLyrics(song.id, song);
   } else {
-    const existingLyrics = readSongLyrics(song.id);
-    if (!Array.isArray(existingLyrics.lyrics) || existingLyrics.lyrics.length === 0) {
+    const filePath = getLyricsFilePath(song.id);
+    if (!fs.existsSync(filePath)) {
       writeSongLyrics(song.id, song);
     }
   }
@@ -227,7 +306,10 @@ function saveLightweightHistoryItem(song) {
   const hasAudio = (song.stems && (song.stems.inst || song.stems.lead)) || song.status === 'splitting' || song.status === 'fetching_lyrics' || song.status === 'ready';
   const hasSplitStems = (song.stems && song.stems.inst && song.stems.lead && song.stems.inst !== song.stems.lead) || song.status === 'fetching_lyrics' || song.status === 'ready';
   const lyricsOnDisk = readSongLyrics(song.id);
-  const hasLyrics = (Array.isArray(song.lyrics) && song.lyrics.length > 0) || (Array.isArray(lyricsOnDisk.lyrics) && lyricsOnDisk.lyrics.length > 0);
+  const resolvedLyrics = Array.isArray(song.lyrics) ? song.lyrics : (lyricsOnDisk.lyrics || []);
+  const hasLyrics = resolvedLyrics.length > 0;
+  const resolvedProvider = hasLyrics ? (song.lyricsProvider !== undefined ? song.lyricsProvider : (lyricsOnDisk.lyricsProvider || null)) : null;
+  const resolvedError = !hasLyrics ? (song.lyricsError !== undefined ? song.lyricsError : (lyricsOnDisk.lyricsError || null)) : null;
 
   const lightItem = {
     id: song.id,
@@ -242,11 +324,13 @@ function saveLightweightHistoryItem(song) {
     downloadAttempts: song.downloadAttempts || [],
     engineSettings: song.engineSettings || null,
     separationInfo: song.separationInfo || null,
-    lyricsProvider: song.lyricsProvider || lyricsOnDisk.lyricsProvider || null,
+    lyricsProvider: resolvedProvider,
     isSynced: song.isSynced !== undefined ? song.isSynced : (lyricsOnDisk.isSynced !== undefined ? lyricsOnDisk.isSynced : true),
     hasLyrics: hasLyrics,
+    duration: typeof song.duration === 'number' ? song.duration : (parseFloat(song.duration) || null),
     spotifyUrl: song.spotifyUrl || null,
     spotifyTrackId: song.spotifyTrackId || null,
+    audioSourceId: song.audioSourceId || null,
     isSpotify: !!song.spotifyUrl,
     isUploaded: !!(song.isUploaded || song.downloadMethod === 'Uploaded'),
     youtubeId: song.youtubeId || extractYoutubeId(song.youtubeUrl) || null,
@@ -259,7 +343,7 @@ function saveLightweightHistoryItem(song) {
 
   if (song.downloadError && !hasAudio) lightItem.downloadError = song.downloadError;
   if (song.splitError && !hasSplitStems) lightItem.splitError = song.splitError;
-  if (song.lyricsError && !lightItem.hasLyrics) lightItem.lyricsError = song.lyricsError;
+  if (resolvedError && !hasLyrics) lightItem.lyricsError = resolvedError;
 
   const idx = history.findIndex(s => s.id === song.id);
   if (idx !== -1) {
@@ -1525,6 +1609,7 @@ async function getSongAudioDuration(song) {
 // Purely resolve YouTube Music Video ID online (NO VIDEO DOWNLOAD)
 async function resolveYoutubeMusicVideo(song, io = null, customUrlOrQuery = null) {
   if (!song || !song.id) return { success: false, error: 'Invalid song' };
+  const previousYtId = song.youtubeId;
 
   // 1. If a search is already active for this song, abort it so it cannot overwrite future changes
   if (activeVideoResolutions.has(song.id)) {
@@ -1550,8 +1635,9 @@ async function resolveYoutubeMusicVideo(song, io = null, customUrlOrQuery = null
         if (streamInfo && streamInfo.duration) {
           song.videoDuration = streamInfo.duration;
           const audioDur = await getSongAudioDuration(song);
-          if ((song.videoOffset === undefined || song.videoOffset === null) && audioDur > 0) {
-            song.videoOffset = Number((streamInfo.duration - audioDur).toFixed(2));
+          if ((song.videoOffset === undefined || song.videoOffset === null || directId !== previousYtId) && audioDur > 0) {
+            const diff = streamInfo.duration - audioDur;
+            song.videoOffset = Math.abs(diff) < 0.75 ? 0 : Number(diff.toFixed(2));
           }
         }
       } catch (e) {
@@ -1637,36 +1723,42 @@ async function resolveYoutubeMusicVideo(song, io = null, customUrlOrQuery = null
   
   // Fast, targeted queries:
   // If custom query provided: use it directly with sensible music video fallbacks.
-  // Otherwise: try official music video first, then official video, then title + artist.
+  // Otherwise: try clean title + artist, official music video, official video, clean title.
   const queriesToTry = customUrlOrQuery
     ? [
         customUrlOrQuery.trim(),
         `${customUrlOrQuery.trim()} official music video`,
-        `${cleanTitle} ${mainArtist} official music video`.trim(),
         cleanQuery
       ].filter(Boolean)
     : [
+        cleanQuery,
         `${cleanTitle} ${mainArtist} official music video`.trim(),
         `${cleanTitle} ${mainArtist} official video`.trim(),
-        cleanQuery
+        cleanTitle
       ].filter(Boolean);
+
+  // If song already has audioSourceId (from verified audio download), prepend it as top priority!
+  if (song.audioSourceId && !customUrlOrQuery) {
+    queriesToTry.unshift(`https://www.youtube.com/watch?v=${song.audioSourceId}`);
+  }
 
   const ytFilter = `!is_live & duration < 900 & title !~= '(?i)(karaoke|instrumental|backing track|off vocal|minus one|piano cover|audio only|8d audio|hour loop|reaction|tutorial|bass boosted)'`;
 
   let resolvedId = null;
   let resolvedDuration = null;
+  let highestVideoScore = 0;
 
   try {
     for (const q of queriesToTry) {
       if (controller.signal.aborted) break;
 
+      const isDirectUrl = q.startsWith('http://') || q.startsWith('https://') || extractYoutubeId(q);
       let rawOutput = '';
       try {
         console.log(`[MusicVideo][${song.id}] Resolving YouTube video ID for "${song.title}": ${q}`);
         // --no-cache-dir eliminates sqlite cache lock contention across parallel yt-dlp instances!
-        // ytsearch3 checks top 3 candidates without throwing exit code 101
-        const searchTarget = q.startsWith('ytsearch') ? `"${q}"` : `"ytsearch3:${q}"`;
-        const cmd = `${activatePrefix}"${ytdlpPath}" --no-cache-dir --no-warnings --match-filter "${ytFilter}" --print "%(id)s\t%(duration)s" ${searchTarget}`;
+        const searchTarget = isDirectUrl ? `"${q}"` : (q.startsWith('ytsearch') ? `"${q}"` : `"ytsearch6:${q}"`);
+        const cmd = `${activatePrefix}"${ytdlpPath}" --no-cache-dir --no-warnings --match-filter "${ytFilter}" --print "%(id)s\t%(duration)s\t%(title)s\t%(channel)s\t%(uploader)s" ${searchTarget}`;
 
         const result = await execPromise(cmd, {
           signal: controller.signal,
@@ -1692,17 +1784,23 @@ async function resolveYoutubeMusicVideo(song, io = null, customUrlOrQuery = null
           const parts = line.split('\t');
           const extracted = extractYoutubeId(parts[0]);
           if (extracted) {
-            resolvedId = extracted;
-            if (parts[1]) {
-              const pDur = parseFloat(parts[1]);
-              if (!isNaN(pDur) && pDur > 0) {
-                resolvedDuration = pDur;
-              }
+            const pDur = parseFloat(parts[1]) || 0;
+            const pTitle = parts[2] || '';
+            const pChannel = parts[3] || parts[4] || '';
+
+            const score = isDirectUrl
+              ? 100
+              : scoreVideoCandidate(pTitle, pChannel, pDur, cleanTitle, mainArtist, song.duration);
+
+            if (score > highestVideoScore && score >= 45) {
+              highestVideoScore = score;
+              resolvedId = extracted;
+              resolvedDuration = pDur > 0 ? pDur : null;
             }
-            break;
           }
         }
-        if (resolvedId) break;
+        // If we found a high confidence match (score >= 80), stop querying
+        if (resolvedId && highestVideoScore >= 80) break;
       }
     }
   } finally {
@@ -1724,8 +1822,9 @@ async function resolveYoutubeMusicVideo(song, io = null, customUrlOrQuery = null
       song.videoDuration = resolvedDuration;
     }
     const audioDur = await getSongAudioDuration(song);
-    if ((song.videoOffset === undefined || song.videoOffset === null) && song.videoDuration && audioDur > 0) {
-      song.videoOffset = Number((song.videoDuration - audioDur).toFixed(2));
+    if ((song.videoOffset === undefined || song.videoOffset === null || resolvedId !== previousYtId) && song.videoDuration && audioDur > 0) {
+      const diff = song.videoDuration - audioDur;
+      song.videoOffset = Math.abs(diff) < 0.75 ? 0 : Number(diff.toFixed(2));
     }
     delete song.videoError;
     // Pre-warm video stream extraction in background so playback has zero delay!
@@ -2009,6 +2108,7 @@ async function downloadSongAudio(song, requestedSource = 'auto') {
 
   const venvActivate = getVenvActivatePath();
   const activatePrefix = venvActivate ? `source "${venvActivate}" && ` : '';
+  const ytdlpPath = getYtDlpExecutablePath();
   
   // Clean title & main artist extraction
   const cleanTitle = (song.title || '')
@@ -2060,9 +2160,9 @@ async function downloadSongAudio(song, requestedSource = 'auto') {
   const trySpotdlQuery = async (queryText, stageLabel) => {
     if (!queryText) return false;
     try {
-      // SpotDL with verified results filter and direct mp3 output
-      const spotdlCmd = `${activatePrefix}spotdl "${queryText}" --only-verified-results --format mp3 --bitrate 192k --output "${songDir}/{title}.{output-ext}"`;
-      const result = await execPromise(spotdlCmd, { shell: '/bin/bash', timeout: 35000 });
+      // SpotDL with verified results filter, youtube fallback, and direct mp3 output
+      const spotdlCmd = `${activatePrefix}spotdl "${queryText}" --audio youtube-music youtube --only-verified-results --format mp3 --bitrate 192k --output "${songDir}/{title}.{output-ext}"`;
+      const result = await execPromise(spotdlCmd, { shell: '/bin/bash', timeout: 45000 });
       const fullLog = (result.stdout || '') + ' ' + (result.stderr || '');
       
       // If SpotDL grabbed a karaoke/instrumental video when original song is not instrumental, reject it
@@ -2136,26 +2236,88 @@ async function downloadSongAudio(song, requestedSource = 'auto') {
   }
 
   // ==========================================
-  // STAGE 2: Direct yt-dlp Search (Title + Main Artist Official Audio)
+  // STAGE 2: Direct yt-dlp Search (Title + Main Artist with Smart Verification)
   // ==========================================
   const ytFilter = isInstRequested ? '!is_live' : `!is_live & title !~= '(?i)(karaoke|instrumental|backing track|off vocal|minus one|piano cover|8d audio)'`;
 
   if (!audioDownloaded && requestedSource !== 'spotdl') {
     try {
       methodUsed = 'yt-dlp Direct (Title + Artist)';
-      const ytdlpCmd = `${activatePrefix}yt-dlp --js-runtimes node --max-downloads 1 --match-filter "${ytFilter}" "ytsearch5:${cleanQuery} official audio" -x --audio-format mp3 -o "${songDir}/audio.%(ext)s"`;
+      
+      // Step A: Search top 10 candidates with cleanQuery to find verified title match
+      const ytdlpSearchCmd = `${activatePrefix}"${ytdlpPath}" --no-cache-dir --no-warnings --match-filter "${ytFilter}" --print "%(id)s\t%(duration)s\t%(title)s\t%(channel)s\t%(uploader)s" "ytsearch10:${cleanQuery}"`;
+      let searchOutput = '';
       try {
-        await execPromise(ytdlpCmd, { shell: '/bin/bash', timeout: 50000 });
+        const sr = await execPromise(ytdlpSearchCmd, { shell: '/bin/bash', timeout: 25000 });
+        searchOutput = (sr && sr.stdout) || '';
       } catch (e) {
-        // Exit code 101 is standard when reaching --max-downloads 1
+        if (e.stdout) searchOutput = e.stdout;
       }
 
-      if (checkAndAdoptAudio()) {
-        audioDownloaded = true;
-        attemptsLog.push({ provider: 'yt-dlp Direct (Title + Artist)', status: 'success', detail: `Audio extracted via YouTube audio search for "${cleanQuery}"` });
-        attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'skipped', detail: 'Not needed (acquired via yt-dlp Direct)' });
+      let bestCandidate = null;
+      let highestScore = 0;
+
+      if (searchOutput) {
+        const lines = searchOutput.trim().split(/\r?\n/).filter(Boolean);
+        for (const line of lines) {
+          const parts = line.split('\t');
+          const id = extractYoutubeId(parts[0]);
+          const duration = parseFloat(parts[1]) || 0;
+          const title = parts[2] || '';
+          const channel = parts[3] || parts[4] || '';
+          if (id) {
+            const score = scoreVideoCandidate(title, channel, duration, cleanTitle, mainArtist, song.duration);
+            if (score > highestScore && score >= 45) {
+              highestScore = score;
+              bestCandidate = { id, duration, title, channel };
+            }
+          }
+        }
+      }
+
+      // Step B: If cleanQuery had no verified candidate, try with "official audio"
+      if (!bestCandidate) {
+        const fallbackSearchCmd = `${activatePrefix}"${ytdlpPath}" --no-cache-dir --no-warnings --match-filter "${ytFilter}" --print "%(id)s\t%(duration)s\t%(title)s\t%(channel)s\t%(uploader)s" "ytsearch5:${cleanQuery} official audio"`;
+        try {
+          const sr2 = await execPromise(fallbackSearchCmd, { shell: '/bin/bash', timeout: 20000 });
+          const out2 = (sr2 && sr2.stdout) || '';
+          if (out2) {
+            const lines2 = out2.trim().split(/\r?\n/).filter(Boolean);
+            for (const line of lines2) {
+              const parts = line.split('\t');
+              const id = extractYoutubeId(parts[0]);
+              const duration = parseFloat(parts[1]) || 0;
+              const title = parts[2] || '';
+              const channel = parts[3] || parts[4] || '';
+              if (id) {
+                const score = scoreVideoCandidate(title, channel, duration, cleanTitle, mainArtist, song.duration);
+                if (score > highestScore && score >= 45) {
+                  highestScore = score;
+                  bestCandidate = { id, duration, title, channel };
+                }
+              }
+            }
+          }
+        } catch (e) {}
+      }
+
+      if (bestCandidate) {
+        console.log(`[AudioDownload][${song.id}] Downloading verified YouTube match: ${bestCandidate.id} ("${bestCandidate.title}", duration: ${bestCandidate.duration}s, score: ${highestScore})`);
+        const ytdlpDownloadCmd = `${activatePrefix}"${ytdlpPath}" --js-runtimes node "https://www.youtube.com/watch?v=${bestCandidate.id}" -x --audio-format mp3 -o "${songDir}/audio.%(ext)s"`;
+        try {
+          await execPromise(ytdlpDownloadCmd, { shell: '/bin/bash', timeout: 50000 });
+        } catch (e) {}
+
+        if (checkAndAdoptAudio()) {
+          audioDownloaded = true;
+          song.audioSourceId = bestCandidate.id;
+          attemptsLog.push({ provider: 'yt-dlp Direct (Title + Artist)', status: 'success', detail: `Audio extracted via verified match: "${bestCandidate.title}"` });
+          attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'skipped', detail: 'Not needed (acquired via yt-dlp Direct)' });
+        } else {
+          attemptsLog.push({ provider: 'yt-dlp Direct (Title + Artist)', status: 'failed', detail: 'yt-dlp completed but output audio file missing' });
+        }
       } else {
-        attemptsLog.push({ provider: 'yt-dlp Direct (Title + Artist)', status: 'failed', detail: 'yt-dlp completed but output audio file missing' });
+        attemptsLog.push({ provider: 'yt-dlp Direct (Title + Artist)', status: 'failed', detail: `No verified title match on YouTube for "${cleanQuery}"` });
       }
     } catch (ytdlpErr) {
       console.warn("yt-dlp direct audio search failed, trying title fallback...", ytdlpErr.message);
@@ -2164,24 +2326,57 @@ async function downloadSongAudio(song, requestedSource = 'auto') {
   }
 
   // ==========================================
-  // STAGE 3: Direct yt-dlp Search (Title Only Fallback)
+  // STAGE 3: Direct yt-dlp Search (Title Only Fallback with Verification)
   // ==========================================
   if (!audioDownloaded && requestedSource !== 'spotdl') {
     if (cleanTitle) {
       try {
         methodUsed = 'yt-dlp Direct (Title Only)';
-        const ytdlpCmd = `${activatePrefix}yt-dlp --js-runtimes node --max-downloads 1 --match-filter "${ytFilter}" "ytsearch5:${cleanTitle} official audio" -x --audio-format mp3 -o "${songDir}/audio.%(ext)s"`;
+        const ytdlpTitleCmd = `${activatePrefix}"${ytdlpPath}" --no-cache-dir --no-warnings --match-filter "${ytFilter}" --print "%(id)s\t%(duration)s\t%(title)s\t%(channel)s\t%(uploader)s" "ytsearch8:${cleanTitle}"`;
+        let titleSearchOut = '';
         try {
-          await execPromise(ytdlpCmd, { shell: '/bin/bash', timeout: 50000 });
+          const sr3 = await execPromise(ytdlpTitleCmd, { shell: '/bin/bash', timeout: 25000 });
+          titleSearchOut = (sr3 && sr3.stdout) || '';
         } catch (e) {
-          // Exit code 101 is standard when reaching --max-downloads 1
+          if (e.stdout) titleSearchOut = e.stdout;
         }
 
-        if (checkAndAdoptAudio()) {
-          audioDownloaded = true;
-          attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'success', detail: `Audio extracted for title "${cleanTitle}"` });
+        let bestTitleCandidate = null;
+        let highestTitleScore = 0;
+
+        if (titleSearchOut) {
+          const lines = titleSearchOut.trim().split(/\r?\n/).filter(Boolean);
+          for (const line of lines) {
+            const parts = line.split('\t');
+            const id = extractYoutubeId(parts[0]);
+            const duration = parseFloat(parts[1]) || 0;
+            const title = parts[2] || '';
+            const channel = parts[3] || parts[4] || '';
+            if (id) {
+              const score = scoreVideoCandidate(title, channel, duration, cleanTitle, mainArtist, song.duration);
+              if (score > highestTitleScore && score >= 45) {
+                highestTitleScore = score;
+                bestTitleCandidate = { id, duration, title, channel };
+              }
+            }
+          }
+        }
+
+        if (bestTitleCandidate) {
+          const downloadCmd = `${activatePrefix}"${ytdlpPath}" --js-runtimes node "https://www.youtube.com/watch?v=${bestTitleCandidate.id}" -x --audio-format mp3 -o "${songDir}/audio.%(ext)s"`;
+          try {
+            await execPromise(downloadCmd, { shell: '/bin/bash', timeout: 50000 });
+          } catch (e) {}
+
+          if (checkAndAdoptAudio()) {
+            audioDownloaded = true;
+            song.audioSourceId = bestTitleCandidate.id;
+            attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'success', detail: `Audio extracted for verified match: "${bestTitleCandidate.title}"` });
+          } else {
+            attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'failed', detail: 'Title fallback completed but output audio missing' });
+          }
         } else {
-          attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'failed', detail: 'Title fallback completed but output audio missing' });
+          attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'failed', detail: `No verified title match on YouTube for "${cleanTitle}"` });
         }
       } catch (ytdlpTitleErr) {
         attemptsLog.push({ provider: 'yt-dlp Title Fallback', status: 'failed', detail: ytdlpTitleErr.message || 'Title fallback failed' });
@@ -2665,20 +2860,26 @@ async function fetchAndProcessLyrics(song, requestedProvider = 'auto', io = null
     io.emit('queue_updated', queue);
     io.emit('library_updated', readHistory());
     const cur = getActiveCurrentState(io);
-    if (cur && cur.songId === song.id && Array.isArray(song.lyrics) && song.lyrics.length > 0) {
+    if (cur && cur.songId === song.id) {
       const updatedActive = {
         ...cur.songData,
-        ...song
+        ...song,
+        lyrics: song.lyrics || [],
+        lyricsProvider: song.lyricsProvider || null,
+        isSynced: song.isSynced !== undefined ? song.isSynced : true,
+        lyricsError: song.lyricsError || null
       };
       if (typeof io.updateCurrentState === 'function') io.updateCurrentState({ songData: updatedActive });
       io.emit('sync_state', { songId: song.id, songData: updatedActive });
-      io.emit('lyrics_updated', {
-        songId: song.id,
-        lyrics: song.lyrics,
-        lyricsProvider: song.lyricsProvider,
-        isSynced: song.isSynced
-      });
     }
+    io.emit('lyrics_updated', {
+      songId: song.id,
+      lyrics: song.lyrics || [],
+      lyricsProvider: song.lyricsProvider || null,
+      isSynced: song.isSynced !== undefined ? song.isSynced : true,
+      lyricsError: song.lyricsError || null,
+      lyricsAttempts: song.lyricsAttempts || []
+    });
   }
 
   return song;
@@ -2836,13 +3037,14 @@ router.post('/retry_lyrics/:id', async (req, res) => {
     }
   }
 
+  const hasLyrics = Array.isArray(song.lyrics) && song.lyrics.length > 0;
   res.json({
-    success: true,
+    success: hasLyrics,
     song,
     attempts: song.lyricsAttempts || [],
-    provider: song.lyricsProvider,
-    lyricsCount: (song.lyrics || []).length,
-    lyricsError: song.lyricsError
+    provider: hasLyrics ? (song.lyricsProvider || null) : null,
+    lyricsCount: hasLyrics ? song.lyrics.length : 0,
+    lyricsError: hasLyrics ? null : (song.lyricsError || "No lyrics found across any provider.")
   });
 });
 
@@ -3427,15 +3629,20 @@ router.get('/song_details/:id', (req, res) => {
     isCustom: !!(song.engineSettings && song.engineSettings.isCustom)
   };
 
+  const hasLyricsLoaded = Array.isArray(song.lyrics) && song.lyrics.length > 0;
   const defaultLyAttempts = [];
-  const lyProv = song.lyricsProvider || (song.lyrics && song.lyrics.length > 0 ? 'LRCLIB' : null);
+  const lyProv = hasLyricsLoaded ? (song.lyricsProvider || 'LRCLIB') : null;
   if (lyProv) {
     defaultLyAttempts.push({ provider: lyProv, status: 'success', detail: `Found synced LRC (${(song.lyrics || []).length} lines)` });
     if (lyProv !== 'Musixmatch') defaultLyAttempts.push({ provider: 'Musixmatch', status: 'skipped', detail: 'Skipped (synced lyrics already found)' });
     if (lyProv !== 'NetEase') defaultLyAttempts.push({ provider: 'NetEase', status: 'skipped', detail: 'Skipped (synced lyrics already found)' });
-  } else if (song.lyricsError) {
-    defaultLyAttempts.push({ provider: 'All Providers', status: 'failed', detail: song.lyricsError });
+  } else {
+    defaultLyAttempts.push({ provider: 'All Providers', status: 'failed', detail: song.lyricsError || 'No lyrics found across any provider' });
   }
+
+  const lyricsComponentStatus = hasLyricsLoaded
+    ? 'success'
+    : (song.status === 'fetching_lyrics' ? 'pending' : 'failed');
 
   res.json({
     song,
@@ -3461,13 +3668,13 @@ router.get('/song_details/:id', (req, res) => {
         error: song.splitError || null
       },
       lyrics: {
-        status: song.lyricsProvider ? 'success' : (song.lyricsError ? 'failed' : 'pending'),
-        provider: song.lyricsProvider || null,
+        status: lyricsComponentStatus,
+        provider: hasLyricsLoaded ? (song.lyricsProvider || null) : null,
         language: song.language || null,
         count: (song.lyrics || []).length,
-        hasLyrics: !!song.hasLyrics,
-        attempts: (song.lyricsAttempts && song.lyricsAttempts.length > 0) ? song.lyricsAttempts : defaultLyAttempts,
-        error: song.lyricsError || null
+        hasLyrics: hasLyricsLoaded,
+        attempts: (Array.isArray(song.lyricsAttempts) && song.lyricsAttempts.length > 0) ? song.lyricsAttempts : defaultLyAttempts,
+        error: hasLyricsLoaded ? null : (song.lyricsError || 'No lyrics found across any provider.')
       }
     }
   });

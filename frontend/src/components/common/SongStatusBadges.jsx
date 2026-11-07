@@ -69,15 +69,15 @@ export default function SongStatusBadges({ song }) {
     lyricsTitle = `Fetching Lyrics: ${song.lyricsStatus || 'Searching...'}`;
     lyricsPhaseClass = 'icon-loader-2 icon-spin';
     lyricsPhaseColor = undefined;
-  } else if (song.lyricsError || !hasLyricsLoaded) {
-    lyricsTitle = `Lyrics: ${song.lyricsError || 'No lyrics found'}`;
-    lyricsPhaseClass = 'icon-x';
-    lyricsPhaseColor = '#ef4444';
   } else if (hasLyricsLoaded) {
     const prov = song.lyricsProvider ? ` (${song.lyricsProvider})` : '';
     lyricsTitle = `Lyrics Loaded${prov}`;
     lyricsPhaseClass = 'icon-check';
     lyricsPhaseColor = '#10b981';
+  } else {
+    lyricsTitle = `Lyrics Failed: ${song.lyricsError || 'No lyrics found across any provider'}`;
+    lyricsPhaseClass = 'icon-x';
+    lyricsPhaseColor = '#ef4444';
   }
 
   return (

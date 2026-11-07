@@ -22,6 +22,83 @@ def parse_args():
 def log_progress(msg):
     print(f"PROGRESS: {msg}", flush=True)
 
+def normalize_title(t):
+    if not t:
+        return ""
+    # Strip text in parentheses/brackets e.g. (feat. ...), (Remastered), etc.
+    t = re.sub(r'[\(\[\{].*?[\)\]\}]', ' ', t)
+    # Remove punctuation, keep letters and numbers (including Persian/Arabic Unicode)
+    t = re.sub(r'[^\w\s\u0600-\u06FF]', ' ', t)
+    return ' '.join(t.lower().split())
+
+def is_title_match(target_title, candidate_title):
+    t1 = normalize_title(target_title)
+    t2 = normalize_title(candidate_title)
+    if not t1 or not t2:
+        return False
+    if t1 == t2:
+        return True
+    
+    w1 = set(t1.split())
+    w2 = set(t2.split())
+    if not w1 or not w2:
+        return False
+    
+    # Candidate must contain all words of the target title
+    if w1.issubset(w2):
+        return True
+    
+    import difflib
+    # For spelling variations (e.g. daryaa vs darya)
+    if difflib.SequenceMatcher(None, t1, t2).ratio() >= 0.85:
+        return True
+    
+    return False
+
+def normalize_artist(a):
+    if not a:
+        return ""
+    a = re.sub(r'[\(\[\{].*?[\)\]\}]', ' ', a)
+    a = re.sub(r'[^\w\s\u0600-\u06FF]', ' ', a)
+    return ' '.join(a.lower().split())
+
+def is_artist_match(target_artist, candidate_artists):
+    if not target_artist:
+        return True
+    t_art = normalize_artist(target_artist)
+    if not t_art:
+        return True
+
+    # Split target artists by common delimiters
+    target_subs = [normalize_artist(p) for p in re.split(r",|&|\bfeat\.?\b|\bft\.?\b|\bfeaturing\b|\band\b", target_artist, flags=re.I) if normalize_artist(p)] or [t_art]
+
+    cand_list = []
+    if isinstance(candidate_artists, str):
+        candidate_artists = [candidate_artists]
+    for ca in candidate_artists:
+        if not ca:
+            continue
+        subs = [normalize_artist(p) for p in re.split(r",|&|\bfeat\.?\b|\bft\.?\b|\bfeaturing\b|\band\b", ca, flags=re.I) if normalize_artist(p)]
+        cand_list.extend(subs or [normalize_artist(ca)])
+
+    if not cand_list:
+        return False
+
+    import difflib
+    for t_sub in target_subs:
+        w_target = set(t_sub.split())
+        for c in cand_list:
+            if c == t_sub:
+                return True
+            if difflib.SequenceMatcher(None, t_sub, c).ratio() >= 0.85:
+                return True
+            w_c = set(c.split())
+            if len(w_target) > 1 and len(w_c) > 1:
+                if w_target == w_c or w_target.issubset(w_c) or w_c.issubset(w_target):
+                    return True
+
+    return False
+
 def fetch_lrclib(title, artist, query):
     """Method 1: LRCLIB direct API & search"""
     log_progress("Trying LRCLIB (Exact)...")
@@ -48,11 +125,17 @@ def fetch_lrclib(title, artist, query):
                 data = json.loads(response.read().decode())
                 if isinstance(data, list) and len(data) > 0:
                     for item in data:
-                        if item.get('syncedLyrics'):
-                            return {'provider': 'LRCLIB (Synced)', 'lrc': item['syncedLyrics'], 'is_synced': True}
+                        t_match = is_title_match(title, item.get('trackName', ''))
+                        a_match = is_artist_match(artist, item.get('artistName', ''))
+                        if t_match and a_match:
+                            if item.get('syncedLyrics'):
+                                return {'provider': 'LRCLIB (Synced)', 'lrc': item['syncedLyrics'], 'is_synced': True}
                     for item in data:
-                        if item.get('plainLyrics'):
-                            return {'provider': 'LRCLIB (Plain)', 'lrc': item['plainLyrics'], 'is_synced': False}
+                        t_match = is_title_match(title, item.get('trackName', ''))
+                        a_match = is_artist_match(artist, item.get('artistName', ''))
+                        if t_match and a_match:
+                            if item.get('plainLyrics'):
+                                return {'provider': 'LRCLIB (Plain)', 'lrc': item['plainLyrics'], 'is_synced': False}
         except Exception:
             pass
 
@@ -179,8 +262,11 @@ def search_spotify_track_ids(title, artist, query, access_token=None):
             for item in page:
                 d = item.get('item', {}).get('data', {})
                 tid = d.get('id')
-                if tid and tid not in candidates:
-                    candidates.append(tid)
+                cand_name = d.get('name') or ''
+                cand_artists = [a.get('profile', {}).get('name') for a in d.get('artists', {}).get('items', []) if a.get('profile', {}).get('name')]
+                if tid and is_title_match(title, cand_name) and is_artist_match(artist, cand_artists):
+                    if tid not in candidates:
+                        candidates.append(tid)
                 if len(candidates) >= 5:
                     break
             break
@@ -212,8 +298,11 @@ def search_spotify_track_ids(title, artist, query, access_token=None):
                 tracks = sr.json().get('tracks', {}).get('items', [])
                 for t in tracks:
                     tid = t.get('id')
-                    if tid and tid not in candidates:
-                        candidates.append(tid)
+                    cand_name = t.get('name') or ''
+                    cand_artists = [a.get('name') for a in t.get('artists', []) if a.get('name')]
+                    if tid and is_title_match(title, cand_name) and is_artist_match(artist, cand_artists):
+                        if tid not in candidates:
+                            candidates.append(tid)
         except Exception:
             pass
 

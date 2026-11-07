@@ -29,7 +29,7 @@ function QueueStatusBadge({ song }) {
     );
     statusClass = 'status-splitting';
     tooltip = 'Separating stems...';
-  } else if (song.status === 'fetching_lyrics') {
+  } else if (song.status === 'fetching_lyrics' || song.lyricsStatus) {
     icons = (
       <>
         <i className="icon-loader-2 icon-spin" />
@@ -37,7 +37,7 @@ function QueueStatusBadge({ song }) {
       </>
     );
     statusClass = 'status-lyrics';
-    tooltip = 'Fetching lyrics...';
+    tooltip = song.lyricsStatus ? `Fetching lyrics: ${song.lyricsStatus}` : 'Fetching lyrics...';
   } else if (song.status === 'error') {
     icons = <i className="icon-alert-triangle" />;
     statusClass = 'status-error';

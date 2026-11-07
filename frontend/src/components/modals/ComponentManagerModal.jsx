@@ -254,11 +254,17 @@ export default function ComponentManagerModal() {
       return handleRefetchSubtitles(mode);
     }
     setLyLoading(true);
-    setLyStatusMsg(`Fetching lyrics via ${lyricsProvider === 'auto' ? 'Auto providers' : lyricsProvider}... please wait...`);
+    const provLabel = lyricsProvider === 'auto' ? 'Auto providers' : lyricsProvider;
+    setLyStatusMsg(`Fetching lyrics via ${provLabel}... please wait...`);
     try {
-      await api.retryLyrics(songId, lyricsProvider);
+      const res = await api.retryLyrics(songId, lyricsProvider);
       await loadDetails();
-      setLyStatusMsg(null);
+      if (!res?.success || !res?.lyricsCount) {
+        setLyStatusMsg(`Lyrics search failed: ${res?.lyricsError || 'No lyrics found across any provider.'}`);
+      } else {
+        setLyStatusMsg(`Lyrics found via ${res?.provider || provLabel}! (${res?.lyricsCount} lines)`);
+        setTimeout(() => setLyStatusMsg(null), 4000);
+      }
     } catch (err) {
       setLyStatusMsg(`Lyrics retry failed: ${err.message}`);
     } finally {
@@ -737,21 +743,33 @@ export default function ComponentManagerModal() {
                     ) : (
                       <span className="status-badge success"><i className="icon-check"></i> Synced Lyrics</span>
                     )
-                  ) : ly.status === 'failed' || song?.lyricsError ? (
-                    <span className="status-badge error"><i className="icon-x"></i> No Lyrics</span>
-                  ) : (
+                  ) : (lyLoading || song?.status === 'fetching_lyrics' || song?.lyricsStatus) ? (
                     <span className="status-badge pending"><i className="icon-loader-2 icon-spin"></i> Fetching</span>
+                  ) : (
+                    <span className="status-badge error"><i className="icon-x"></i> Failed</span>
                   )}
                 </div>
 
                 <div className="component-details">
                   <div className="component-meta-list">
-                    <div>
-                      Loaded <strong>{lyLineCount}</strong> lines via <strong>{ly.provider || song?.lyricsProvider || 'Auto'}</strong> {lyIsSynced ? '(Synced)' : '(Unsynced)'}
-                      {song?.language && (
-                        <span> • Language: <strong>{getWhisperLanguageLabel(song.language)}</strong> ({song.language.toUpperCase()})</span>
-                      )}
-                    </div>
+                    {lyLineCount > 0 ? (
+                      <div>
+                        Loaded <strong>{lyLineCount}</strong> lines via <strong>{ly.provider || song?.lyricsProvider || 'Auto'}</strong> {lyIsSynced ? '(Synced)' : '(Unsynced)'}
+                        {song?.language && (
+                          <span> • Language: <strong>{getWhisperLanguageLabel(song.language)}</strong> ({song.language.toUpperCase()})</span>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ color: '#f87171' }}>
+                        <i className="icon-alert-triangle" style={{ marginRight: '0.35rem' }}></i>
+                        <strong>No lyrics loaded</strong>
+                        {(song?.lyricsError || ly.error) && (
+                          <span style={{ color: '#cbd5e1', marginLeft: '0.35rem' }}>
+                            ({song?.lyricsError || ly.error})
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1068,35 +1086,59 @@ export default function ComponentManagerModal() {
                     <i className="icon-loader-2 icon-spin" style={{ marginRight: '0.4rem' }}></i>
                     {lyStatusMsg || 'Fetching synced lyrics from providers... please wait...'}
                   </div>
-                ) : lyStatusMsg && (lyStatusMsg.startsWith('Lyrics retry failed') || lyStatusMsg.startsWith('Subtitles re-fetch failed')) ? (
-                  <div className="component-report-box" style={{ color: '#f87171' }}>
-                    <i className="icon-alert-triangle" style={{ marginRight: '0.3rem' }}></i>
-                    {lyStatusMsg}
-                  </div>
-                ) : lyAttempts.length > 0 ? (
-                  <div className="component-report-box">
-                    {lyAttempts.map((a, idx) => {
-                      const isSuccess = a.status === 'success';
-                      const isSkipped = a.status === 'skipped';
-                      const isPartial = a.status === 'partial';
-                      return (
-                        <div key={idx} className={`attempt-row ${a.status}`}>
-                          <div className="attempt-header">
-                            <span className="attempt-provider">
-                              <i
-                                className={isSuccess ? 'icon-check' : (isSkipped ? 'icon-skip-forward' : (isPartial ? 'icon-alert-triangle' : 'icon-x'))}
-                                style={{ color: isSuccess ? '#10b981' : (isSkipped ? '#94a3b8' : (isPartial ? '#f59e0b' : '#ef4444')) }}
-                              ></i>
-                              {a.provider}
-                            </span>
-                            <span className="attempt-badge">{a.status.toUpperCase()}</span>
-                          </div>
-                          {a.detail && <div className="attempt-detail">{a.detail}</div>}
+                ) : (
+                  <>
+                    {/* Status Alert Banner */}
+                    {lyStatusMsg ? (
+                      <div className="component-report-box" style={{
+                        color: (lyStatusMsg.toLowerCase().includes('failed') || lyStatusMsg.toLowerCase().includes('no lyrics')) ? '#f87171' : '#34d399',
+                        marginBottom: lyAttempts.length > 0 ? '0.5rem' : '0'
+                      }}>
+                        <i className={(lyStatusMsg.toLowerCase().includes('failed') || lyStatusMsg.toLowerCase().includes('no lyrics')) ? "icon-alert-triangle" : "icon-check"} style={{ marginRight: '0.3rem' }}></i>
+                        {lyStatusMsg}
+                      </div>
+                    ) : (lyLineCount === 0 && (song?.lyricsError || ly.error)) ? (
+                      <div className="component-report-box" style={{ color: '#f87171', marginBottom: lyAttempts.length > 0 ? '0.5rem' : '0' }}>
+                        <i className="icon-alert-triangle" style={{ marginRight: '0.3rem' }}></i>
+                        Lyrics search failed: {song?.lyricsError || ly.error}
+                      </div>
+                    ) : null}
+
+                    {/* Attempts Breakdown */}
+                    {lyAttempts.length > 0 ? (
+                      <div className="component-report-box">
+                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Provider Search Report ({lyLineCount > 0 ? 'Lyrics Found' : 'Failed'})
                         </div>
-                      );
-                    })}
-                  </div>
-                ) : null}
+                        {lyAttempts.map((a, idx) => {
+                          const isSuccess = a.status === 'success';
+                          const isSkipped = a.status === 'skipped';
+                          const isPartial = a.status === 'partial';
+                          return (
+                            <div key={idx} className={`attempt-row ${a.status}`}>
+                              <div className="attempt-header">
+                                <span className="attempt-provider">
+                                  <i
+                                    className={isSuccess ? 'icon-check' : (isSkipped ? 'icon-skip-forward' : (isPartial ? 'icon-alert-triangle' : 'icon-x'))}
+                                    style={{ color: isSuccess ? '#10b981' : (isSkipped ? '#94a3b8' : (isPartial ? '#f59e0b' : '#ef4444')) }}
+                                  ></i>
+                                  {a.provider}
+                                </span>
+                                <span className="attempt-badge">{a.status.toUpperCase()}</span>
+                              </div>
+                              {a.detail && <div className="attempt-detail">{a.detail}</div>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (lyLineCount === 0 && !lyStatusMsg) ? (
+                      <div className="component-report-box" style={{ color: '#94a3b8', fontSize: '0.8rem' }}>
+                        <i className="icon-info" style={{ marginRight: '0.35rem' }}></i>
+                        No lyrics found. Select a provider above and click &ldquo;Retry Lyrics&rdquo; or import manual lyrics.
+                      </div>
+                    ) : null}
+                  </>
+                )}
               </div>
             </>
           )}

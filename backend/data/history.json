@@ -876,6 +876,7 @@
     "id": "6792690860",
     "title": "Hamkhooneh (feat. Viguen)",
     "artist": "هایده",
+    "language": "nn",
     "albumArt": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/eb/71/af/eb71afc4-546a-6388-e61c-8a6a4c95ebaf/859742684654_cover.jpg/100x100bb.jpg",
     "query": "Hamkhooneh (feat. Viguen) هایده",
     "status": "ready",
@@ -917,7 +918,7 @@
       "karaokeModel": "5_HP-Karaoke-UVR.pth",
       "isCustom": true
     },
-    "lyricsProvider": "Musixmatch (Synced)",
+    "lyricsProvider": "AI Whisper Auto-Synced (small)",
     "isSynced": true,
     "hasLyrics": true,
     "spotifyUrl": null,
@@ -1389,6 +1390,125 @@
     "videoStatus": "ready",
     "videoError": null,
     "videoDuration": 299,
+    "videoOffset": 0
+  },
+  {
+    "id": "spotify_3wyK58LJOolhQXE6fPsCMb",
+    "title": "Haft Daryaa",
+    "artist": "Mohsen Namjoo, Kābin",
+    "language": "fa",
+    "albumArt": "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b273a02e894b1072520999112fcc",
+    "query": "Haft Daryaa Mohsen Namjoo, Kābin",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/spotify_3wyK58LJOolhQXE6fPsCMb/instrumental.mp3",
+      "lead": "/audio/spotify_3wyK58LJOolhQXE6fPsCMb/lead_vocal.mp3",
+      "back": "/audio/spotify_3wyK58LJOolhQXE6fPsCMb/back_vocal.mp3",
+      "full": "/audio/spotify_3wyK58LJOolhQXE6fPsCMb/audio.mp3"
+    },
+    "downloadMethod": "yt-dlp Direct (Title + Artist)",
+    "downloadAttempts": [
+      {
+        "provider": "SpotDL (Spotify Link)",
+        "status": "failed",
+        "detail": "SpotDL verified match not found for Spotify link"
+      },
+      {
+        "provider": "yt-dlp Direct (Title + Artist)",
+        "status": "success",
+        "detail": "Audio extracted via verified match: \"Haft Daryaa\""
+      }
+    ],
+    "engineSettings": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "isCustom": false
+    },
+    "separationInfo": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "primaryModel": "UVR-MDX-NET-Inst_HQ_3.onnx",
+      "karaokeModel": "5_HP-Karaoke-UVR.pth",
+      "isCustom": false
+    },
+    "lyricsProvider": "AI Whisper Auto-Synced (small)",
+    "isSynced": true,
+    "hasLyrics": true,
+    "duration": 247.5,
+    "spotifyUrl": "https://open.spotify.com/track/3wyK58LJOolhQXE6fPsCMb",
+    "spotifyTrackId": "3wyK58LJOolhQXE6fPsCMb",
+    "audioSourceId": "mpkuwldW_YU",
+    "isSpotify": true,
+    "isUploaded": false,
+    "youtubeId": "mpkuwldW_YU",
+    "youtubeUrl": "https://www.youtube.com/watch?v=mpkuwldW_YU",
+    "videoStatus": "ready",
+    "videoError": null,
+    "videoDuration": 247,
+    "videoOffset": 0
+  },
+  {
+    "id": "spotify_3IEWyapOdrISv930LrTvEe",
+    "title": "Hegh Hegh",
+    "artist": "Habib",
+    "language": "en",
+    "albumArt": "https://image-cdn-fa.spotifycdn.com/image/ab67616d0000b2736b5fb5a281508a44e2b991a1",
+    "query": "Hegh Hegh Habib",
+    "status": "ready",
+    "stems": {
+      "inst": "/audio/spotify_3IEWyapOdrISv930LrTvEe/instrumental.mp3",
+      "lead": "/audio/spotify_3IEWyapOdrISv930LrTvEe/lead_vocal.mp3",
+      "back": "/audio/spotify_3IEWyapOdrISv930LrTvEe/back_vocal.mp3",
+      "full": "/audio/spotify_3IEWyapOdrISv930LrTvEe/audio.mp3"
+    },
+    "downloadMethod": "yt-dlp Direct (Title + Artist)",
+    "downloadAttempts": [
+      {
+        "provider": "SpotDL (Spotify Link)",
+        "status": "failed",
+        "detail": "SpotDL verified match not found for Spotify link"
+      },
+      {
+        "provider": "yt-dlp Direct (Title + Artist)",
+        "status": "success",
+        "detail": "Audio extracted via verified match: \"Habib Mohebian - Hegh Hegh | حبیب محبیان - هق هق\""
+      },
+      {
+        "provider": "yt-dlp Title Fallback",
+        "status": "skipped",
+        "detail": "Not needed (acquired via yt-dlp Direct)"
+      }
+    ],
+    "engineSettings": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "isCustom": false
+    },
+    "separationInfo": {
+      "mode": "balanced",
+      "format": "MP3",
+      "bitrate": "192k",
+      "primaryModel": "UVR-MDX-NET-Inst_HQ_3.onnx",
+      "karaokeModel": "5_HP-Karaoke-UVR.pth",
+      "isCustom": false
+    },
+    "lyricsProvider": "Manual Import",
+    "isSynced": false,
+    "hasLyrics": true,
+    "duration": 246,
+    "spotifyUrl": "https://open.spotify.com/track/3IEWyapOdrISv930LrTvEe",
+    "spotifyTrackId": "3IEWyapOdrISv930LrTvEe",
+    "audioSourceId": "kTTJiAXH4fw",
+    "isSpotify": true,
+    "isUploaded": false,
+    "youtubeId": "kTTJiAXH4fw",
+    "youtubeUrl": "https://www.youtube.com/watch?v=kTTJiAXH4fw",
+    "videoStatus": "ready",
+    "videoError": null,
+    "videoDuration": 246,
     "videoOffset": 0
   }
 ]
