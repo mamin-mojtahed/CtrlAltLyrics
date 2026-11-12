@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Orbitron:wght@600;700;800;900&family=Space+Grotesk:wght@600;700;800&family=Rajdhani:wght@600;700;800&display=swap');
 @import 'lucide-static/font/lucide.css';
 
 :root {
@@ -906,132 +906,223 @@ input[type="search"]::-webkit-search-cancel-button:hover {
   position: relative;
 }
 
-.mixer-toggles-row {
-  flex: 0 0 auto;
+/* Stem Mixer Top Bar */
+.stem-mixer-top-bar {
   display: flex;
-  justify-content: center;
   align-items: center;
-  gap: clamp(0.35rem, 0.8vw, 0.75rem);
-  padding-bottom: 0.35rem;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 0.15rem;
+  justify-content: space-between;
   width: 100%;
-}
-
-.mixer-toggles-label {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.mixer-toggles-group {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.85rem;
-}
-
-.stem-mixer-header-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  margin-bottom: 0.25rem;
+  padding: 0.1rem 0.2rem 0.35rem 0.2rem;
+  border-bottom: 1px solid var(--border);
   flex: 0 0 auto;
+  margin-bottom: 0.15rem;
 }
 
-.stem-mixer-header-row {
+.stem-mixer-title {
+  font-family: 'Orbitron', 'Space Grotesk', 'Rajdhani', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, #ffffff 40%, #a5b4fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 10px rgba(99, 102, 241, 0.35);
+  user-select: none;
+  line-height: 1;
+}
+
+.stem-mixer-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.mixer-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: all 0.15s ease;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.mixer-action-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.mixer-action-btn.active {
+  background: rgba(99, 102, 241, 0.25);
+  border-color: var(--accent, #6366f1);
+  color: #ffffff;
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.45);
+}
+
+/* Dynamic Animated Revealed Tray */
+.mixer-revealed-tray {
+  display: grid;
+  grid-template-rows: 0fr;
+  width: 100%;
+  flex: 0 0 auto;
+  overflow: hidden;
+  opacity: 0;
+  margin-bottom: 0;
+  pointer-events: none;
+  transition: grid-template-rows 0.24s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.2s ease,
+              margin-bottom 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mixer-revealed-tray.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  margin-bottom: 0.15rem;
+  pointer-events: auto;
+}
+
+.mixer-revealed-track {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mixer-revealed-inner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  padding: 0.15rem 0 0.35rem;
+  border-bottom: 1px solid var(--border);
+  box-sizing: border-box;
+}
+
+.mixer-tray-content {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  position: relative;
+  width: 100%;
+  animation: mixerTrayContentFade 0.16s ease-out;
+}
+
+@keyframes mixerTrayContentFade {
+  from {
+    opacity: 0.35;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.mixer-visual-toggles-row {
+  gap: 0.45rem;
+}
+
+.mixer-controls-row {
+  gap: 0.55rem;
 }
 
 .currently-playing-label {
   display: inline;
 }
 
+/* Unified Revealed Buttons (Visual & Controls) */
 .subtitle-toggle-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  margin: 0;
+  padding: 0;
   cursor: pointer;
   user-select: none;
+  line-height: 1;
 }
 
 .subtitle-toggle-btn input[type="checkbox"] {
   display: none;
 }
 
-.subtitle-toggle-btn .toggle-content {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.3rem 0.6rem;
-  font-size: 1.1rem;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--border);
-  transition: all 0.2s ease;
-  opacity: 0.5;
-}
-
-.subtitle-toggle-btn:hover .toggle-content {
-  background: rgba(255, 255, 255, 0.14);
-  opacity: 0.85;
-  transform: translateY(-1px);
-}
-
-.subtitle-toggle-btn input[type="checkbox"]:checked + .toggle-content {
-  opacity: 1;
-  background: rgba(99, 102, 241, 0.25);
-  border-color: rgba(99, 102, 241, 0.6);
-  box-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
-}
-
-/* Magic Mouse Stem Fader Button */
+.subtitle-toggle-btn .toggle-content,
+.mixer-shortcuts-toggle-btn,
 .magic-mouse-fader-btn,
 .magicMouseFaderBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
-  padding: 4px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  box-sizing: border-box;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
-  cursor: ns-resize;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
-  touch-action: none;
   transition: all 0.15s ease;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
+.magic-mouse-fader-btn,
+.magicMouseFaderBtn {
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.subtitle-toggle-btn:hover .toggle-content,
+.mixer-shortcuts-toggle-btn:hover,
 .magic-mouse-fader-btn:hover,
 .magicMouseFaderBtn:hover {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.3);
-  box-shadow: 0 0 12px rgba(99, 102, 241, 0.35);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
 }
 
+.subtitle-toggle-btn input[type="checkbox"]:checked + .toggle-content,
+.mixer-shortcuts-toggle-btn.active,
 .magic-mouse-fader-btn.active,
 .magicMouseFaderBtn.active {
-  background: rgba(99, 102, 241, 0.18);
+  background: rgba(99, 102, 241, 0.22);
   border-color: var(--accent, #6366f1);
-  box-shadow: 0 0 16px rgba(99, 102, 241, 0.65);
-  transform: scale(1.06);
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.45);
+  opacity: 1;
+}
+
+.subtitle-toggle-btn .toggle-content [class^="icon-"],
+.subtitle-toggle-btn .toggle-content [class*=" icon-"],
+.mixer-shortcuts-toggle-btn [class^="icon-"],
+.mixer-shortcuts-toggle-btn [class*=" icon-"] {
+  font-size: 1.05rem;
+  line-height: 1;
 }
 
 .magic-mouse-svg {
-  width: 26px;
-  height: 32px;
+  width: 17px;
+  height: 21px;
   overflow: visible;
   display: block;
 }
 
-.magic-mouse-svg .mouse-btn {
+.magic-mouse-svg .mouse-btn,
+.magic-mouse-svg .mouse-body {
   fill: transparent;
   stroke: rgba(255, 255, 255, 0.75);
   stroke-width: 1.5;
@@ -1039,12 +1130,11 @@ input[type="search"]::-webkit-search-cancel-button:hover {
   transition: fill 0.08s ease, stroke 0.08s ease, filter 0.08s ease;
 }
 
-.magic-mouse-svg .mouse-body {
-  fill: transparent;
-  stroke: rgba(255, 255, 255, 0.75);
-  stroke-width: 1.5;
-  stroke-linejoin: round;
-  transition: stroke 0.15s ease;
+.magic-mouse-fader-btn:hover .magic-mouse-svg .mouse-btn,
+.magic-mouse-fader-btn:hover .magic-mouse-svg .mouse-body,
+.magicMouseFaderBtn:hover .magic-mouse-svg .mouse-btn,
+.magicMouseFaderBtn:hover .magic-mouse-svg .mouse-body {
+  stroke: rgba(255, 255, 255, 0.95);
 }
 
 .magic-mouse-fader-btn.active .mouse-body,
@@ -1072,44 +1162,6 @@ input[type="search"]::-webkit-search-cancel-button:hover {
   filter: drop-shadow(0 0 3px rgba(236, 72, 153, 0.9));
 }
 
-/* Mixer Keyboard Shortcuts Toggle Button */
-.mixer-shortcuts-toggle-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 4px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  user-select: none;
-  -webkit-user-select: none;
-  transition: all 0.15s ease;
-}
-
-.mixer-shortcuts-toggle-btn [class^="icon-"],
-.mixer-shortcuts-toggle-btn [class*=" icon-"] {
-  font-size: 1.1rem;
-  line-height: 1;
-}
-
-.mixer-shortcuts-toggle-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.3);
-  color: var(--text-primary);
-  box-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
-}
-
-.mixer-shortcuts-toggle-btn.active {
-  background: rgba(99, 102, 241, 0.18);
-  border-color: var(--accent, #6366f1);
-  color: #fff;
-  box-shadow: 0 0 12px rgba(99, 102, 241, 0.5);
-}
-
 /* Hide shortcut labels when toggle is turned off */
 .mixer-card.mixer-shortcuts-hidden .fader-shortcut-key {
   display: none !important;
@@ -1120,8 +1172,9 @@ input[type="search"]::-webkit-search-cancel-button:hover {
   gap: 0.5rem;
 }
 
-.mixer-card.mixer-shortcuts-hidden .stem-mixer-header-container {
-  margin-bottom: 0.4rem;
+.mixer-card.mixer-shortcuts-hidden .stem-mixer-header-container,
+.mixer-card.mixer-shortcuts-hidden .stem-mixer-top-bar {
+  margin-bottom: 0.25rem;
 }
 
 /* Search Popup */
@@ -3994,59 +4047,63 @@ div#player-controls,
     display: none !important;
   }
 
-  .mixer-toggles-row {
-    padding-bottom: 0.1rem !important;
-    margin-bottom: 0.05rem !important;
-    gap: 0.2rem !important;
-    flex: 0 0 auto;
+  .stem-mixer-top-bar {
+    padding-bottom: 0.2rem !important;
+    margin-bottom: 0.08rem !important;
   }
 
-  .mixer-toggles-label {
-    font-size: 0.65rem !important;
+  .stem-mixer-title {
+    font-size: 0.68rem !important;
+    letter-spacing: 0.1em !important;
   }
 
-  .mixer-toggles-group {
-    gap: 0.2rem !important;
+  .stem-mixer-actions {
+    gap: 0.25rem !important;
   }
 
-  .subtitle-toggle-btn .toggle-content {
-    padding: 0.1rem 0.25rem !important;
+  .mixer-action-btn {
+    width: 22px !important;
+    height: 22px !important;
     font-size: 0.72rem !important;
     border-radius: 5px !important;
   }
 
-  .stem-mixer-header-container {
-    margin-bottom: 0.05rem !important;
-    flex: 0 0 auto;
+  .mixer-revealed-tray.is-open {
+    margin-bottom: 0.08rem !important;
   }
 
-  .stem-mixer-header-row {
+  .mixer-revealed-inner {
+    padding: 0.1rem 0 0.22rem !important;
+  }
+
+  .mixer-visual-toggles-row {
+    gap: 0.25rem !important;
+  }
+
+  .mixer-controls-row {
     gap: 0.35rem !important;
   }
 
-  .mixer-shortcuts-toggle-btn {
-    width: 22px !important;
-    height: 22px !important;
-    padding: 2px !important;
+  .subtitle-toggle-btn .toggle-content,
+  .mixer-shortcuts-toggle-btn,
+  .magic-mouse-fader-btn,
+  .magicMouseFaderBtn {
+    width: 24px !important;
+    height: 24px !important;
+    padding: 0 !important;
     border-radius: 5px !important;
   }
 
+  .subtitle-toggle-btn .toggle-content [class^="icon-"],
+  .subtitle-toggle-btn .toggle-content [class*=" icon-"],
   .mixer-shortcuts-toggle-btn [class^="icon-"],
   .mixer-shortcuts-toggle-btn [class*=" icon-"] {
     font-size: 0.78rem !important;
   }
 
-  .magic-mouse-fader-btn,
-  .magicMouseFaderBtn {
-    width: 24px !important;
-    height: 24px !important;
-    padding: 2px !important;
-    border-radius: 6px !important;
-  }
-
   .magic-mouse-svg {
-    width: 14px !important;
-    height: 18px !important;
+    width: 12px !important;
+    height: 15px !important;
   }
 
   .fader-shortcut-key {
@@ -4144,7 +4201,8 @@ div#player-controls,
     display: none !important;
   }
 
-  .mixer-card.mixer-shortcuts-hidden .stem-mixer-header-container {
+  .mixer-card.mixer-shortcuts-hidden .stem-mixer-header-container,
+  .mixer-card.mixer-shortcuts-hidden .stem-mixer-top-bar {
     margin-bottom: 0.25rem !important;
   }
 
@@ -4180,6 +4238,36 @@ div#player-controls,
 
   .fader-label {
     font-size: 0.52rem !important;
+  }
+
+  .mixer-visual-toggles-row {
+    gap: 0.18rem !important;
+  }
+
+  .mixer-controls-row {
+    gap: 0.25rem !important;
+  }
+
+  .subtitle-toggle-btn .toggle-content,
+  .mixer-shortcuts-toggle-btn,
+  .magic-mouse-fader-btn,
+  .magicMouseFaderBtn {
+    width: 22px !important;
+    height: 22px !important;
+    border-radius: 4px !important;
+    padding: 0 !important;
+  }
+
+  .subtitle-toggle-btn .toggle-content [class^="icon-"],
+  .subtitle-toggle-btn .toggle-content [class*=" icon-"],
+  .mixer-shortcuts-toggle-btn [class^="icon-"],
+  .mixer-shortcuts-toggle-btn [class*=" icon-"] {
+    font-size: 0.7rem !important;
+  }
+
+  .magic-mouse-svg {
+    width: 11px !important;
+    height: 14px !important;
   }
 }
 
