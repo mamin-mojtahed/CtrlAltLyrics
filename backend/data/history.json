@@ -978,8 +978,10 @@
     "lyricsProvider": "Musixmatch (Synced)",
     "isSynced": true,
     "hasLyrics": true,
+    "duration": null,
     "spotifyUrl": null,
     "spotifyTrackId": null,
+    "audioSourceId": null,
     "isSpotify": false,
     "isUploaded": true,
     "youtubeId": null,
@@ -987,7 +989,8 @@
     "videoStatus": "error",
     "videoError": "No matching YouTube music video found",
     "videoDuration": null,
-    "videoOffset": 0
+    "videoOffset": 0,
+    "lyricsStatus": null
   },
   {
     "id": "1377813701",
