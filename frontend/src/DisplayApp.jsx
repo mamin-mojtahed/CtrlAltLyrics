@@ -259,9 +259,11 @@ export default function DisplayApp() {
 
     const handleLyricsUpdated = (data) => {
       if (!data || !data.songId) return;
-      if (songRef.current && songRef.current.id === data.songId) {
+      const curId = songRef.current?.id || songRef.current?.songId;
+      if (curId && String(curId) === String(data.songId)) {
         setSong(prev => {
-          if (!prev || prev.id !== data.songId) return prev;
+          const prevId = prev?.id || prev?.songId;
+          if (!prev || String(prevId) !== String(data.songId)) return prev;
           const updated = {
             ...prev,
             lyrics: data.lyrics || [],

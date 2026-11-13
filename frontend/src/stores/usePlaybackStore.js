@@ -5,6 +5,47 @@ import { extractColorsFromSongCover, getHighResAlbumArt } from '../utils/themeCo
 import { fetchQueue, fetchSong } from '../services/api';
 import { useModalStore } from './useModalStore';
 
+// Internal sync anchor for continuous 60fps interpolation across local & remote audioMaster
+const syncAnchor = {
+  time: 0,
+  timestamp: (typeof performance !== 'undefined' ? performance.now() : Date.now()),
+  isPlaying: false
+};
+
+export function updateSyncAnchor(time, isPlaying) {
+  if (typeof time === 'number' && !isNaN(time)) {
+    syncAnchor.time = Math.max(0, time);
+  }
+  syncAnchor.timestamp = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  if (isPlaying !== undefined) {
+    syncAnchor.isPlaying = Boolean(isPlaying);
+  }
+}
+
+export function getAccuratePlaybackTime() {
+  const state = usePlaybackStore.getState();
+  // 1. If audio is actively playing locally on dashboard via WebAudio buffer sources
+  if (state.audioMaster === 'dashboard' && state.isPlaying && audioPlayer.isPlayingLocally()) {
+    const localTime = audioPlayer.getCurrentPlaybackTime(true);
+    if (typeof localTime === 'number' && !isNaN(localTime) && localTime >= 0) {
+      return localTime;
+    }
+  }
+
+  // 2. If playing remotely or WebAudio sources are decoding/buffering
+  if (state.isPlaying) {
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const elapsed = Math.max(0, (now - syncAnchor.timestamp) / 1000);
+    const maxDur = typeof state.duration === 'number' && state.duration > 0 ? state.duration : Infinity;
+    return Math.min(maxDur, Math.max(0, syncAnchor.time + elapsed));
+  }
+
+  // 3. If paused or stopped
+  return typeof state.currentTime === 'number' && !isNaN(state.currentTime)
+    ? Math.max(0, state.currentTime)
+    : (syncAnchor.time || 0);
+}
+
 export const usePlaybackStore = create((set, get) => ({
   currentSong: null,
   currentQueueId: null,
@@ -24,6 +65,8 @@ export const usePlaybackStore = create((set, get) => ({
   isDraggingSlider: false,
   audioMaster: 'dashboard',
   isEndingSong: false,
+
+  getAccuratePlaybackTime: () => getAccuratePlaybackTime(),
 
   setAudioBlocked: (blocked) => {
     set({ audioBlocked: blocked });
@@ -150,6 +193,15 @@ export const usePlaybackStore = create((set, get) => ({
         console.error("Failed to fetch song:", e);
         return;
       }
+    } else if (songOrId && typeof songOrId === 'object' && songOrId.id) {
+      if (!Array.isArray(songOrId.lyrics) || songOrId.lyrics.length === 0) {
+        try {
+          const freshSong = await fetchSong(songOrId.id);
+          song = { ...songOrId, ...freshSong };
+        } catch (e) {
+          console.error("Failed to fetch full song:", e);
+        }
+      }
     }
 
     if (!song) return;
@@ -162,12 +214,14 @@ export const usePlaybackStore = create((set, get) => ({
       const colorSrc = fullSong.id ? `/api/cover/${fullSong.id}` : getHighResAlbumArt(fullSong.albumArt);
       extractColorsFromSongCover(colorSrc);
 
+      const willPlay = forcePlay !== null ? forcePlay : true;
+      updateSyncAnchor(0, willPlay);
       set({
         currentSong: fullSong,
         currentQueueId: targetQueueId,
         currentTime: 0,
         duration: fullSong.duration || 0,
-        isPlaying: forcePlay !== null ? forcePlay : true,
+        isPlaying: willPlay,
         audioMaster: 'display'
       });
 
@@ -182,6 +236,7 @@ export const usePlaybackStore = create((set, get) => ({
       return;
     }
 
+    updateSyncAnchor(0, false);
     set({ currentSong: fullSong, currentQueueId: targetQueueId, currentTime: 0, audioMaster: 'dashboard' });
 
     const colorSrc = fullSong.id ? `/api/cover/${fullSong.id}` : getHighResAlbumArt(fullSong.albumArt);
@@ -204,6 +259,7 @@ export const usePlaybackStore = create((set, get) => ({
     if (shouldPlay) {
       await get().play(0);
     } else {
+      updateSyncAnchor(0, false);
       set({ isPlaying: false });
       emitPlayerCommand({ command: 'pause', time: 0 });
     }
@@ -215,6 +271,7 @@ export const usePlaybackStore = create((set, get) => ({
 
     if (state.audioMaster === 'display') {
       audioPlayer.stopAllSources();
+      updateSyncAnchor(offset, true);
       set({ isPlaying: true, currentTime: offset });
       emitPlayerCommand({ command: 'play', time: offset, audioMaster: 'display' });
       emitUpdateState({
@@ -229,6 +286,7 @@ export const usePlaybackStore = create((set, get) => ({
 
     await audioPlayer.playAudio(offset);
     const blocked = audioPlayer.isContextSuspended();
+    updateSyncAnchor(offset, !blocked);
     set({ isPlaying: !blocked, currentTime: offset, audioBlocked: blocked, audioMaster: 'dashboard' });
 
     emitPlayerCommand({ command: 'play', time: offset, audioMaster: 'dashboard' });
@@ -250,6 +308,7 @@ export const usePlaybackStore = create((set, get) => ({
     if (state.audioMaster !== 'display') {
       audioPlayer.stopAllSources();
     }
+    updateSyncAnchor(currentActualTime, false);
     set({ isPlaying: false, currentTime: currentActualTime });
     emitPlayerCommand({ command: 'pause', time: currentActualTime });
     emitUpdateState({
@@ -293,6 +352,7 @@ export const usePlaybackStore = create((set, get) => ({
     const maxDur = state.duration || 0;
     const target = Math.max(0, maxDur > 0 ? Math.min(maxDur, time) : time);
 
+    updateSyncAnchor(target, state.isPlaying);
     set({ currentTime: target });
     audioPlayer.seekAudio(target, state.isPlaying);
     emitPlayerCommand({ command: 'seek', time: target, audioMaster: state.audioMaster });
@@ -302,9 +362,7 @@ export const usePlaybackStore = create((set, get) => ({
   jumpToNextLine: () => {
     const state = get();
     if (!state.currentSong?.lyrics?.length) return;
-    const cur = (state.audioMaster === 'dashboard' && state.isPlaying)
-      ? audioPlayer.getCurrentPlaybackTime(true)
-      : state.currentTime;
+    const cur = getAccuratePlaybackTime();
     const nextLine = state.currentSong.lyrics.find(l => l.time > cur + 0.3);
     if (nextLine) {
       get().seek(nextLine.time);
@@ -314,9 +372,7 @@ export const usePlaybackStore = create((set, get) => ({
   jumpToPrevLine: () => {
     const state = get();
     if (!state.currentSong?.lyrics?.length) return;
-    const cur = (state.audioMaster === 'dashboard' && state.isPlaying)
-      ? audioPlayer.getCurrentPlaybackTime(true)
-      : state.currentTime;
+    const cur = getAccuratePlaybackTime();
     const pastLines = state.currentSong.lyrics.filter(l => l.time < cur - 0.5);
     if (pastLines.length > 0) {
       get().seek(pastLines[pastLines.length - 1].time);
@@ -328,6 +384,7 @@ export const usePlaybackStore = create((set, get) => ({
   endQueue: (skipBroadcast = false) => {
     audioPlayer.resetAudio();
     extractColorsFromSongCover(null);
+    updateSyncAnchor(0, false);
     set({
       currentSong: null,
       currentQueueId: null,
@@ -552,6 +609,12 @@ export const usePlaybackStore = create((set, get) => ({
     if (state.currentTime !== undefined && !current.isDraggingSlider) {
       if (!(current.isPlaying && current.audioMaster === 'dashboard')) {
         updates.currentTime = state.currentTime;
+        const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+        const effectivePlaying = state.isPlaying !== undefined ? state.isPlaying : (updates.isPlaying !== undefined ? updates.isPlaying : current.isPlaying);
+        const est = syncAnchor.isPlaying ? syncAnchor.time + (now - syncAnchor.timestamp) / 1000 : syncAnchor.time;
+        if (!syncAnchor.isPlaying || Math.abs(est - state.currentTime) > 0.35) {
+          updateSyncAnchor(state.currentTime, effectivePlaying);
+        }
       }
     }
 
@@ -560,6 +623,7 @@ export const usePlaybackStore = create((set, get) => ({
       if (!state.isPlaying) {
         audioPlayer.stopAllSources();
       }
+      updateSyncAnchor(updates.currentTime ?? current.currentTime, state.isPlaying);
     }
 
     if (state.audioMaster !== undefined) {

@@ -243,3 +243,346 @@ export function configureMeasureContext(ctx, sampleEl) {
     } catch (_) {}
   }
 }
+
+// Pre-cached ratio lookup per line at stable word boundaries using WeakMap to prevent object pollution and serialization anomalies
+const lineRatioCache = new WeakMap();
+
+/**
+ * Calculates microsecond-accurate karaoke progress percentage (0-100)
+ * supporting nested character/word sync points, in-line pauses, and RTL text.
+ * Uses continuous word-boundary interpolation so Persian ligatures are never
+ * split mid-word, producing a silky-smooth 60+ FPS slide animation.
+ */
+export function calculateKaraokeProgress(line, curTime, nextLineTime, songDuration, ctx) {
+  try {
+    if (!line) return 0;
+    const start = typeof line.time === 'number' ? line.time : parseFloat(line.time) || 0;
+    const rawEnd = line.endTime ? (typeof line.endTime === 'number' ? line.endTime : parseFloat(line.endTime)) : null;
+    const end = rawEnd || (nextLineTime && nextLineTime > start ? nextLineTime : (songDuration && songDuration > start ? Math.min(start + 5, songDuration) : start + 3));
+
+    if (curTime <= start) return 0;
+    if (curTime >= end) return 100;
+
+    const pts = Array.isArray(line.syncPoints) && line.syncPoints.length > 0 ? line.syncPoints : null;
+
+    // Fallback to smooth linear line progression if no syncPoints or line is instrumental
+    if (!pts || pts.length === 0 || line.isInstrumental || isInstrumentalText(line.text)) {
+      const lineDur = Math.max(0.2, end - start);
+      return Math.min(100, Math.max(0, ((curTime - start) / lineDur) * 100));
+    }
+
+    const text = line.text || '';
+    const totalChars = Math.max(1, text.length);
+
+    const firstPtTime = (pts[0] && typeof pts[0].time === 'number') ? pts[0].time : (pts[0] ? parseFloat(pts[0].time) : 0) || start;
+    if (curTime < firstPtTime) return 0;
+
+    const lastPt = pts[pts.length - 1];
+    const lastEnd = (lastPt && typeof lastPt.endTime === 'number' ? lastPt.endTime : (lastPt ? parseFloat(lastPt.endTime) : 0)) ||
+                    (lastPt && typeof lastPt.time === 'number' ? lastPt.time : (lastPt ? parseFloat(lastPt.time) : 0)) || end;
+    if (curTime >= lastEnd) return 100;
+
+    // Resolve ratio Map safely via WeakMap (handles frozen, cloned, or serialized line objects)
+    const fontKey = ctx ? ctx.font : 'default';
+    let ratioMap = null;
+    if (typeof line === 'object' && line !== null) {
+      const cached = lineRatioCache.get(line);
+      if (cached && cached.fontKey === fontKey && cached.map instanceof Map) {
+        ratioMap = cached.map;
+      } else {
+        ratioMap = new Map();
+        try {
+          lineRatioCache.set(line, { fontKey, map: ratioMap });
+        } catch (_) {}
+      }
+    } else {
+      ratioMap = new Map();
+    }
+
+    const getCharRatio = (charIdx) => {
+      const c = Math.min(totalChars, Math.max(0, charIdx));
+      if (c === 0) return 0;
+      if (c >= totalChars) return 1;
+      if (ratioMap && typeof ratioMap.has === 'function' && ratioMap.has(c)) {
+        return ratioMap.get(c);
+      }
+
+      let ratio = c / totalChars;
+      if (ctx && text) {
+        try {
+          const fullW = ctx.measureText(text).width;
+          if (fullW > 0) {
+            const subW = ctx.measureText(text.slice(0, c)).width;
+            ratio = Math.min(1, Math.max(0, subW / fullW));
+          }
+        } catch (_) {}
+      }
+      if (ratioMap && typeof ratioMap.set === 'function') {
+        ratioMap.set(c, ratio);
+      }
+      return ratio;
+    };
+
+    // Find active sync point or pause zone
+    for (let k = 0; k < pts.length; k++) {
+      const pt = pts[k];
+      if (!pt) continue;
+      const ptStart = typeof pt.time === 'number' ? pt.time : parseFloat(pt.time) || 0;
+      const nextPt = k < pts.length - 1 ? pts[k + 1] : null;
+      const nextPtStart = nextPt ? (typeof nextPt.time === 'number' ? nextPt.time : parseFloat(nextPt.time) || lastEnd) : lastEnd;
+      const ptEnd = (typeof pt.endTime === 'number' ? pt.endTime : parseFloat(pt.endTime)) || nextPtStart;
+
+      const charStart = typeof pt.charIndex === 'number' ? pt.charIndex : 0;
+      const charEnd = (nextPt && typeof nextPt.charIndex === 'number') ? nextPt.charIndex : totalChars;
+
+      if (pt.isPause) {
+        // In-line pause zone: vocal progress is frozen at the pause position
+        if (curTime >= ptStart && curTime <= ptEnd) {
+          return Math.min(100, Math.max(0, getCharRatio(charStart) * 100));
+        }
+      } else if (curTime >= ptStart && curTime <= ptEnd) {
+        // Actively singing this word: continuous float interpolation between word boundaries
+        const wordDur = Math.max(0.02, ptEnd - ptStart);
+        const frac = Math.min(1, Math.max(0, (curTime - ptStart) / wordDur));
+        const rStart = getCharRatio(charStart);
+        const rEnd = getCharRatio(charEnd);
+        const progressRatio = rStart + frac * (rEnd - rStart);
+        return Math.min(100, Math.max(0, progressRatio * 100));
+      } else if (nextPt && curTime > ptEnd && curTime < nextPtStart) {
+        // Inter-word vocal pause: maintain smooth progress frozen at completion of current word
+        return Math.min(100, Math.max(0, getCharRatio(charEnd) * 100));
+      }
+    }
+
+    // If time reached or exceeded the end of the last word
+    return 100;
+  } catch (err) {
+    console.error('Error calculating karaoke progress:', err);
+    return 0;
+  }
+}
+
+/**
+ * Calculates which words a pause timestamp falls between in a lyric line.
+ * Automatically computes appropriate charIndex and descriptive labels for visual UI.
+ */
+export function calculatePauseWordPosition(lineText, syncPoints, pauseTime) {
+  if (!lineText || typeof lineText !== 'string' || lineText.trim() === '') {
+    return { slot: 0, charIndex: 0, prevWord: null, nextWord: null, badgeLabel: null };
+  }
+
+  // 1. Extract words from line text
+  const words = [];
+  const reg = /\S+/gu;
+  let m;
+  while ((m = reg.exec(lineText)) !== null) {
+    words.push({ text: m[0], charIndex: m.index, endCharIndex: m.index + m[0].length });
+  }
+
+  if (words.length === 0) {
+    return { slot: 0, charIndex: 0, prevWord: null, nextWord: null, badgeLabel: null };
+  }
+
+  // 2. Map word points (non-pauses) to words
+  const wordPts = (Array.isArray(syncPoints) ? syncPoints : [])
+    .filter((p) => p && !p.isPause && typeof p.time === 'number')
+    .sort((a, b) => a.time - b.time);
+
+  const wordTimes = words.map((w, idx) => {
+    const matchByChar = wordPts.find((p) => typeof p.charIndex === 'number' && Math.abs(p.charIndex - w.charIndex) <= 1);
+    if (matchByChar) return matchByChar.time;
+    if (wordPts[idx]) return wordPts[idx].time;
+    return null;
+  });
+
+  // Interpolate missing timestamps
+  let knownTime = 0;
+  for (let i = 0; i < words.length; i++) {
+    if (wordTimes[i] !== null) {
+      knownTime = wordTimes[i];
+    } else {
+      knownTime += 0.35;
+      wordTimes[i] = knownTime;
+    }
+  }
+
+  // 3. Determine slot relative to words
+  if (pauseTime < wordTimes[0]) {
+    return {
+      slot: -1,
+      charIndex: 0,
+      prevWord: null,
+      nextWord: words[0].text,
+      badgeLabel: `Before "${words[0].text}"`
+    };
+  }
+
+  let slot = words.length - 1;
+  for (let i = 0; i < words.length - 1; i++) {
+    if (pauseTime >= wordTimes[i] && pauseTime < wordTimes[i + 1]) {
+      slot = i;
+      break;
+    }
+  }
+
+  if (slot < words.length - 1) {
+    return {
+      slot,
+      charIndex: words[slot].endCharIndex,
+      prevWord: words[slot].text,
+      nextWord: words[slot + 1].text,
+      badgeLabel: `"${words[slot].text}" ↔ "${words[slot + 1].text}"`
+    };
+  }
+
+  return {
+    slot: words.length - 1,
+    charIndex: words[words.length - 1].endCharIndex,
+    prevWord: words[words.length - 1].text,
+    nextWord: null,
+    badgeLabel: `After "${words[words.length - 1].text}"`
+  };
+}
+
+/**
+ * Migrates legacy syncPoints containing separate 'isPause' nodes into the
+ * single-node-type architecture where each node is a word with a default 'time'
+ * and an optional earlier 'endTime' defining any inter-word pause segment.
+ */
+export function migrateLegacySyncPoints(syncPoints) {
+  if (!Array.isArray(syncPoints) || syncPoints.length === 0) return [];
+  const cleaned = [];
+  for (let i = 0; i < syncPoints.length; i++) {
+    const pt = syncPoints[i];
+    if (!pt) continue;
+    if (pt.isPause) {
+      if (cleaned.length > 0 && typeof pt.time === 'number') {
+        const prev = cleaned[cleaned.length - 1];
+        if (typeof prev.endTime !== 'number' || prev.endTime > pt.time) {
+          prev.endTime = pt.time;
+        }
+      }
+      continue;
+    }
+    const copy = { ...pt };
+    delete copy.isPause;
+    delete copy.duration;
+    cleaned.push(copy);
+  }
+
+  // Clear accidental/phonetic micro-gap endTimes (< 0.18s) before non-terminal words
+  // so legacy AI alignment micro-gaps are never misinterpreted as intentional pauses
+  for (let i = 0; i < cleaned.length - 1; i++) {
+    const cur = cleaned[i];
+    const nxt = cleaned[i + 1];
+    if (typeof cur.endTime === 'number' && typeof nxt.time === 'number') {
+      if (cur.endTime > nxt.time - 0.18) {
+        delete cur.endTime;
+      }
+    }
+  }
+
+  return cleaned;
+}
+
+/**
+ * Structures a lyric line into clean word entities and inter-word pauses.
+ * In this single-node architecture:
+ * 1. syncPoints contains only words: each word has a default 'time' (start of word).
+ * 2. An optional (earlier) 'endTime' on word[i] defines a paused segment [word[i].endTime, word[i+1].time].
+ * 3. Pause duration is automatically computed (no separate pause node).
+ */
+export function getLineWordPairsWithPauses(lineText, syncPoints, lineStart = 0, lineEnd = null) {
+  if (!lineText || typeof lineText !== 'string' || lineText.trim() === '') {
+    return { words: [], pauses: [] };
+  }
+
+  // 1. Extract words from line text
+  const rawWords = [];
+  const reg = /\S+/gu;
+  let m;
+  while ((m = reg.exec(lineText)) !== null) {
+    rawWords.push({
+      text: m[0],
+      charIndex: m.index,
+      endCharIndex: m.index + m[0].length
+    });
+  }
+
+  if (rawWords.length === 0) {
+    return { words: [], pauses: [] };
+  }
+
+  // 2. Migrate any legacy points if present to ensure single-node structure
+  const rawPts = Array.isArray(syncPoints) ? syncPoints : [];
+  const pts = migrateLegacySyncPoints(rawPts);
+
+  // 3. Associate each word with its sync point
+  const hasCharIndices = pts.some((p) => typeof p.charIndex === 'number');
+  const usedPtIndices = new Set();
+
+  const words = rawWords.map((w, idx) => {
+    let ptIdx = -1;
+    if (hasCharIndices) {
+      ptIdx = pts.findIndex((p, pI) => !usedPtIndices.has(pI) && typeof p.charIndex === 'number' && Math.abs(p.charIndex - w.charIndex) <= 1);
+    } else {
+      // Legacy points without char indices: match by text or position
+      ptIdx = pts.findIndex((p, pI) => !usedPtIndices.has(pI) && p.text === w.text);
+      if (ptIdx === -1 && pts[idx] && !usedPtIndices.has(idx)) {
+        ptIdx = idx;
+      }
+    }
+
+    const pt = ptIdx !== -1 ? pts[ptIdx] : null;
+    if (ptIdx !== -1) usedPtIndices.add(ptIdx);
+    const actualPtIdx = pt ? pts.indexOf(pt) : -1;
+
+    const time = pt && typeof pt.time === 'number' ? pt.time : (pt ? parseFloat(pt.time) || null : null);
+    const endTime = pt && typeof pt.endTime === 'number' ? pt.endTime : (pt && pt.endTime ? parseFloat(pt.endTime) || null : null);
+
+    return {
+      index: idx,
+      text: w.text,
+      charIndex: w.charIndex,
+      endCharIndex: w.endCharIndex,
+      ptIndex: actualPtIdx,
+      pointId: pt ? (pt.id || pt._id || `word_${idx}`) : `word_${idx}`,
+      time,
+      endTime,
+      hasPoint: pt !== null && time !== null
+    };
+  });
+
+  // 4. Identify paused segments between pairs of words
+  // A paused segment exists if and only if word[i] has an optional earlier endTime
+  // with a musically perceptible gap (>= 0.18s) before the next word
+  const pauses = [];
+  for (let i = 0; i < words.length - 1; i++) {
+    const wCur = words[i];
+    const wNext = words[i + 1];
+    if (!wCur.hasPoint || !wNext.hasPoint) continue;
+
+    if (typeof wCur.endTime === 'number' && wCur.endTime <= (wNext.time - 0.18)) {
+      const pStart = wCur.endTime;
+      const pEnd = wNext.time;
+      const pDur = Math.max(0.05, Math.round((pEnd - pStart) * 100) / 100);
+
+      pauses.push({
+        id: `pause_${i}_${i + 1}`,
+        slot: i,
+        prevWordIndex: i,
+        nextWordIndex: i + 1,
+        prevWord: wCur,
+        nextWord: wNext,
+        startTime: pStart,
+        endTime: pEnd,
+        duration: pDur,
+        ptIndex: wCur.ptIndex,
+        isExplicit: true,
+        label: `"${wCur.text}" ↔ "${wNext.text}"`
+      });
+    }
+  }
+
+  return { words, pauses };
+}

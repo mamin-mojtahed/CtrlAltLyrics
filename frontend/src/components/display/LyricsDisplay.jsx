@@ -10,7 +10,8 @@ import {
   getLyricsMeasureContext,
   balanceLyricLine,
   calculateMaxLineWidth,
-  configureMeasureContext
+  configureMeasureContext,
+  calculateKaraokeProgress
 } from '../../utils/lyricsWrapping';
 
 function LyricsDisplay({
@@ -170,11 +171,15 @@ function LyricsDisplay({
             el.classList.add('past');
             el.style.setProperty('--karaoke-progress', '100%');
             el.querySelectorAll('.lyric-subline').forEach((s) => s.style.setProperty('--karaoke-progress', '100%'));
+            const pText = el.querySelector('.lyric-text');
+            if (pText) pText.style.setProperty('--karaoke-progress', '100%');
           } else {
             el.classList.remove('active');
             el.classList.remove('past');
             el.style.setProperty('--karaoke-progress', '0%');
             el.querySelectorAll('.lyric-subline').forEach((s) => s.style.setProperty('--karaoke-progress', '0%'));
+            const fText = el.querySelector('.lyric-text');
+            if (fText) fText.style.setProperty('--karaoke-progress', '0%');
           }
         });
       }
@@ -188,29 +193,16 @@ function LyricsDisplay({
           if (!showKaraokeSlide) {
             activeEl.style.removeProperty('--karaoke-progress');
             activeEl.querySelectorAll('.lyric-subline').forEach((s) => s.style.removeProperty('--karaoke-progress'));
+            const singleText = activeEl.querySelector('.lyric-text');
+            if (singleText) singleText.style.removeProperty('--karaoke-progress');
             return;
           }
 
           const line = lyrics[activeIndex];
-          const start = typeof line.time === 'number' ? line.time : parseFloat(line.time) || 0;
-          let end;
-          if (activeIndex < lyrics.length - 1) {
-            const nextLine = lyrics[activeIndex + 1];
-            const nextStart = typeof nextLine.time === 'number' ? nextLine.time : parseFloat(nextLine.time) || 0;
-            end = nextStart > start ? nextStart : start + 3;
-          } else {
-            end = duration > start ? duration : start + 6;
-          }
-
-          const lineDur = Math.max(0.3, end - start);
-          let progress = 0;
-          if (curTime <= start) {
-            progress = 0;
-          } else if (curTime >= end) {
-            progress = 100;
-          } else {
-            progress = Math.min(100, Math.max(0, ((curTime - start) / lineDur) * 100));
-          }
+          const nextLine = activeIndex < lyrics.length - 1 ? lyrics[activeIndex + 1] : null;
+          const nextStart = nextLine ? (typeof nextLine.time === 'number' ? nextLine.time : parseFloat(nextLine.time) || 0) : null;
+          const ctx = getLyricsMeasureContext();
+          const progress = calculateKaraokeProgress(line, curTime, nextStart, duration, ctx);
 
           const sublines = activeEl.querySelectorAll('.lyric-subline');
           if (sublines.length > 1) {
@@ -235,6 +227,8 @@ function LyricsDisplay({
             });
           } else {
             activeEl.style.setProperty('--karaoke-progress', `${progress.toFixed(2)}%`);
+            const singleText = activeEl.querySelector('.lyric-text');
+            if (singleText) singleText.style.setProperty('--karaoke-progress', `${progress.toFixed(2)}%`);
           }
         }
       }

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import * as audioPlayer from '../../services/audioPlayer';
+import { usePlaybackStore } from '../../stores/usePlaybackStore';
 import { formatCentiseconds } from '../../utils/themeColors';
+import { getLineWordPairsWithPauses } from '../../utils/lyricsWrapping';
 
 /**
  * Interactive Audio Waveform & Timeline Visualizer for Lyrics Syncing
@@ -12,6 +14,34 @@ import { formatCentiseconds } from '../../utils/themeColors';
  * - Transient onset auto-snapping for syllable/word synchronization
  * - Zoom & navigation (fit song, zoom to line, zoom in/out)
  */
+
+// Sample-range min/max resolution helper with absolute-anchored block queries
+function getSampleRangeMinMax(channel, cachedBlocks, s0, s1) {
+  let min = 0;
+  let max = 0;
+  const len = s1 - s0;
+  if (len <= 64 || !cachedBlocks || !cachedBlocks.blocks) {
+    for (let s = s0; s < s1; s++) {
+      const v = channel[s];
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+  } else {
+    const blkSize = cachedBlocks.BLOCK || 64;
+    const blkArr = cachedBlocks.blocks;
+    const totalBlks = cachedBlocks.numBlocks || (blkArr.length / 2);
+    const b0 = Math.min(totalBlks - 1, Math.max(0, Math.floor(s0 / blkSize)));
+    const b1 = Math.min(totalBlks - 1, Math.max(b0, Math.floor(s1 / blkSize)));
+    for (let b = b0; b <= b1; b++) {
+      const pMin = blkArr[b * 2];
+      const pMax = blkArr[b * 2 + 1];
+      if (pMin < min) min = pMin;
+      if (pMax > max) max = pMax;
+    }
+  }
+  return { min, max };
+}
+
 const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumEditor({
   song,
   lines,
@@ -25,7 +55,15 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
   onSeek,
   onTogglePlayPause,
   nudgeStep = 0.10,
-  onStampCurrentLine
+  onStampCurrentLine,
+  onUpdateSyncPointTime,
+  onUpdateSyncPointEndTime,
+  onUpdatePauseBounds,
+  isSameSong = false,
+  selectedSyncPtKey = null,
+  onSelectSyncPoint = null,
+  onDeleteSyncPoint = null,
+  onRemovePause = null
 }, ref) {
   // Viewport window (in seconds)
   const [viewStart, setViewStart] = useState(0);
@@ -35,6 +73,15 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
   const [transientStatus, setTransientStatus] = useState(null);
   const [hoveredMarkerIndex, setHoveredMarkerIndex] = useState(-1);
+  const [hoveredPauseKey, setHoveredPauseKey] = useState(null);
+
+  const MAIN_TRACK_H = 120;
+  const pausePartitionsRef = useRef([]);
+  const activePauseDragRef = useRef(null);
+  const hoveredPauseRef = useRef(null);
+  const hoveredSubMarkerRef = useRef(null);
+  const selectedSyncPtKeyRef = useRef(selectedSyncPtKey);
+  selectedSyncPtKeyRef.current = selectedSyncPtKey;
 
   // Dismiss cheatsheet modal on Escape before parent modal receives the key event
   useEffect(() => {
@@ -60,6 +107,8 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
   const dragAnchorRef = useRef({ startX: 0, initialViewStart: 0, initialViewDuration: 0, initialViewEnd: 0, startTime: 0 });
   const hoveredMarkerIndexRef = useRef(-1);
   const markerBoxesRef = useRef([]);
+  const isDraggingSubMarkerRef = useRef(null);
+  const subMarkerBoxesRef = useRef([]);
 
   // DOM Refs
   const containerRef = useRef(null);
@@ -72,7 +121,39 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
   // Audio Buffers & Downsampled Peaks Cache
   const audioBufferRef = useRef(null);
   const peaksCacheRef = useRef({ mix: null, lead: null });
+  const bufferBlocksCacheRef = useRef(new WeakMap());
   const animFrameRef = useRef(null);
+
+  const getAudioBlocks = useCallback((buf) => {
+    if (!buf || typeof buf.getChannelData !== 'function' || !buf.length) return null;
+    let cached = bufferBlocksCacheRef.current.get(buf);
+    if (cached) return cached;
+
+    const ch0 = buf.getChannelData(0);
+    const ch1 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : ch0;
+    const len = buf.length;
+    const BLOCK = 64;
+    const numBlocks = Math.ceil(len / BLOCK);
+    const blocks = new Float32Array(numBlocks * 2);
+
+    for (let b = 0; b < numBlocks; b++) {
+      const start = b * BLOCK;
+      const end = Math.min(len, start + BLOCK);
+      let min = 0;
+      let max = 0;
+      for (let j = start; j < end; j++) {
+        const s = (ch0[j] + ch1[j]) * 0.5;
+        if (s < min) min = s;
+        if (s > max) max = s;
+      }
+      blocks[b * 2] = min;
+      blocks[b * 2 + 1] = max;
+    }
+
+    const result = { blocks, BLOCK, numBlocks };
+    bufferBlocksCacheRef.current.set(buf, result);
+    return result;
+  }, []);
 
   // Fresh state refs for global event listeners
   const viewStartRef = useRef(viewStart);
@@ -87,6 +168,25 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
   linesRef.current = lines;
   const selectedRowIndexRef = useRef(selectedRowIndex);
   selectedRowIndexRef.current = selectedRowIndex;
+  const followPlayheadRef = useRef(followPlayhead);
+  followPlayheadRef.current = followPlayhead;
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
+  const isSameSongRef = useRef(isSameSong);
+  isSameSongRef.current = isSameSong;
+
+  // Viewport centering initialization when selectedRowIndex changes initially
+  const hasInitializedViewRef = useRef(false);
+  useEffect(() => {
+    if (hasInitializedViewRef.current) return;
+    if (selectedRowIndex > 0 && lines[selectedRowIndex]) {
+      const lineTime = typeof lines[selectedRowIndex].time === 'number' ? lines[selectedRowIndex].time : parseFloat(lines[selectedRowIndex].time) || 0;
+      if (lineTime > 2) {
+        hasInitializedViewRef.current = true;
+        setViewStart(Math.max(0, lineTime - 2.0));
+      }
+    }
+  }, [selectedRowIndex, lines]);
 
   // 1. Resolve Audio Buffer for Visualization (Vocal Stem or Mix)
   useEffect(() => {
@@ -142,56 +242,43 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
     };
   }, [song]);
 
-  // Downsample AudioBuffer into fast 3,000-bucket min/max peaks
+  // Downsample AudioBuffer into fast 3,000-bucket min/max peaks + 64-sample block pyramid
   const generatePeaks = (mixBuf, leadBuf) => {
     if (!mixBuf) return;
-    const buckets = 3000;
-    const computeFor = (buf) => {
+    const computeSummary = (buf) => {
       if (!buf) return null;
-      const ch0 = buf.getChannelData(0);
-      const ch1 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : ch0;
-      const len = buf.length;
-      const step = len / buckets;
-      const peaks = new Float32Array(buckets * 2);
+      const blkData = getAudioBlocks(buf);
+      if (!blkData) return null;
+      const { blocks, numBlocks, BLOCK } = blkData;
+      const buckets = 3000;
+      const step = buf.length / buckets;
+      const summary = new Float32Array(buckets * 2);
 
       for (let i = 0; i < buckets; i++) {
         const start = Math.floor(i * step);
-        const end = Math.min(len, Math.floor((i + 1) * step));
+        const end = Math.min(buf.length, Math.floor((i + 1) * step));
+        const b0 = Math.min(numBlocks - 1, Math.max(0, Math.floor(start / BLOCK)));
+        const b1 = Math.min(numBlocks - 1, Math.max(b0, Math.floor(end / BLOCK)));
         let min = 0;
         let max = 0;
-
-        for (let j = start; j < end; j += 4) {
-          const s = (ch0[j] + ch1[j]) * 0.5;
-          if (s < min) min = s;
-          if (s > max) max = s;
+        for (let b = b0; b <= b1; b++) {
+          const pMin = blocks[b * 2];
+          const pMax = blocks[b * 2 + 1];
+          if (pMin < min) min = pMin;
+          if (pMax > max) max = pMax;
         }
-        peaks[i * 2] = min;
-        peaks[i * 2 + 1] = max;
+        summary[i * 2] = min;
+        summary[i * 2 + 1] = max;
       }
-      return peaks;
+      return { ...blkData, summary };
     };
 
     peaksCacheRef.current = {
-      mix: computeFor(mixBuf),
-      lead: leadBuf ? computeFor(leadBuf) : null
+      mix: computeSummary(mixBuf),
+      lead: leadBuf ? computeSummary(leadBuf) : null
     };
     renderAllCanvases();
   };
-
-  // 2. Playhead Auto-Follow Logic during Playback
-  useEffect(() => {
-    if (!isPlaying || !followPlayhead || duration <= 0) return;
-
-    const cur = playbackTime;
-    const curStart = viewStartRef.current;
-    const curDur = viewDurationRef.current;
-
-    // Advance view when playhead exceeds 75% of view or lags behind
-    if (cur > curStart + curDur * 0.75 || cur < curStart) {
-      const targetStart = Math.max(0, Math.min(duration - curDur, cur - curDur * 0.30));
-      setViewStart(targetStart);
-    }
-  }, [playbackTime, isPlaying, followPlayhead, duration]);
 
   // 3. Zoom Navigation Functions
   const handleZoom = (factor, centerRatio = 0.5) => {
@@ -227,7 +314,36 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
     zoomFit: handleZoomFit,
     zoomToActiveLine: handleZoomToActiveLine,
     toggleShortcutsModal: () => setShowShortcutsModal((prev) => !prev),
-    snapTransient: handleSnapTransient
+    snapTransient: handleSnapTransient,
+    getHoveredSyncPoint: () => {
+      if (hoveredPauseRef.current) {
+        const parts = hoveredPauseRef.current.split('_');
+        if (parts.length >= 2) {
+          const lIdx = parseInt(parts[0], 10);
+          if (!isNaN(lIdx)) {
+            return {
+              lineIndex: lIdx,
+              pointIndex: hoveredPauseRef.current,
+              isPause: true,
+              pauseKey: hoveredPauseRef.current
+            };
+          }
+        }
+      }
+      if (hoveredSubMarkerRef.current) {
+        return {
+          lineIndex: hoveredSubMarkerRef.current.lineIndex,
+          pointIndex: hoveredSubMarkerRef.current.pointIndex,
+          isPause: false
+        };
+      }
+      return null;
+    },
+    clearHovered: () => {
+      hoveredPauseRef.current = null;
+      setHoveredPauseKey(null);
+      hoveredSubMarkerRef.current = null;
+    }
   }), [duration, viewDuration, viewStart, selectedRowIndex, lines]);
 
   // 4. Snap Selected Lyric to Nearest Vocal Transient
@@ -277,418 +393,727 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
     setTimeout(() => setTransientStatus(null), 2500);
   };
 
+  // Safe canvas rounded rect helper with cross-browser fallback
+  const drawRoundRect = (ctx, x, y, w, h, r) => {
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return;
+    ctx.beginPath();
+    if (typeof ctx.roundRect === 'function') {
+      try {
+        ctx.roundRect(x, y, w, h, r);
+        return;
+      } catch (_) {}
+    }
+    ctx.rect(x, y, w, h);
+  };
+
+  // Safe canvas circle helper with finite number checks
+  const drawCircle = (ctx, cx, cy, r) => {
+    if (!Number.isFinite(cx) || !Number.isFinite(cy) || !Number.isFinite(r) || r <= 0) return;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+  };
+
   // 5. Canvas Rendering Loop
   const renderAllCanvases = useCallback(() => {
-    const wrap = canvasWrapRef.current;
-    if (!wrap || duration <= 0) return;
+    try {
+      const wrap = canvasWrapRef.current;
+      const safeDuration = typeof duration === 'number' && !isNaN(duration) && duration > 0 ? duration : 0;
+      if (!wrap || safeDuration <= 0) return;
 
-    const width = wrap.clientWidth;
-    if (width <= 0) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-
-    // ==========================================
-    // A. Render Minimap Overview
-    // ==========================================
-    const minimap = minimapCanvasRef.current;
-    if (minimap) {
-      const mmW = minimap.clientWidth;
-      const mmH = 30;
-      minimap.width = Math.floor(mmW * dpr);
-      minimap.height = Math.floor(mmH * dpr);
-      minimap.style.width = `${mmW}px`;
-      minimap.style.height = `${mmH}px`;
-
-      const ctx = minimap.getContext('2d');
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.scale(dpr, dpr);
-      ctx.clearRect(0, 0, mmW, mmH);
-
-      // Background
-      ctx.fillStyle = '#060a12';
-      ctx.fillRect(0, 0, mmW, mmH);
-
-      // Thumbnail waveform silhouette
-      const peaks = peaksCacheRef.current.lead || peaksCacheRef.current.mix;
-      if (peaks) {
-        const total = peaks.length / 2;
-        ctx.fillStyle = 'rgba(99, 102, 241, 0.40)';
-        ctx.beginPath();
-        for (let x = 0; x < mmW; x++) {
-          const b = Math.floor((x / mmW) * total);
-          const max = peaks[b * 2 + 1];
-          const barH = Math.max(1, max * (mmH / 2) * 0.85);
-          ctx.rect(x, mmH / 2 - barH, 1, barH * 2);
-        }
-        ctx.fill();
-      }
-
-      // Lyric Tick Markers across the whole song
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const lx = (line.time / duration) * mmW;
-        if (lx >= 0 && lx <= mmW) {
-          const isSel = selectedRowIndex === i;
-          ctx.fillStyle = isSel ? '#fbbf24' : 'rgba(255, 255, 255, 0.45)';
-          ctx.fillRect(lx - (isSel ? 1.5 : 0.5), isSel ? 2 : 7, isSel ? 3 : 1, isSel ? mmH - 4 : mmH - 14);
-        }
-      }
-
-      // Viewport Camera Window (Cyan Theme)
-      const vpX1 = Math.max(0, (viewStart / duration) * mmW);
-      const vpX2 = Math.min(mmW, ((viewStart + viewDuration) / duration) * mmW);
-      const vpW = Math.max(4, vpX2 - vpX1);
-
-      // Outside curtain mask
-      ctx.fillStyle = 'rgba(2, 6, 23, 0.60)';
-      if (vpX1 > 0) ctx.fillRect(0, 0, vpX1, mmH);
-      if (vpX2 < mmW) ctx.fillRect(vpX2, 0, mmW - vpX2, mmH);
-
-      // Inside view illumination
-      ctx.fillStyle = 'rgba(56, 189, 248, 0.08)';
-      ctx.fillRect(vpX1, 0, vpW, mmH);
-
-      // View border
-      ctx.strokeStyle = '#38bdf8';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(vpX1, 0.5, vpW, mmH - 1);
-
-      // Top & Bottom rails
-      ctx.fillStyle = '#0284c7';
-      ctx.fillRect(vpX1, 0, vpW, 2);
-      ctx.fillRect(vpX1, mmH - 2, vpW, 2);
-
-      // Left & Right Resize Handles
-      ctx.fillStyle = '#0284c7';
-      ctx.fillRect(vpX1 - 2.5, 2, 5, mmH - 4);
-      ctx.fillRect(vpX2 - 2.5, 2, 5, mmH - 4);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(vpX1 - 0.5, mmH / 2 - 4, 1.5, 8);
-      ctx.fillRect(vpX2 - 0.5, mmH / 2 - 4, 1.5, 8);
-
-      // Playhead on minimap
-      const pmX = (playbackTime / duration) * mmW;
-      ctx.strokeStyle = '#ef4444';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(pmX, 0);
-      ctx.lineTo(pmX, mmH);
-      ctx.stroke();
-    }
-
-    // ==========================================
-    // B. Render Time Ruler
-    // ==========================================
-    const ruler = rulerCanvasRef.current;
-    if (ruler) {
-      const rH = 24;
-      ruler.width = Math.floor(width * dpr);
-      ruler.height = Math.floor(rH * dpr);
-      ruler.style.width = `${width}px`;
-      ruler.style.height = `${rH}px`;
-
-      const ctx = ruler.getContext('2d');
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.scale(dpr, dpr);
-      ctx.clearRect(0, 0, width, rH);
-
-      // Background
-      ctx.fillStyle = '#0a0e1a';
-      ctx.fillRect(0, 0, width, rH);
-
-      // Time Steps
-      let timeStep = 5;
-      if (viewDuration <= 3) timeStep = 0.2;
-      else if (viewDuration <= 8) timeStep = 0.5;
-      else if (viewDuration <= 18) timeStep = 1;
-      else if (viewDuration <= 45) timeStep = 2;
-      else if (viewDuration <= 90) timeStep = 5;
-      else timeStep = 15;
-
-      const firstTick = Math.floor(viewStart / timeStep) * timeStep;
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = '9px monospace';
-      ctx.textAlign = 'center';
-
-      for (let t = firstTick; t <= viewStart + viewDuration; t += timeStep) {
-        const x = ((t - viewStart) / viewDuration) * width;
-        if (x >= 0 && x <= width) {
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.20)';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(x, 14);
-          ctx.lineTo(x, rH);
-          ctx.stroke();
-
-          const label = formatCentiseconds(t).slice(0, 5);
-          ctx.fillText(label, x, 10);
-        }
-      }
-
-      // Playhead flag on ruler
-      if (playbackTime >= viewStart && playbackTime <= viewStart + viewDuration) {
-        const px = ((playbackTime - viewStart) / viewDuration) * width;
-        ctx.fillStyle = '#ef4444';
-        ctx.beginPath();
-        ctx.moveTo(px - 5, 0);
-        ctx.lineTo(px + 5, 0);
-        ctx.lineTo(px, 12);
-        ctx.closePath();
-        ctx.fill();
-      }
-    }
-
-    // ==========================================
-    // C. Render Main Spectrum & Waveform Track
-    // ==========================================
-    const canvas = mainCanvasRef.current;
-    if (canvas) {
-      const trackH = 120;
-      canvas.width = Math.floor(width * dpr);
-      canvas.height = Math.floor(trackH * dpr);
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${trackH}px`;
-
-      const ctx = canvas.getContext('2d');
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.scale(dpr, dpr);
-      ctx.clearRect(0, 0, width, trackH);
-
-      // Background gradient
-      const bgGrad = ctx.createLinearGradient(0, 0, 0, trackH);
-      bgGrad.addColorStop(0, '#070b14');
-      bgGrad.addColorStop(1, '#0c111e');
-      ctx.fillStyle = bgGrad;
-      ctx.fillRect(0, 0, width, trackH);
-
-      // Center zero line
-      const centerY = trackH / 2;
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(0, centerY);
-      ctx.lineTo(width, centerY);
-      ctx.stroke();
-
-      // 1. High-Precision Background Audio Spectrum & Formant Waveform
-      const buf = audioBufferRef.current || audioPlayer.getLoadedBuffer();
-      if (buf && duration > 0) {
-        const ch = buf.getChannelData(0);
-        const sampleRate = buf.sampleRate || 44100;
-        const startSample = Math.max(0, Math.floor(viewStart * sampleRate));
-        const endSample = Math.min(ch.length, Math.floor((viewStart + viewDuration) * sampleRate));
-        const totalSamples = endSample - startSample;
-
-        if (totalSamples > 0) {
-          const step = totalSamples / width;
-          const maxAmp = (trackH / 2) * 0.88;
-
-          // Base Audio Waveform
-          const waveGrad = ctx.createLinearGradient(0, 0, 0, trackH);
-          waveGrad.addColorStop(0, '#38bdf8');   // Cyan high
-          waveGrad.addColorStop(0.3, '#818cf8'); // Indigo mid
-          waveGrad.addColorStop(0.5, '#c084fc'); // Purple center
-          waveGrad.addColorStop(0.7, '#818cf8'); // Indigo mid
-          waveGrad.addColorStop(1, '#38bdf8');   // Cyan low
-
-          ctx.fillStyle = waveGrad;
-          ctx.beginPath();
-
-          for (let x = 0; x < width; x++) {
-            const s0 = Math.floor(startSample + x * step);
-            const s1 = Math.min(ch.length, Math.floor(startSample + (x + 1) * step));
-            let min = 0;
-            let max = 0;
-            const len = s1 - s0;
-            const stride = Math.max(1, Math.floor(len / 48));
-
-            for (let s = s0; s < s1; s += stride) {
-              const v = ch[s];
-              if (v < min) min = v;
-              if (v > max) max = v;
-            }
-
-            const topY = centerY - Math.max(1, max * maxAmp);
-            const botY = centerY - Math.min(-1, min * maxAmp);
-            ctx.rect(x, topY, 1, Math.max(1.5, botY - topY));
-          }
-          ctx.fill();
-
-          // Vocal Formant Energy Layer (Highlighted in Gold & Rose)
-          const stemBuffers = audioPlayer.getStemBuffers();
-          const leadBuf = stemBuffers.leadBuf || (buf !== audioPlayer.getLoadedBuffer() ? audioBufferRef.current : null);
-
-          if (leadBuf && leadBuf !== buf) {
-            const leadCh = leadBuf.getChannelData(0);
-            const leadSampleRate = leadBuf.sampleRate || 44100;
-            const leadStart = Math.max(0, Math.floor(viewStart * leadSampleRate));
-            const leadEnd = Math.min(leadCh.length, Math.floor((viewStart + viewDuration) * leadSampleRate));
-            const leadTotal = leadEnd - leadStart;
-
-            if (leadTotal > 0) {
-              const leadStep = leadTotal / width;
-              const vocalGrad = ctx.createLinearGradient(0, 0, 0, trackH);
-              vocalGrad.addColorStop(0, '#f43f5e'); // Rose
-              vocalGrad.addColorStop(0.5, '#fbbf24'); // Bright Gold
-              vocalGrad.addColorStop(1, '#f43f5e');
-
-              ctx.fillStyle = vocalGrad;
-              ctx.beginPath();
-
-              for (let x = 0; x < width; x++) {
-                const s0 = Math.floor(leadStart + x * leadStep);
-                const s1 = Math.min(leadCh.length, Math.floor(leadStart + (x + 1) * leadStep));
-                let min = 0;
-                let max = 0;
-                const len = s1 - s0;
-                const stride = Math.max(1, Math.floor(len / 48));
-
-                for (let s = s0; s < s1; s += stride) {
-                  const v = leadCh[s];
-                  if (v < min) min = v;
-                  if (v > max) max = v;
-                }
-
-                if (max > 0.03 || min < -0.03) {
-                  const topY = centerY - Math.max(1, max * maxAmp);
-                  const botY = centerY - Math.min(-1, min * maxAmp);
-                  ctx.rect(x, topY, 1, Math.max(1.5, botY - topY));
-                }
-              }
-              ctx.fill();
-            }
-          }
-        }
+      const width = wrap.clientWidth;
+      if (width <= 0) return;
+      const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+      let safePlayTime = 0;
+      if (isScrubbingRulerRef.current) {
+        safePlayTime = typeof playbackTimeRef.current === 'number' && !isNaN(playbackTimeRef.current)
+          ? Math.max(0, playbackTimeRef.current)
+          : 0;
+      } else if (isPlayingRef.current && isSameSongRef.current) {
+        safePlayTime = usePlaybackStore.getState().getAccuratePlaybackTime();
       } else {
-        // Fallback to coarse peaks if buffer is still decoding
-        const peaks = peaksCacheRef.current.lead || peaksCacheRef.current.mix;
-        if (peaks && duration > 0) {
-          const totalBuckets = peaks.length / 2;
-          const maxAmp = (trackH / 2) * 0.88;
-          ctx.fillStyle = '#818cf8';
-          ctx.beginPath();
-          for (let x = 0; x < width; x += 2) {
-            const t0 = viewStart + (x / width) * viewDuration;
-            const t1 = viewStart + ((x + 2) / width) * viewDuration;
-            const b0 = Math.max(0, Math.min(totalBuckets - 1, Math.floor((t0 / duration) * totalBuckets)));
-            const b1 = Math.max(0, Math.min(totalBuckets - 1, Math.floor((t1 / duration) * totalBuckets)));
-            let min = 0, max = 0;
-            for (let b = b0; b <= b1; b++) {
-              if (peaks[b * 2] < min) min = peaks[b * 2];
-              if (peaks[b * 2 + 1] > max) max = peaks[b * 2 + 1];
+        safePlayTime = typeof playbackTimeRef.current === 'number' && !isNaN(playbackTimeRef.current)
+          ? Math.max(0, playbackTimeRef.current)
+          : 0;
+      }
+      safePlayTime = Math.max(0, Math.min(safeDuration, safePlayTime));
+      const safeViewStart = typeof viewStart === 'number' && !isNaN(viewStart) ? Math.max(0, viewStart) : 0;
+      const safeViewDuration = Math.max(0.1, typeof viewDuration === 'number' && !isNaN(viewDuration) ? viewDuration : 25);
+
+      // ==========================================
+      // A. Render Minimap Overview
+      // ==========================================
+      const minimap = minimapCanvasRef.current;
+      if (minimap) {
+        const mmW = minimap.clientWidth;
+        const mmH = 30;
+        if (mmW > 0) {
+          const targetW = Math.floor(mmW * dpr);
+          const targetH = Math.floor(mmH * dpr);
+          if (minimap.width !== targetW || minimap.height !== targetH) {
+            minimap.width = targetW;
+            minimap.height = targetH;
+            minimap.style.width = `${mmW}px`;
+            minimap.style.height = `${mmH}px`;
+          }
+
+          const ctx = minimap.getContext('2d');
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.clearRect(0, 0, mmW, mmH);
+
+          // Background
+          ctx.fillStyle = '#060a12';
+          ctx.fillRect(0, 0, mmW, mmH);
+
+          // Thumbnail waveform silhouette
+          const peaksObj = peaksCacheRef.current.lead || peaksCacheRef.current.mix;
+          const peaks = peaksObj?.summary || peaksObj;
+          if (peaks && (peaks.length || peaks.summary?.length)) {
+            const arr = peaks.summary || peaks;
+            const total = arr.length / 2;
+            ctx.fillStyle = 'rgba(99, 102, 241, 0.40)';
+            ctx.beginPath();
+            for (let x = 0; x < mmW; x++) {
+              const b = Math.floor((x / mmW) * total);
+              const max = arr[b * 2 + 1];
+              const barH = Math.max(1, max * (mmH / 2) * 0.85);
+              ctx.rect(x, mmH / 2 - barH, 1, barH * 2);
             }
-            const topY = centerY - Math.max(1, max * maxAmp);
-            const botY = centerY - Math.min(-1, min * maxAmp);
-            ctx.rect(x, topY, 1.5, Math.max(2, botY - topY));
+            ctx.fill();
           }
-          ctx.fill();
+
+          // Lyric Tick Markers across the whole song
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (!line) continue;
+            const lineTime = typeof line.time === 'number' ? line.time : parseFloat(line.time) || 0;
+            const lx = (lineTime / safeDuration) * mmW;
+            if (Number.isFinite(lx) && lx >= 0 && lx <= mmW) {
+              const isSel = selectedRowIndex === i;
+              ctx.fillStyle = isSel ? '#fbbf24' : 'rgba(255, 255, 255, 0.45)';
+              ctx.fillRect(lx - (isSel ? 1.5 : 0.5), isSel ? 2 : 7, isSel ? 3 : 1, isSel ? mmH - 4 : mmH - 14);
+            }
+          }
+
+          // Viewport Camera Window (Cyan Theme)
+          const vpX1 = Math.max(0, (safeViewStart / safeDuration) * mmW);
+          const vpX2 = Math.min(mmW, ((safeViewStart + safeViewDuration) / safeDuration) * mmW);
+          const vpW = Math.max(4, vpX2 - vpX1);
+
+          // Outside curtain mask
+          ctx.fillStyle = 'rgba(2, 6, 23, 0.60)';
+          if (vpX1 > 0) ctx.fillRect(0, 0, vpX1, mmH);
+          if (vpX2 < mmW) ctx.fillRect(vpX2, 0, mmW - vpX2, mmH);
+
+          // Inside view illumination
+          ctx.fillStyle = 'rgba(56, 189, 248, 0.08)';
+          ctx.fillRect(vpX1, 0, vpW, mmH);
+
+          // View border
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(vpX1, 0.5, vpW, mmH - 1);
+
+          // Top & Bottom rails
+          ctx.fillStyle = '#0284c7';
+          ctx.fillRect(vpX1, 0, vpW, 2);
+          ctx.fillRect(vpX1, mmH - 2, vpW, 2);
+
+          // Left & Right Resize Handles
+          ctx.fillStyle = '#0284c7';
+          ctx.fillRect(vpX1 - 2.5, 2, 5, mmH - 4);
+          ctx.fillRect(vpX2 - 2.5, 2, 5, mmH - 4);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(vpX1 - 0.5, mmH / 2 - 4, 1.5, 8);
+          ctx.fillRect(vpX2 - 0.5, mmH / 2 - 4, 1.5, 8);
+
+          // Playhead on minimap
+          const pmX = (safePlayTime / safeDuration) * mmW;
+          if (Number.isFinite(pmX)) {
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(pmX, 0);
+            ctx.lineTo(pmX, mmH);
+            ctx.stroke();
+          }
         }
       }
-      // 2. Render Interactive Lyric Pins & Badges
-      const boxes = [];
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const lx = ((line.time - viewStart) / viewDuration) * width;
 
-        if (lx >= -80 && lx <= width + 80) {
-          const isSel = selectedRowIndex === i;
-          const isHov = hoveredMarkerIndex === i;
+      // ==========================================
+      // B. Render Time Ruler
+      // ==========================================
+      const ruler = rulerCanvasRef.current;
+      if (ruler) {
+        const rH = 24;
+        const targetW = Math.floor(width * dpr);
+        const targetH = Math.floor(rH * dpr);
+        if (ruler.width !== targetW || ruler.height !== targetH) {
+          ruler.width = targetW;
+          ruler.height = targetH;
+          ruler.style.width = `${width}px`;
+          ruler.style.height = `${rH}px`;
+        }
 
-          // Vertical Marker Line
-          ctx.strokeStyle = isSel ? '#fbbf24' : (isHov ? '#38bdf8' : 'rgba(56, 189, 248, 0.55)');
-          ctx.lineWidth = isSel || isHov ? 2 : 1.5;
-          if (!isSel && !isHov) ctx.setLineDash([4, 3]);
-          else ctx.setLineDash([]);
+        const ctx = ruler.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, width, rH);
 
-          ctx.beginPath();
-          ctx.moveTo(lx, 24);
-          ctx.lineTo(lx, trackH);
-          ctx.stroke();
-          ctx.setLineDash([]);
+        // Background
+        ctx.fillStyle = '#0a0e1a';
+        ctx.fillRect(0, 0, width, rH);
 
-          // Draggable Knob / Handle
-          ctx.fillStyle = isSel ? '#f59e0b' : (isHov ? '#38bdf8' : '#0284c7');
-          ctx.beginPath();
-          ctx.arc(lx, trackH - 10, isSel || isHov ? 5 : 4, 0, Math.PI * 2);
-          ctx.fill();
+        // Time Steps
+        let timeStep = 5;
+        if (safeViewDuration <= 3) timeStep = 0.2;
+        else if (safeViewDuration <= 8) timeStep = 0.5;
+        else if (safeViewDuration <= 18) timeStep = 1;
+        else if (safeViewDuration <= 45) timeStep = 2;
+        else if (safeViewDuration <= 90) timeStep = 5;
+        else timeStep = 15;
 
-          // Lyric Header Pill Badge at Top of Pin
-          const previewText = line.text ? (line.text.length > 16 ? line.text.slice(0, 15) + '…' : line.text) : '#INST';
-          const label = `[#${i + 1}] ${previewText}`;
-          ctx.font = isSel ? 'bold 10px sans-serif' : '10px sans-serif';
-          const textW = ctx.measureText(label).width;
-          const badgeW = textW + 14;
-          const badgeH = 20;
-          const badgeX = Math.max(2, Math.min(width - badgeW - 2, lx - badgeW / 2));
-          const badgeY = 3;
+        const firstTick = Math.floor(safeViewStart / timeStep) * timeStep;
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '9px monospace';
+        ctx.textAlign = 'center';
 
-          boxes.push({ index: i, lx, badgeX, badgeY, badgeW, badgeH, time: line.time });
-
-          // Badge Background
-          if (isSel) {
-            ctx.fillStyle = 'rgba(245, 158, 11, 0.95)';
-            ctx.strokeStyle = '#fef08a';
-            ctx.lineWidth = 1.5;
-          } else if (isHov) {
-            ctx.fillStyle = 'rgba(30, 58, 138, 0.92)';
-            ctx.strokeStyle = '#38bdf8';
-            ctx.lineWidth = 1.5;
-          } else {
-            ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-            ctx.strokeStyle = 'rgba(56, 189, 248, 0.65)';
+        for (let t = firstTick; t <= safeViewStart + safeViewDuration; t += timeStep) {
+          const x = ((t - safeViewStart) / safeViewDuration) * width;
+          if (Number.isFinite(x) && x >= 0 && x <= width) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.20)';
             ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x, 14);
+            ctx.lineTo(x, rH);
+            ctx.stroke();
+
+            const label = formatCentiseconds(t).slice(0, 5);
+            ctx.fillText(label, x, 10);
           }
+        }
 
-          // Rounded Badge rect
-          ctx.beginPath();
-          ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 4);
-          ctx.fill();
-          ctx.stroke();
-
-          // Badge Text
-          ctx.fillStyle = isSel ? '#000000' : (isHov ? '#ffffff' : '#e2e8f0');
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(label, badgeX + badgeW / 2, badgeY + badgeH / 2);
+        // Playhead flag on ruler
+        if (safePlayTime >= safeViewStart && safePlayTime <= safeViewStart + safeViewDuration) {
+          const px = ((safePlayTime - safeViewStart) / safeViewDuration) * width;
+          if (Number.isFinite(px)) {
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath();
+            ctx.moveTo(px - 5, 0);
+            ctx.lineTo(px + 5, 0);
+            ctx.lineTo(px, 12);
+            ctx.closePath();
+            ctx.fill();
+          }
         }
       }
-      markerBoxesRef.current = boxes;
 
-      // 4. Render Red Playhead Needle
-      if (playbackTime >= viewStart && playbackTime <= viewStart + viewDuration) {
-        const playX = ((playbackTime - viewStart) / viewDuration) * width;
-        ctx.strokeStyle = '#ef4444';
-        ctx.lineWidth = 2;
+      // ==========================================
+      // C. Render Main Spectrum & Waveform Track
+      // ==========================================
+      const canvas = mainCanvasRef.current;
+      if (canvas) {
+        const trackH = 120;
+        const targetW = Math.floor(width * dpr);
+        const targetH = Math.floor(trackH * dpr);
+        if (canvas.width !== targetW || canvas.height !== targetH) {
+          canvas.width = targetW;
+          canvas.height = targetH;
+          canvas.style.width = `${width}px`;
+          canvas.style.height = `${trackH}px`;
+        }
+
+        const ctx = canvas.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, width, trackH);
+
+        // Background gradient
+        const bgGrad = ctx.createLinearGradient(0, 0, 0, trackH);
+        bgGrad.addColorStop(0, '#070b14');
+        bgGrad.addColorStop(1, '#0c111e');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, width, trackH);
+
+        // Center zero line
+        const centerY = trackH / 2;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(playX, 0);
-        ctx.lineTo(playX, trackH);
+        ctx.moveTo(0, centerY);
+        ctx.lineTo(width, centerY);
         ctx.stroke();
 
-        // Playhead Time Badge
-        const timeText = formatCentiseconds(playbackTime);
-        ctx.font = '9px monospace';
-        const tw = ctx.measureText(timeText).width + 8;
-        ctx.fillStyle = '#ef4444';
-        ctx.beginPath();
-        ctx.roundRect(playX - tw / 2, trackH - 16, tw, 14, 3);
-        ctx.fill();
-        ctx.fillStyle = '#ffffff';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(timeText, playX, trackH - 9);
+        // 1. High-Precision Background Audio Spectrum & Formant Waveform
+        const buf = audioBufferRef.current || audioPlayer.getLoadedBuffer();
+        const hasValidBuf = buf && typeof buf.getChannelData === 'function' && buf.numberOfChannels > 0 && typeof buf.length === 'number' && buf.length > 0;
+        if (hasValidBuf && safeDuration > 0) {
+          const ch = buf.getChannelData(0);
+          const sampleRate = buf.sampleRate || 44100;
+          const startSample = Math.max(0, Math.floor(safeViewStart * sampleRate));
+          const endSample = Math.min(ch.length, Math.floor((safeViewStart + safeViewDuration) * sampleRate));
+          const totalSamples = endSample - startSample;
+
+          if (totalSamples > 0) {
+            const step = totalSamples / width;
+            const maxAmp = (trackH / 2) * 0.88;
+            const baseBlocks = getAudioBlocks(buf);
+
+            // Base Audio Waveform
+            const waveGrad = ctx.createLinearGradient(0, 0, 0, trackH);
+            waveGrad.addColorStop(0, '#38bdf8');   // Cyan high
+            waveGrad.addColorStop(0.3, '#818cf8'); // Indigo mid
+            waveGrad.addColorStop(0.5, '#c084fc'); // Purple center
+            waveGrad.addColorStop(0.7, '#818cf8'); // Indigo mid
+            waveGrad.addColorStop(1, '#38bdf8');   // Cyan low
+
+            ctx.fillStyle = waveGrad;
+            ctx.beginPath();
+
+            for (let x = 0; x < width; x++) {
+              const s0 = Math.max(0, Math.min(ch.length - 1, Math.floor(startSample + x * step)));
+              const s1 = Math.max(s0 + 1, Math.min(ch.length, Math.floor(startSample + (x + 1) * step)));
+              const { min, max } = getSampleRangeMinMax(ch, baseBlocks, s0, s1);
+
+              const topY = centerY - Math.max(1, max * maxAmp);
+              const botY = centerY - Math.min(-1, min * maxAmp);
+              ctx.rect(x, topY, 1, Math.max(1.5, botY - topY));
+            }
+            ctx.fill();
+
+            // Vocal Formant Energy Layer (Highlighted in Gold & Rose)
+            const stemBuffers = audioPlayer.getStemBuffers() || {};
+            const leadBuf = stemBuffers.leadBuf || (buf !== audioPlayer.getLoadedBuffer() ? audioBufferRef.current : null);
+            const hasValidLead = leadBuf && typeof leadBuf.getChannelData === 'function' && leadBuf.numberOfChannels > 0 && typeof leadBuf.length === 'number' && leadBuf.length > 0;
+
+            if (hasValidLead && leadBuf !== buf) {
+              const leadCh = leadBuf.getChannelData(0);
+              const leadSampleRate = leadBuf.sampleRate || 44100;
+              const leadStart = Math.max(0, Math.floor(safeViewStart * leadSampleRate));
+              const leadEnd = Math.min(leadCh.length, Math.floor((safeViewStart + safeViewDuration) * leadSampleRate));
+              const leadTotal = leadEnd - leadStart;
+
+              if (leadTotal > 0) {
+                const leadStep = leadTotal / width;
+                const leadBlocks = getAudioBlocks(leadBuf);
+                const vocalGrad = ctx.createLinearGradient(0, 0, 0, trackH);
+                vocalGrad.addColorStop(0, '#ec4899'); // Fuchsia
+                vocalGrad.addColorStop(0.5, '#fbbf24'); // Bright Gold
+                vocalGrad.addColorStop(1, '#ec4899');
+
+                ctx.fillStyle = vocalGrad;
+                ctx.beginPath();
+
+                for (let x = 0; x < width; x++) {
+                  const s0 = Math.max(0, Math.min(leadCh.length - 1, Math.floor(leadStart + x * leadStep)));
+                  const s1 = Math.max(s0 + 1, Math.min(leadCh.length, Math.floor(leadStart + (x + 1) * leadStep)));
+                  const { min, max } = getSampleRangeMinMax(leadCh, leadBlocks, s0, s1);
+
+                  if (max > 0.03 || min < -0.03) {
+                    const topY = centerY - Math.max(1, max * maxAmp);
+                    const botY = centerY - Math.min(-1, min * maxAmp);
+                    ctx.rect(x, topY, 1, Math.max(1.5, botY - topY));
+                  }
+                }
+                ctx.fill();
+              }
+            }
+          }
+        } else {
+          // Fallback to coarse peaks if buffer is still decoding
+          const peaksObj = peaksCacheRef.current.lead || peaksCacheRef.current.mix;
+          const peaks = peaksObj?.summary || peaksObj;
+          if (peaks && safeDuration > 0) {
+            const totalBuckets = (peaks.length || peaks.summary?.length) / 2;
+            const maxAmp = (trackH / 2) * 0.88;
+            ctx.fillStyle = '#818cf8';
+            ctx.beginPath();
+            for (let x = 0; x < width; x++) {
+              const t0 = safeViewStart + (x / width) * safeViewDuration;
+              const t1 = safeViewStart + ((x + 1) / width) * safeViewDuration;
+              const b0 = Math.max(0, Math.min(totalBuckets - 1, Math.floor((t0 / safeDuration) * totalBuckets)));
+              const b1 = Math.max(0, Math.min(totalBuckets - 1, Math.floor((t1 / safeDuration) * totalBuckets)));
+              let min = 0, max = 0;
+              for (let b = b0; b <= b1; b++) {
+                if (peaks[b * 2] < min) min = peaks[b * 2];
+                if (peaks[b * 2 + 1] > max) max = peaks[b * 2 + 1];
+              }
+              const topY = centerY - Math.max(1, max * maxAmp);
+              const botY = centerY - Math.min(-1, min * maxAmp);
+              ctx.rect(x, topY, 1, Math.max(2, botY - topY));
+            }
+            ctx.fill();
+          }
+        }
+
+        // 2. Render Interactive Lyric Pins & Badges
+        const boxes = [];
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          if (!line) continue;
+          const lineTime = typeof line.time === 'number' ? line.time : parseFloat(line.time) || 0;
+          const lx = ((lineTime - safeViewStart) / safeViewDuration) * width;
+
+          if (Number.isFinite(lx) && lx >= -80 && lx <= width + 80) {
+            const isSel = selectedRowIndex === i;
+            const isHov = hoveredMarkerIndex === i;
+
+            // Vertical Marker Line
+            ctx.strokeStyle = isSel ? '#fbbf24' : (isHov ? '#38bdf8' : 'rgba(56, 189, 248, 0.55)');
+            ctx.lineWidth = isSel || isHov ? 2 : 1.5;
+            if (!isSel && !isHov) ctx.setLineDash([4, 3]);
+            else ctx.setLineDash([]);
+
+            ctx.beginPath();
+            ctx.moveTo(lx, 24);
+            ctx.lineTo(lx, trackH);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Draggable Knob / Handle
+            ctx.fillStyle = isSel ? '#f59e0b' : (isHov ? '#38bdf8' : '#0284c7');
+            drawCircle(ctx, lx, trackH - 10, isSel || isHov ? 5 : 4);
+
+            // Lyric Header Pill Badge at Top of Pin
+            const previewText = line.text ? (line.text.length > 16 ? line.text.slice(0, 15) + '…' : line.text) : '#INST';
+            const label = `[#${i + 1}] ${previewText}`;
+            ctx.font = isSel ? 'bold 10px sans-serif' : '10px sans-serif';
+            const textW = ctx.measureText(label).width;
+            const badgeW = textW + 14;
+            const badgeH = 20;
+            const badgeX = Math.max(2, Math.min(width - badgeW - 2, lx - badgeW / 2));
+            const badgeY = 3;
+
+            boxes.push({ index: i, lx, badgeX, badgeY, badgeW, badgeH, time: lineTime });
+
+            // Badge Background
+            if (isSel) {
+              ctx.fillStyle = 'rgba(245, 158, 11, 0.95)';
+              ctx.strokeStyle = '#fef08a';
+              ctx.lineWidth = 1.5;
+            } else if (isHov) {
+              ctx.fillStyle = 'rgba(30, 58, 138, 0.92)';
+              ctx.strokeStyle = '#38bdf8';
+              ctx.lineWidth = 1.5;
+            } else {
+              ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+              ctx.strokeStyle = 'rgba(56, 189, 248, 0.65)';
+              ctx.lineWidth = 1;
+            }
+
+            // Rounded Badge rect
+            ctx.beginPath();
+            drawRoundRect(ctx, badgeX, badgeY, badgeW, badgeH, 4);
+            ctx.fill();
+            ctx.stroke();
+
+            // Badge Text
+            ctx.fillStyle = isSel ? '#000000' : (isHov ? '#ffffff' : '#e2e8f0');
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, badgeX + badgeW / 2, badgeY + badgeH / 2);
+          }
+        }
+        markerBoxesRef.current = boxes;
+
+        // 3. Render Nested Sub-Line Word Pins & Pauses
+        const subBoxes = [];
+        const pausePartitions = [];
+        const pauseHandles = [];
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          if (!line || !line.text) continue;
+          const isSelectedLine = selectedRowIndex === i;
+          // In the nested sub-line workspace, render sub-line words & pauses for the active selected line
+          if (selectedRowIndex >= 0 && !isSelectedLine) continue;
+
+          const { words, pauses } = getLineWordPairsWithPauses(line.text, line.syncPoints, line.time, line.endTime);
+
+          // 1. Render pauses for this line
+          pauses.forEach((p) => {
+            const sx = ((p.startTime - safeViewStart) / safeViewDuration) * width;
+            const endX = ((p.endTime - safeViewStart) / safeViewDuration) * width;
+            const durVal = p.duration;
+            const pWidth = Math.max(6, endX - sx);
+
+            if (Number.isFinite(sx) && Number.isFinite(endX) && (endX >= -40 && sx <= width + 40)) {
+              const pointId = p.id || `pause_${i}_${p.slot}`;
+              // Prevent duplicate rendering if a partition with identical lineIndex and slot/id was already processed
+              const alreadyExists = pausePartitions.some((pp) => pp.lineIndex === i && (pp.pointId === pointId || (p.slot >= 0 && pp.slot === p.slot)));
+              if (alreadyExists) return;
+
+              pausePartitions.push({
+                lineIndex: i,
+                pointIndex: p.ptIndex >= 0 ? p.ptIndex : p.slot,
+                prevWordIndex: p.prevWordIndex,
+                nextWordIndex: p.nextWordIndex,
+                slot: p.slot,
+                pointId,
+                startX: sx,
+                endX: endX,
+                startTime: p.startTime,
+                endTime: p.endTime,
+                duration: durVal,
+                label: p.label,
+                isSelected: isSelectedLine
+              });
+
+              const curSelKey = selectedSyncPtKeyRef.current || selectedSyncPtKey;
+              const isSelectedPause = curSelKey === `${i}_pause_${p.prevWordIndex}` ||
+                curSelKey === `${i}_${p.ptIndex}` ||
+                curSelKey === pointId;
+              const pauseKeyId = `${i}_pause_${p.prevWordIndex}`;
+              const isHoveredBody = hoveredPauseRef.current === `${pauseKeyId}_select` || hoveredPauseRef.current === `${pauseKeyId}_move` || hoveredPauseRef.current === `${i}_${p.ptIndex}_move`;
+              const isHoveredLeft = hoveredPauseRef.current === `${pauseKeyId}_left` || hoveredPauseRef.current === `${i}_${p.ptIndex}_left`;
+              const isHoveredRight = hoveredPauseRef.current === `${pauseKeyId}_right` || hoveredPauseRef.current === `${i}_${p.ptIndex}_right`;
+              const isDraggingThis = activePauseDragRef.current?.pointId === pointId;
+              const dragMode = isDraggingThis ? activePauseDragRef.current.mode : null;
+
+              // Clamp drawing coordinates strictly to viewport to prevent WebKit/Canvas path overflow when zoomed in max
+              const clampStartX = Math.max(-10, Math.min(width + 10, sx));
+              const clampEndX = Math.max(-10, Math.min(width + 10, endX));
+              const clampW = Math.max(0, clampEndX - clampStartX);
+
+              if (clampW > 0) {
+                // Shaded Partition Body (Refined Amber / Gold palette - zero harsh red overlay)
+                ctx.fillStyle = isSelectedPause
+                  ? 'rgba(245, 158, 11, 0.28)'
+                  : (isDraggingThis || isHoveredBody
+                    ? 'rgba(245, 158, 11, 0.20)'
+                    : (isSelectedLine ? 'rgba(245, 158, 11, 0.10)' : 'rgba(245, 158, 11, 0.05)'));
+                ctx.strokeStyle = isSelectedPause
+                  ? '#fbbf24'
+                  : (isDraggingThis || isHoveredBody
+                    ? (dragMode === 'move' ? '#fbbf24' : '#f59e0b')
+                    : (isSelectedLine ? 'rgba(245, 158, 11, 0.55)' : 'rgba(245, 158, 11, 0.30)'));
+                ctx.lineWidth = isSelectedPause ? 2.5 : (isDraggingThis ? 2 : (isSelectedLine || isHoveredBody ? 1.5 : 1));
+                ctx.setLineDash(isSelectedPause ? [] : [4, 3]);
+                drawRoundRect(ctx, clampStartX, 24, clampW, trackH - 34, 4);
+                ctx.fill();
+                ctx.stroke();
+                ctx.setLineDash([]);
+              }
+
+              // Clean middle badge with word pair and automatic duration
+              let badgeLabel = `⏸ ${p.label} (${durVal}s)`;
+              if (dragMode === 'left') {
+                badgeLabel = `⏸ START: ${formatCentiseconds(p.startTime)} (${durVal}s)`;
+              } else if (dragMode === 'right') {
+                badgeLabel = `⏸ END: ${formatCentiseconds(p.endTime)} (${durVal}s)`;
+              } else if (dragMode === 'move') {
+                badgeLabel = `⏸ MOVE: ${p.label} (${durVal}s)`;
+              }
+
+              ctx.font = isSelectedLine || isDraggingThis || isSelectedPause ? 'bold 10px sans-serif' : '9px sans-serif';
+              const badgeTextW = ctx.measureText(badgeLabel).width;
+              const badgeW = badgeTextW + 12;
+              const badgeH = 18;
+              const badgeCenterX = Math.max(sx + badgeW / 2 + 2, Math.min(endX - badgeW / 2 - 2, sx + pWidth / 2));
+              const badgeCenterY = 24 + (trackH - 34) / 2;
+
+              // Only render full badge when partition is wide enough or actively selected/dragged to avoid obscuring adjacent lyrics
+              const canFitBadge = pWidth >= badgeW + 8;
+              const isHighlightState = isDraggingThis || isSelectedPause || isHoveredBody;
+
+              if (canFitBadge || isHighlightState) {
+                ctx.fillStyle = isSelectedPause
+                  ? 'rgba(180, 83, 9, 0.96)'
+                  : (isDraggingThis
+                    ? (dragMode === 'move' ? 'rgba(217, 119, 6, 0.96)' : 'rgba(180, 83, 9, 0.95)')
+                    : (isHoveredBody ? 'rgba(180, 83, 9, 0.92)' : 'rgba(15, 23, 42, 0.88)'));
+                ctx.strokeStyle = isSelectedPause ? '#fbbf24' : (isDraggingThis ? '#fbbf24' : (isHoveredBody ? '#fbbf24' : 'rgba(245, 158, 11, 0.55)'));
+                ctx.lineWidth = isSelectedPause ? 2 : 1;
+                drawRoundRect(ctx, badgeCenterX - badgeW / 2, badgeCenterY - badgeH / 2, badgeW, badgeH, 3);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = isSelectedPause || isDraggingThis ? '#ffffff' : (isHoveredBody ? '#ffffff' : '#fde68a');
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(badgeLabel, badgeCenterX, badgeCenterY);
+              } else if (pWidth >= 20) {
+                // Compact mini pill for narrow zoom levels so lyrics remain 100% visible
+                const miniW = 20;
+                const miniCenterX = Math.max(sx + miniW / 2 + 2, Math.min(endX - miniW / 2 - 2, sx + pWidth / 2));
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                ctx.strokeStyle = 'rgba(245, 158, 11, 0.50)';
+                ctx.lineWidth = 1;
+                drawRoundRect(ctx, miniCenterX - miniW / 2, badgeCenterY - badgeH / 2, miniW, badgeH, 3);
+                ctx.fill();
+                ctx.stroke();
+                ctx.fillStyle = '#fbbf24';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('⏸', miniCenterX, badgeCenterY);
+              }
+
+              // Left Resize Handle (Line and Knob at sx)
+              if (sx >= -20 && sx <= width + 20) {
+                const isLeftActive = isHoveredLeft || dragMode === 'left';
+                ctx.beginPath();
+                ctx.strokeStyle = isLeftActive ? '#fbbf24' : (isSelectedPause ? '#fbbf24' : 'rgba(245, 158, 11, 0.70)');
+                ctx.lineWidth = isLeftActive ? 3 : (isSelectedPause ? 2.5 : 1.5);
+                ctx.moveTo(sx, 24);
+                ctx.lineTo(sx, trackH - 10);
+                ctx.stroke();
+
+                // Knob
+                ctx.beginPath();
+                ctx.fillStyle = isLeftActive ? '#fbbf24' : (isSelectedPause ? '#fbbf24' : 'rgba(245, 158, 11, 0.80)');
+                drawCircle(ctx, sx, trackH / 2, isLeftActive ? 7 : (isSelectedPause ? 5.5 : 4));
+                ctx.fillStyle = '#ffffff';
+                drawCircle(ctx, sx, trackH / 2, isLeftActive ? 3.5 : (isSelectedPause ? 2.5 : 1.5));
+              }
+
+              // Right Resize Handle (Line and Knob at endX)
+              if (endX >= -20 && endX <= width + 20) {
+                const isRightActive = isHoveredRight || dragMode === 'right';
+                ctx.beginPath();
+                ctx.strokeStyle = isRightActive ? '#fbbf24' : (isSelectedPause ? '#fbbf24' : 'rgba(245, 158, 11, 0.70)');
+                ctx.lineWidth = isRightActive ? 3 : (isSelectedPause ? 2.5 : 1.5);
+                ctx.moveTo(endX, 24);
+                ctx.lineTo(endX, trackH - 10);
+                ctx.stroke();
+
+                // Knob
+                ctx.beginPath();
+                ctx.fillStyle = isRightActive ? '#fbbf24' : (isSelectedPause ? '#fbbf24' : 'rgba(245, 158, 11, 0.80)');
+                drawCircle(ctx, endX, trackH / 2, isRightActive ? 7 : (isSelectedPause ? 5.5 : 4));
+                ctx.fillStyle = '#ffffff';
+                drawCircle(ctx, endX, trackH / 2, isRightActive ? 3.5 : (isSelectedPause ? 2.5 : 1.5));
+              }
+            }
+          });
+
+          // 2. Render word pins for this line
+          if (isSelectedLine) {
+            words.forEach((w) => {
+              if (!w.hasPoint) return;
+              const sx = ((w.time - safeViewStart) / safeViewDuration) * width;
+              const curSel = selectedSyncPtKeyRef.current || selectedSyncPtKey;
+              const isSelectedWord = curSel === `${i}_${w.ptIndex}` ||
+                curSel === `${i}_word_${w.index}`;
+
+              if (Number.isFinite(sx) && sx >= -60 && sx <= width + 60) {
+                ctx.strokeStyle = isSelectedWord ? '#fbbf24' : '#a855f7';
+                ctx.lineWidth = isSelectedWord ? 2.5 : 1.5;
+                ctx.setLineDash(isSelectedWord ? [] : [2, 2]);
+                ctx.beginPath();
+                ctx.moveTo(sx, 28);
+                ctx.lineTo(sx, trackH - 14);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                ctx.fillStyle = isSelectedWord ? '#fbbf24' : '#c084fc';
+                drawCircle(ctx, sx, trackH - 14, isSelectedWord ? 4 : 3);
+
+                const wordLabel = w.text.length > 8 ? w.text.slice(0, 7) + '…' : w.text;
+                ctx.font = isSelectedWord ? 'bold 9px sans-serif' : '9px sans-serif';
+                const wW = ctx.measureText(wordLabel).width + 8;
+                const wH = 15;
+                const wX = Math.max(2, Math.min(width - wW - 2, sx - wW / 2));
+                const wY = 28 + (w.index % 2) * 16;
+
+                ctx.fillStyle = isSelectedWord ? 'rgba(126, 34, 206, 0.98)' : 'rgba(88, 28, 135, 0.90)';
+                ctx.strokeStyle = isSelectedWord ? '#fbbf24' : '#c084fc';
+                ctx.lineWidth = isSelectedWord ? 2 : 1;
+                ctx.beginPath();
+                drawRoundRect(ctx, wX, wY, wW, wH, 3);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#ffffff';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(wordLabel, wX + wW / 2, wY + wH / 2);
+
+                subBoxes.push({
+                  lineIndex: i,
+                  pointIndex: w.ptIndex,
+                  wordIndex: w.index,
+                  pointId: w.pointId,
+                  sx,
+                  badgeX: wX,
+                  badgeY: wY,
+                  badgeW: wW,
+                  badgeH: wH,
+                  time: w.time
+                });
+              }
+            });
+          }
+        }
+        subMarkerBoxesRef.current = subBoxes;
+        pausePartitionsRef.current = pausePartitions;
+
+        // 4. Render Red Playhead Needle
+        if (safePlayTime >= safeViewStart && safePlayTime <= safeViewStart + safeViewDuration) {
+          const playX = ((safePlayTime - safeViewStart) / safeViewDuration) * width;
+          if (Number.isFinite(playX)) {
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(playX, 0);
+            ctx.lineTo(playX, trackH);
+            ctx.stroke();
+
+            // Playhead Time Badge
+            const timeText = formatCentiseconds(safePlayTime);
+            ctx.font = '9px monospace';
+            const tw = ctx.measureText(timeText).width + 8;
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath();
+            drawRoundRect(ctx, playX - tw / 2, trackH - 16, tw, 14, 3);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(timeText, playX, trackH - 9);
+          }
+        }
       }
+    } catch (err) {
+      console.error('Error rendering timeline canvases:', err);
     }
-  }, [duration, viewStart, viewDuration, playbackTime, lines, selectedRowIndex, isPlaying, hoveredMarkerIndex]);
+  }, [duration, viewStart, viewDuration, lines, selectedRowIndex, isPlaying, hoveredMarkerIndex, hoveredPauseKey, selectedSyncPtKey]);
 
   // Continuously request animation frame during playback for silky 60fps spectrum
   useEffect(() => {
-    renderAllCanvases();
+    try {
+      renderAllCanvases();
+    } catch (e) {
+      console.error('Error rendering timeline canvases:', e);
+    }
   }, [renderAllCanvases]);
+
+  useEffect(() => {
+    if (!isPlaying) {
+      try {
+        renderAllCanvases();
+      } catch (e) {
+        console.error('Error rendering timeline canvases on seek:', e);
+      }
+    }
+  }, [playbackTime, isPlaying, renderAllCanvases]);
 
   useEffect(() => {
     if (!isPlaying) return;
     let rafId;
     const loop = () => {
-      renderAllCanvases();
+      try {
+        if (followPlayheadRef.current && isPlayingRef.current && isSameSongRef.current) {
+          const cur = usePlaybackStore.getState().getAccuratePlaybackTime();
+          const curStart = viewStartRef.current;
+          const curDur = viewDurationRef.current;
+          const totalDur = durationRef.current;
+          if (cur > curStart + curDur - 1.5 || cur < curStart) {
+            const targetStart = Math.max(0, Math.min(totalDur - curDur, cur - curDur * 0.25));
+            setViewStart(targetStart);
+          }
+        }
+        renderAllCanvases();
+      } catch (e) {
+        console.error('Error in timeline render loop:', e);
+      }
       rafId = requestAnimationFrame(loop);
     };
     rafId = requestAnimationFrame(loop);
@@ -904,6 +1329,47 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
     return hitLineIndex;
   }, []);
 
+  const hitTestPausePartitions = (canvasX, canvasY) => {
+    if (!pausePartitionsRef.current || pausePartitionsRef.current.length === 0) return null;
+    if (canvasY < 15 || canvasY > MAIN_TRACK_H - 6) return null;
+
+    // Prioritize selected line's pauses first
+    const partitions = [...pausePartitionsRef.current].sort((a, b) => {
+      if (a.isSelected && !b.isSelected) return -1;
+      if (!a.isSelected && b.isSelected) return 1;
+      return 0;
+    });
+
+    for (const pp of partitions) {
+      const leftDist = Math.abs(canvasX - pp.startX);
+      const rightDist = Math.abs(canvasX - pp.endX);
+      const handleRadius = 12;
+
+      if (pp.endX - pp.startX < 24) {
+        if (leftDist <= handleRadius && leftDist <= rightDist) {
+          return { pp, mode: 'left' };
+        }
+        if (rightDist <= handleRadius) {
+          return { pp, mode: 'right' };
+        }
+        if (canvasX >= pp.startX - 4 && canvasX <= pp.endX + 4) {
+          return { pp, mode: 'move' };
+        }
+      } else {
+        if (leftDist <= handleRadius) {
+          return { pp, mode: 'left' };
+        }
+        if (rightDist <= handleRadius) {
+          return { pp, mode: 'right' };
+        }
+        if (canvasX > pp.startX && canvasX < pp.endX) {
+          return { pp, mode: 'move' };
+        }
+      }
+    }
+    return null;
+  };
+
   const handleMainCanvasPointerDown = (e) => {
     if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
     if (durationRef.current <= 0) return;
@@ -922,28 +1388,220 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
     const clickTime = getTimeFromCanvasEvent(e);
     const curLines = linesRef.current;
 
+    // Check if clicking or tapping a pause partition (left end, right end, or middle body)
+    const pauseHit = hitTestPausePartitions(canvasX, canvasY);
+    if (pauseHit && (typeof onUpdatePauseBounds === 'function' || typeof onUpdateSyncPointEndTime === 'function' || typeof onSelectSyncPoint === 'function')) {
+      e.preventDefault();
+      e.stopPropagation();
+      const { pp, mode } = pauseHit;
+
+      if (selectedRowIndex !== pp.lineIndex && typeof onSelectRow === 'function') {
+        onSelectRow(pp.lineIndex);
+        const listEl = document.querySelector('.sync-editor-list');
+        const rowEl = document.getElementById(`sync-line-${pp.lineIndex}`);
+        if (listEl && rowEl) {
+          const listRect = listEl.getBoundingClientRect();
+          const rowRect = rowEl.getBoundingClientRect();
+          if (rowRect.top < listRect.top + 6) {
+            listEl.scrollTop += (rowRect.top - listRect.top) - 14;
+          } else if (rowRect.bottom > listRect.bottom - 6) {
+            listEl.scrollTop += (rowRect.bottom - listRect.bottom) + 14;
+          }
+        }
+      }
+
+      if (typeof onSelectSyncPoint === 'function') {
+        const pauseKey = typeof pp.prevWordIndex === 'number' && pp.prevWordIndex >= 0
+          ? `${pp.lineIndex}_pause_${pp.prevWordIndex}`
+          : `${pp.lineIndex}_${pp.pointIndex}`;
+        onSelectSyncPoint(pauseKey);
+      }
+
+      if (typeof onUpdatePauseBounds === 'function' || typeof onUpdateSyncPointEndTime === 'function') {
+        const pointId = pp.pointId || `pause_${pp.lineIndex}_${pp.prevWordIndex ?? pp.pointIndex}`;
+        activePauseDragRef.current = {
+          pp,
+          mode,
+          pointId,
+          startX: clientX,
+          initialClickTime: clickTime,
+          initialStartTime: pp.startTime,
+          initialEndTime: pp.endTime,
+          initialDuration: pp.duration
+        };
+
+        document.body.style.cursor = mode === 'move' ? 'grabbing' : 'col-resize';
+        try {
+          renderAllCanvases();
+        } catch (err) {}
+
+        let lastStartTime = pp.startTime;
+        let lastEndTime = pp.endTime;
+
+        const onGlobalPauseMove = (moveEvt) => {
+          if (!activePauseDragRef.current) return;
+          moveEvt.preventDefault?.();
+          const dragInfo = activePauseDragRef.current;
+          const curMouseTime = getTimeFromCanvasEvent(moveEvt);
+          const timeDelta = curMouseTime - dragInfo.initialClickTime;
+
+          let newStartTime = dragInfo.initialStartTime;
+          let newEndTime = dragInfo.initialEndTime;
+
+          if (dragInfo.mode === 'left') {
+            // Adjust start time (prev word endTime), keep end time fixed
+            newStartTime = Math.max(0, Math.min(dragInfo.initialEndTime - 0.18, dragInfo.initialStartTime + timeDelta));
+            newEndTime = dragInfo.initialEndTime;
+          } else if (dragInfo.mode === 'right') {
+            // Adjust end time (next word time), keep start time fixed
+            newStartTime = dragInfo.initialStartTime;
+            newEndTime = Math.max(dragInfo.initialStartTime + 0.18, Math.min(durationRef.current || 9999, dragInfo.initialEndTime + timeDelta));
+          } else if (dragInfo.mode === 'move') {
+            // Simply move both ends of the pause block, preserving duration
+            const dur = dragInfo.initialDuration;
+            const minStart = (dragInfo.pp.prevWord && typeof dragInfo.pp.prevWord.time === 'number')
+              ? Math.round((dragInfo.pp.prevWord.time + 0.05) * 100) / 100
+              : 0;
+            const maxStart = Math.max(minStart, (durationRef.current || 9999) - dur);
+            newStartTime = Math.max(minStart, Math.min(maxStart, Math.round((dragInfo.initialStartTime + timeDelta) * 100) / 100));
+            newEndTime = Math.round((newStartTime + dur) * 100) / 100;
+          }
+
+          lastStartTime = newStartTime;
+          lastEndTime = newEndTime;
+
+          if (typeof onUpdatePauseBounds === 'function') {
+            onUpdatePauseBounds(dragInfo.pp.lineIndex, dragInfo.pp.pointIndex, newStartTime, newEndTime, false, dragInfo.pointId, dragInfo.mode);
+          } else if (typeof onUpdateSyncPointEndTime === 'function') {
+            onUpdateSyncPointEndTime(dragInfo.pp.lineIndex, dragInfo.pp.pointIndex, newEndTime);
+          }
+        };
+
+        const onGlobalPauseUp = (upEvt) => {
+          upEvt?.preventDefault?.();
+          if (activePauseDragRef.current) {
+            const dragInfo = activePauseDragRef.current;
+            if (typeof onUpdatePauseBounds === 'function') {
+              onUpdatePauseBounds(dragInfo.pp.lineIndex, dragInfo.pp.pointIndex, lastStartTime, lastEndTime, true, dragInfo.pointId, dragInfo.mode);
+            } else if (typeof onUpdateSyncPointEndTime === 'function') {
+              onUpdateSyncPointEndTime(dragInfo.pp.lineIndex, dragInfo.pp.pointIndex, lastEndTime);
+            }
+            activePauseDragRef.current = null;
+          }
+          document.body.style.cursor = '';
+          try {
+            renderAllCanvases();
+          } catch (err) {}
+          window.removeEventListener('pointermove', onGlobalPauseMove);
+          window.removeEventListener('pointerup', onGlobalPauseUp);
+          window.removeEventListener('pointercancel', onGlobalPauseUp);
+          window.removeEventListener('mousemove', onGlobalPauseMove);
+          window.removeEventListener('mouseup', onGlobalPauseUp);
+          window.removeEventListener('touchmove', onGlobalPauseMove);
+          window.removeEventListener('touchend', onGlobalPauseUp);
+        };
+
+        window.addEventListener('pointermove', onGlobalPauseMove);
+        window.addEventListener('pointerup', onGlobalPauseUp);
+        window.addEventListener('pointercancel', onGlobalPauseUp);
+        window.addEventListener('mousemove', onGlobalPauseMove);
+        window.addEventListener('mouseup', onGlobalPauseUp);
+        window.addEventListener('touchmove', onGlobalPauseMove);
+        window.addEventListener('touchend', onGlobalPauseUp);
+        return;
+      }
+    }
+
+    // Check if clicking or tapping a sub-marker word pin / badge
+    if (subMarkerBoxesRef.current && subMarkerBoxesRef.current.length > 0 && typeof onUpdateSyncPointTime === 'function') {
+      for (const sb of subMarkerBoxesRef.current) {
+        if (
+          canvasX >= sb.badgeX - 6 && canvasX <= sb.badgeX + sb.badgeW + 6 &&
+          canvasY >= sb.badgeY - 4 && canvasY <= sb.badgeY + sb.badgeH + 6
+        ) {
+          isDraggingSubMarkerRef.current = sb;
+          document.body.style.cursor = 'ew-resize';
+
+          if (selectedRowIndex !== sb.lineIndex && typeof onSelectRow === 'function') {
+            onSelectRow(sb.lineIndex);
+          }
+          if (typeof onSelectSyncPoint === 'function') {
+            onSelectSyncPoint(`${sb.lineIndex}_${sb.pointIndex}`);
+          }
+
+          let lastSubTime = sb.time;
+          const onGlobalSubMove = (moveEvt) => {
+            if (!isDraggingSubMarkerRef.current) return;
+            const newTime = getTimeFromCanvasEvent(moveEvt);
+            lastSubTime = newTime;
+            onUpdateSyncPointTime(sb.lineIndex, sb.pointIndex, newTime, false);
+          };
+
+          const onGlobalSubUp = () => {
+            if (isDraggingSubMarkerRef.current) {
+              onUpdateSyncPointTime(sb.lineIndex, sb.pointIndex, lastSubTime, true);
+              isDraggingSubMarkerRef.current = null;
+            }
+            document.body.style.cursor = '';
+            window.removeEventListener('pointermove', onGlobalSubMove);
+            window.removeEventListener('pointerup', onGlobalSubUp);
+            window.removeEventListener('mousemove', onGlobalSubMove);
+            window.removeEventListener('mouseup', onGlobalSubUp);
+            window.removeEventListener('touchmove', onGlobalSubMove);
+            window.removeEventListener('touchend', onGlobalSubUp);
+          };
+
+          window.addEventListener('pointermove', onGlobalSubMove);
+          window.addEventListener('pointerup', onGlobalSubUp);
+          window.addEventListener('mousemove', onGlobalSubMove);
+          window.addEventListener('mouseup', onGlobalSubUp);
+          window.addEventListener('touchmove', onGlobalSubMove);
+          window.addEventListener('touchend', onGlobalSubUp);
+          return;
+        }
+      }
+    }
+
     // Check if clicking or tapping a Lyric Text Box Badge or Marker Pin
     const hitIndex = findHitLyricIndex(canvasX, canvasY, width);
 
     if (hitIndex >= 0) {
       // Immediately select the line
       onSelectRow(hitIndex);
+      if (typeof onSelectSyncPoint === 'function') {
+        onSelectSyncPoint(null);
+      }
+      const listEl = document.querySelector('.sync-editor-list');
       const rowEl = document.getElementById(`sync-line-${hitIndex}`);
-      if (rowEl) rowEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      if (listEl && rowEl) {
+        const listRect = listEl.getBoundingClientRect();
+        const rowRect = rowEl.getBoundingClientRect();
+        if (rowRect.top < listRect.top + 6) {
+          listEl.scrollTop += (rowRect.top - listRect.top) - 14;
+        } else if (rowRect.bottom > listRect.bottom - 6) {
+          listEl.scrollTop += (rowRect.bottom - listRect.bottom) + 14;
+        }
+      }
 
       isDraggingMarkerRef.current = hitIndex;
       dragAnchorRef.current = { startX: clientX, initialTime: curLines[hitIndex].time };
       document.body.style.cursor = 'ew-resize';
 
+      let lastLineTime = curLines[hitIndex].time;
       const onGlobalMarkerMove = (moveEvt) => {
         const curIdx = isDraggingMarkerRef.current;
         if (curIdx === null) return;
         const newTime = getTimeFromCanvasEvent(moveEvt);
-        onUpdateLineTime(curIdx, newTime);
+        lastLineTime = newTime;
+        onUpdateLineTime(curIdx, newTime, false);
       };
 
       const onGlobalMarkerUp = () => {
-        isDraggingMarkerRef.current = null;
+        const curIdx = isDraggingMarkerRef.current;
+        if (curIdx !== null) {
+          onUpdateLineTime(curIdx, lastLineTime, true);
+          isDraggingMarkerRef.current = null;
+        }
         document.body.style.cursor = '';
         window.removeEventListener('pointermove', onGlobalMarkerMove);
         window.removeEventListener('pointerup', onGlobalMarkerUp);
@@ -965,6 +1623,11 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
     }
 
     // Otherwise: Scrub / Seek Playhead directly to clicked timestamp
+    if (typeof onSelectSyncPoint === 'function') {
+      onSelectSyncPoint(null);
+    }
+    playbackTimeRef.current = clickTime;
+    renderAllCanvases();
     onSeek(clickTime);
     isScrubbingRulerRef.current = true;
     document.body.style.cursor = 'col-resize';
@@ -972,6 +1635,8 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
     const onGlobalScrubMove = (moveEvt) => {
       if (!isScrubbingRulerRef.current) return;
       const scrubTime = getTimeFromCanvasEvent(moveEvt);
+      playbackTimeRef.current = scrubTime;
+      renderAllCanvases();
       onSeek(scrubTime);
     };
 
@@ -985,6 +1650,7 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
       window.removeEventListener('mouseup', onGlobalScrubUp);
       window.removeEventListener('touchmove', onGlobalScrubMove);
       window.removeEventListener('touchend', onGlobalScrubUp);
+      renderAllCanvases();
     };
 
     window.addEventListener('pointermove', onGlobalScrubMove);
@@ -1000,7 +1666,7 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
     const wrap = canvasWrapRef.current;
     const canvas = mainCanvasRef.current;
     if (!wrap || !canvas || durationRef.current <= 0) return;
-    if (isDraggingMarkerRef.current !== null || isScrubbingRulerRef.current) return;
+    if (isDraggingMarkerRef.current !== null || isScrubbingRulerRef.current || activePauseDragRef.current !== null || isDraggingSubMarkerRef.current !== null) return;
 
     const wrapRect = wrap.getBoundingClientRect();
     const canvasRect = canvas.getBoundingClientRect();
@@ -1010,6 +1676,55 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
     const clientY = e.clientY ?? e.touches?.[0]?.clientY ?? 0;
     const canvasX = clientX - canvasRect.left;
     const canvasY = clientY - canvasRect.top;
+
+    // Check if hovering over pause partition (left handle, right handle, or middle body)
+    const pauseHover = hitTestPausePartitions(canvasX, canvasY);
+    if (pauseHover) {
+      const { pp, mode } = pauseHover;
+      const hoverKey = `${pp.lineIndex}_pause_${pp.prevWordIndex ?? pp.pointIndex}_${mode}`;
+      if (hoveredPauseRef.current !== hoverKey) {
+        hoveredPauseRef.current = hoverKey;
+        setHoveredPauseKey(hoverKey);
+      }
+      hoveredSubMarkerRef.current = null;
+      if (mode === 'left') {
+        wrap.style.cursor = 'col-resize';
+        wrap.title = `Drag left edge to resize pause start (current: ${pp.duration}s)`;
+      } else if (mode === 'right') {
+        wrap.style.cursor = 'col-resize';
+        wrap.title = `Drag right edge to resize pause end (current: ${pp.duration}s)`;
+      } else {
+        wrap.style.cursor = 'grab';
+        wrap.title = `Pause (${pp.duration}s) - Drag to move both ends, drag edges to resize, press Delete to remove`;
+      }
+      return;
+    } else if (hoveredPauseRef.current !== null) {
+      hoveredPauseRef.current = null;
+      setHoveredPauseKey(null);
+    }
+
+    // Check if hovering over sub-marker word badge
+    let hitSub = null;
+    if (subMarkerBoxesRef.current && subMarkerBoxesRef.current.length > 0) {
+      for (const sb of subMarkerBoxesRef.current) {
+        if (
+          canvasX >= sb.badgeX - 4 && canvasX <= sb.badgeX + sb.badgeW + 4 &&
+          canvasY >= sb.badgeY - 4 && canvasY <= sb.badgeY + sb.badgeH + 4
+        ) {
+          hitSub = sb;
+          break;
+        }
+      }
+    }
+
+    if (hitSub) {
+      hoveredSubMarkerRef.current = { lineIndex: hitSub.lineIndex, pointIndex: hitSub.pointIndex };
+      wrap.style.cursor = 'ew-resize';
+      wrap.title = `Word timestamp #${hitSub.pointIndex + 1} (Click to select, drag to adjust, press Delete to remove)`;
+      return;
+    } else {
+      hoveredSubMarkerRef.current = null;
+    }
 
     const hitIndex = findHitLyricIndex(canvasX, canvasY, width);
 
@@ -1034,6 +1749,11 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
       hoveredMarkerIndexRef.current = -1;
       setHoveredMarkerIndex(-1);
     }
+    if (hoveredPauseRef.current !== null) {
+      hoveredPauseRef.current = null;
+      setHoveredPauseKey(null);
+    }
+    hoveredSubMarkerRef.current = null;
   };
 
   // Double click canvas to insert a new line at clicked timestamp
@@ -1045,9 +1765,10 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
       const canvasRect = canvas.getBoundingClientRect();
       const canvasX = e.clientX - canvasRect.left;
       const canvasY = e.clientY - canvasRect.top;
-      // Do not insert duplicate if double clicking an existing lyric text box or pin
+      // Do not insert duplicate if double clicking an existing lyric text box or pin or pause
       const hitIdx = findHitLyricIndex(canvasX, canvasY, wrapRect.width);
       if (hitIdx >= 0) return;
+      if (hitTestPausePartitions(canvasX, canvasY)) return;
     }
 
     const clickedTime = getTimeFromCanvasEvent(e);
@@ -1115,8 +1836,13 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
           <button
             type="button"
             className="btn-tl-ctrl"
-            onClick={() => onSeek(0)}
-            title="Rewind to Beginning (K)"
+            onClick={() => {
+              if (isPlaying && typeof onTogglePlayPause === 'function') {
+                onTogglePlayPause();
+              }
+              onSeek(0);
+            }}
+            title="Stop & Rewind to Beginning (K)"
           >
             <i className="icon-skip-back"></i>
           </button>
@@ -1272,7 +1998,10 @@ const LyricsTimelineSpectrumEditor = forwardRef(function LyricsTimelineSpectrumE
               <div className="shortcut-col">
                 <h4>Syncing &amp; Editing</h4>
                 <div className="shortcut-row"><kbd>Enter</kbd><span>Stamp Line at Playhead</span></div>
+                <div className="shortcut-row"><kbd>Delete / ⌫</kbd><span>Remove Selected Timestamp / Pause</span></div>
                 <div className="shortcut-row"><kbd>Drag Marker</kbd><span>Move Lyric Pin in Timeline</span></div>
+                <div className="shortcut-row"><kbd>Drag Pause Body</kbd><span>Move Both Pause Ends</span></div>
+                <div className="shortcut-row"><kbd>Drag Pause Edges</kbd><span>Resize Pause Duration</span></div>
                 <div className="shortcut-row"><kbd>Double Click</kbd><span>Insert Line at Timestamp</span></div>
                 <div className="shortcut-row"><kbd>Ctrl + S</kbd><span>Save Synced Lyrics</span></div>
                 <div className="shortcut-row"><kbd>Ctrl + Z</kbd><span>Undo Timestamp Edit</span></div>

@@ -3340,7 +3340,7 @@ function getBestAudioPathForLyrics(songId) {
   return null;
 }
 
-async function runAutoLyricsJob({ action, song, audioPath, model = 'small', language = null, lyricsLines = null, io = null }) {
+async function runAutoLyricsJob({ action, song, audioPath, model = 'small', language = null, precision = 'word', pause_threshold = null, lyricsLines = null, io = null }) {
   recordModelUsage(`whisper:${model || 'small'}`);
   const songDir = path.join(DOWNLOADS_DIR, song.id);
   const pythonBin = getPythonExecutablePath();
@@ -3362,8 +3362,8 @@ async function runAutoLyricsJob({ action, song, audioPath, model = 'small', lang
   };
 
   const initialStatus = action === 'align'
-    ? `AI Auto-Sync (aligning lyrics with Whisper ${model})...`
-    : `AI Auto-Generate (transcribing lyrics with Whisper ${model})...`;
+    ? `AI Auto-Sync (aligning lyrics with Whisper ${model}, ${precision} precision)...`
+    : `AI Auto-Generate (transcribing lyrics with Whisper ${model}, ${precision} precision)...`;
   updateLyricsStatus(initialStatus);
 
   let tempLyricsPath = null;
@@ -3376,8 +3376,13 @@ async function runAutoLyricsJob({ action, song, audioPath, model = 'small', lang
     scriptPath,
     '--action', action,
     '--audio', audioPath,
-    '--model', model || 'small'
+    '--model', model || 'small',
+    '--precision', precision || 'word'
   ];
+
+  if (typeof pause_threshold === 'number' && pause_threshold > 0) {
+    args.push('--pause_threshold', String(pause_threshold));
+  }
 
   const targetLang = (language && language !== 'auto') ? language : (song.language && song.language !== 'auto' ? song.language : null);
   if (targetLang) {
@@ -3565,7 +3570,8 @@ router.get('/song_audio_status/:id', (req, res) => {
 
 router.post('/auto_sync_lyrics/:id', async (req, res) => {
   const songId = req.params.id;
-  const { model = 'small', language = null } = req.body || {};
+  const { model = 'small', language = null, precision = 'word', pause_threshold, pauseThreshold } = req.body || {};
+  const effectivePauseThreshold = typeof pause_threshold === 'number' ? pause_threshold : (typeof pauseThreshold === 'number' ? pauseThreshold : null);
 
   let song = queue.find(s => s.id === songId);
   const history = readHistory();
@@ -3598,6 +3604,8 @@ router.post('/auto_sync_lyrics/:id', async (req, res) => {
       audioPath: audioInfo.path,
       model,
       language,
+      precision,
+      pause_threshold: effectivePauseThreshold,
       lyricsLines: song.lyrics,
       io
     });
@@ -3622,7 +3630,8 @@ router.post('/auto_sync_lyrics/:id', async (req, res) => {
 
 router.post('/auto_generate_lyrics/:id', async (req, res) => {
   const songId = req.params.id;
-  const { model = 'small', language = null } = req.body || {};
+  const { model = 'small', language = null, precision = 'word', pause_threshold, pauseThreshold } = req.body || {};
+  const effectivePauseThreshold = typeof pause_threshold === 'number' ? pause_threshold : (typeof pauseThreshold === 'number' ? pauseThreshold : null);
 
   let song = queue.find(s => s.id === songId);
   const history = readHistory();
@@ -3651,6 +3660,8 @@ router.post('/auto_generate_lyrics/:id', async (req, res) => {
       audioPath: audioInfo.path,
       model,
       language,
+      precision,
+      pause_threshold: effectivePauseThreshold,
       io
     });
 
@@ -4067,6 +4078,7 @@ function parseLrc(lrcString) {
   const lines = lrcString.split('\n');
   const result = [];
   const timeRegex = /\[(\d{2}):(\d{2}(?:\.\d{1,3})?)\]/;
+  const innerTagRegex = /<(\d{2}):(\d{2}(?:\.\d{1,3})?)>([^<]*)/g;
   
   let hasTimestamps = false;
   for (const line of lines) {
@@ -4076,9 +4088,40 @@ function parseLrc(lrcString) {
       const min = parseInt(match[1]);
       const sec = parseFloat(match[2]);
       const time = min * 60 + sec;
-      const text = line.replace(timeRegex, '').trim();
-      if (text) {
-        result.push({ time, text, translation: '', transliteration: '' });
+      const rawBody = line.replace(timeRegex, '').trim();
+
+      // Check for Enhanced LRC tags: <mm:ss.xx>word
+      if (rawBody.includes('<') && rawBody.includes('>')) {
+        const syncPoints = [];
+        let cleanText = '';
+        let matchInner;
+
+        while ((matchInner = innerTagRegex.exec(rawBody)) !== null) {
+          const wMin = parseInt(matchInner[1]);
+          const wSec = parseFloat(matchInner[2]);
+          const wTime = wMin * 60 + wSec;
+          const wText = matchInner[3];
+          const charIndex = cleanText.length;
+          cleanText += wText;
+          syncPoints.push({
+            charIndex,
+            time: Math.round(wTime * 100) / 100,
+            text: wText.trim()
+          });
+        }
+
+        const finalText = cleanText.trim() || rawBody.replace(/<[^>]+>/g, '').trim();
+        if (finalText) {
+          const item = { time, text: finalText, translation: '', transliteration: '' };
+          if (syncPoints.length > 0) {
+            item.syncPoints = syncPoints;
+          }
+          result.push(item);
+        }
+      } else {
+        if (rawBody) {
+          result.push({ time, text: rawBody, translation: '', transliteration: '' });
+        }
       }
     }
   }

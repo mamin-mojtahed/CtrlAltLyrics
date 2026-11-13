@@ -4,12 +4,12 @@ import { useLibraryStore } from '../../stores/useLibraryStore';
 import { useModalStore } from '../../stores/useModalStore';
 import * as audioPlayer from '../../services/audioPlayer';
 import { formatTime } from '../../utils/themeColors';
-import { isRtlText } from '../../utils/lyricsWrapping';
+import { isRtlText, calculateKaraokeProgress, getLyricsMeasureContext } from '../../utils/lyricsWrapping';
 import VisualizerCanvas from '../display/VisualizerCanvas';
 
 /**
  * Pure, safe helper to determine active lyric index and karaoke progress percentage.
- * Protected against undefined/null objects, NaN times, or mutated arrays.
+ * Uses calculateKaraokeProgress for microsecond-precise word-by-word animation.
  */
 function getActiveLyricInfo(time, lyricsList, songDuration) {
   if (!Array.isArray(lyricsList) || lyricsList.length === 0) {
@@ -39,31 +39,13 @@ function getActiveLyricInfo(time, lyricsList, songDuration) {
     return { activeIndex: -1, currentLyric: null, progress: 0 };
   }
 
-  const start = typeof currentLyric.time === 'number'
-    ? currentLyric.time
-    : (parseFloat(currentLyric.time) || 0);
+  const nextLine = (activeIndex < lyricsList.length - 1) ? lyricsList[activeIndex + 1] : null;
+  const nextStart = nextLine
+    ? (typeof nextLine.time === 'number' ? nextLine.time : parseFloat(nextLine.time) || null)
+    : null;
 
-  let end;
-  if (activeIndex < lyricsList.length - 1 && lyricsList[activeIndex + 1]) {
-    const nextLine = lyricsList[activeIndex + 1];
-    const nextStart = typeof nextLine.time === 'number'
-      ? nextLine.time
-      : (parseFloat(nextLine.time) || 0);
-    end = nextStart > start ? nextStart : start + 3;
-  } else {
-    const dur = typeof songDuration === 'number' && songDuration > 0 ? songDuration : start + 6;
-    end = dur > start ? dur : start + 6;
-  }
-
-  const lineDur = Math.max(0.3, end - start);
-  let progress = 0;
-  if (validTime <= start) {
-    progress = 0;
-  } else if (validTime >= end) {
-    progress = 100;
-  } else {
-    progress = Math.min(100, Math.max(0, ((validTime - start) / lineDur) * 100));
-  }
+  const ctx = getLyricsMeasureContext();
+  const progress = calculateKaraokeProgress(currentLyric, validTime, nextStart, songDuration, ctx);
 
   return { activeIndex, currentLyric, progress };
 }
@@ -167,17 +149,8 @@ export default function PlaybackControls() {
 
   // Calculate accurate playback time at any animation frame
   const getPlaybackTime = useCallback(() => {
-    if (audioMaster === 'dashboard' && isPlaying) {
-      return audioPlayer.getCurrentPlaybackTime(true);
-    }
-    const anchor = syncAnchorRef.current;
-    if (isPlaying && anchor.isPlaying) {
-      const now = performance.now();
-      const elapsed = (now - anchor.timestamp) / 1000;
-      return Math.max(0, anchor.time + elapsed);
-    }
-    return anchor.time || usePlaybackStore.getState().currentTime || 0;
-  }, [audioMaster, isPlaying]);
+    return usePlaybackStore.getState().getAccuratePlaybackTime();
+  }, []);
 
   // Smooth 60fps tracking animation loop
   useEffect(() => {
@@ -212,9 +185,14 @@ export default function PlaybackControls() {
 
         if (lyricPreviewRef.current) {
           if (showKaraokeSlide && activeIndex >= 0) {
-            lyricPreviewRef.current.style.setProperty('--karaoke-progress', `${progress.toFixed(1)}%`);
+            const progStr = `${progress.toFixed(2)}%`;
+            lyricPreviewRef.current.style.setProperty('--karaoke-progress', progStr);
+            const textEl = lyricPreviewRef.current.querySelector('.current-lyric-text');
+            if (textEl) textEl.style.setProperty('--karaoke-progress', progStr);
           } else {
             lyricPreviewRef.current.style.removeProperty('--karaoke-progress');
+            const textEl = lyricPreviewRef.current.querySelector('.current-lyric-text');
+            if (textEl) textEl.style.removeProperty('--karaoke-progress');
           }
         }
 
@@ -222,6 +200,20 @@ export default function PlaybackControls() {
         if (activeIndex !== activeIndexRef.current) {
           activeIndexRef.current = activeIndex;
           setActiveLineIndex(activeIndex);
+          if (lyricPreviewRef.current && activeIndex >= 0) {
+            const activeLine = lyricsList[activeIndex];
+            const activeText = activeLine ? (activeLine.text || '').trim() : '';
+            const lineIsRtl = isRtlText(activeText);
+            if (lineIsRtl) {
+              lyricPreviewRef.current.classList.add('rtl');
+              lyricPreviewRef.current.classList.remove('ltr');
+              lyricPreviewRef.current.setAttribute('dir', 'rtl');
+            } else {
+              lyricPreviewRef.current.classList.add('ltr');
+              lyricPreviewRef.current.classList.remove('rtl');
+              lyricPreviewRef.current.setAttribute('dir', 'ltr');
+            }
+          }
         }
       }
     };
@@ -252,14 +244,33 @@ export default function PlaybackControls() {
       const { activeIndex, progress } = getActiveLyricInfo(bounded, lyricsList, maxDur);
       if (lyricPreviewRef.current) {
         if (showKaraokeSlide && activeIndex >= 0) {
-          lyricPreviewRef.current.style.setProperty('--karaoke-progress', `${progress.toFixed(1)}%`);
+          const progStr = `${progress.toFixed(2)}%`;
+          lyricPreviewRef.current.style.setProperty('--karaoke-progress', progStr);
+          const textEl = lyricPreviewRef.current.querySelector('.current-lyric-text');
+          if (textEl) textEl.style.setProperty('--karaoke-progress', progStr);
         } else {
           lyricPreviewRef.current.style.removeProperty('--karaoke-progress');
+          const textEl = lyricPreviewRef.current.querySelector('.current-lyric-text');
+          if (textEl) textEl.style.removeProperty('--karaoke-progress');
         }
       }
       if (activeIndex !== activeIndexRef.current) {
         activeIndexRef.current = activeIndex;
         setActiveLineIndex(activeIndex);
+        if (lyricPreviewRef.current && activeIndex >= 0) {
+          const activeLine = lyricsList[activeIndex];
+          const activeText = activeLine ? (activeLine.text || '').trim() : '';
+          const lineIsRtl = isRtlText(activeText);
+          if (lineIsRtl) {
+            lyricPreviewRef.current.classList.add('rtl');
+            lyricPreviewRef.current.classList.remove('ltr');
+            lyricPreviewRef.current.setAttribute('dir', 'rtl');
+          } else {
+            lyricPreviewRef.current.classList.add('ltr');
+            lyricPreviewRef.current.classList.remove('rtl');
+            lyricPreviewRef.current.setAttribute('dir', 'ltr');
+          }
+        }
       }
     }
 
@@ -291,9 +302,14 @@ export default function PlaybackControls() {
     const { activeIndex, progress } = getActiveLyricInfo(val, lyricsList, maxDur);
     if (lyricPreviewRef.current) {
       if (showKaraokeSlide && activeIndex >= 0) {
-        lyricPreviewRef.current.style.setProperty('--karaoke-progress', `${progress.toFixed(1)}%`);
+        const progStr = `${progress.toFixed(2)}%`;
+        lyricPreviewRef.current.style.setProperty('--karaoke-progress', progStr);
+        const textEl = lyricPreviewRef.current.querySelector('.current-lyric-text');
+        if (textEl) textEl.style.setProperty('--karaoke-progress', progStr);
       } else {
         lyricPreviewRef.current.style.removeProperty('--karaoke-progress');
+        const textEl = lyricPreviewRef.current.querySelector('.current-lyric-text');
+        if (textEl) textEl.style.removeProperty('--karaoke-progress');
       }
     }
     if (activeIndex !== activeIndexRef.current) {
@@ -416,9 +432,11 @@ export default function PlaybackControls() {
       <div
         ref={lyricPreviewRef}
         className={`current-lyric-preview ${showKaraokeSlide && currentLyricText ? 'has-karaoke' : ''} ${isRtl ? 'rtl' : 'ltr'}`}
+        dir={isRtl ? 'rtl' : 'ltr'}
         title={currentLyricText ? `Current lyric: "${currentLyricText}" (Click to edit sync)` : (currentSong ? "Click to open Lyrics & Sync Editor" : undefined)}
         style={{ cursor: currentSong ? 'pointer' : 'default' }}
-        onClick={() => {
+        onClick={(e) => {
+          if (e.target && typeof e.target.blur === 'function') e.target.blur();
           if (currentSong) openLyricsSyncModal(currentSong);
         }}
       >
@@ -434,7 +452,10 @@ export default function PlaybackControls() {
           />
         )}
         <i className="icon-music lyric-preview-icon" aria-hidden="true" />
-        <span className={`current-lyric-text ${!currentLyricText ? 'is-placeholder' : ''}`}>
+        <span
+          className={`current-lyric-text ${!currentLyricText ? 'is-placeholder' : ''}`}
+          dir={isRtl ? 'rtl' : 'ltr'}
+        >
           {currentLyricText || (currentSong ? (lyrics.length > 0 ? '♪ Instrumental / Intro ♪' : 'No lyrics synced') : '—')}
         </span>
       </div>
@@ -457,7 +478,8 @@ export default function PlaybackControls() {
             className="lyrics-counter"
             style={{ cursor: currentSong ? 'pointer' : 'default', userSelect: 'none' }}
             title={currentSong ? "Open Lyrics & Sync Editor" : undefined}
-            onClick={() => {
+            onClick={(e) => {
+              if (e.target && typeof e.target.blur === 'function') e.target.blur();
               if (currentSong) openLyricsSyncModal(currentSong);
             }}
           >

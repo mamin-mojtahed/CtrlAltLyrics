@@ -151,7 +151,8 @@ export default function DashboardApp() {
     const handleLyricsUpdated = (data) => {
       if (!data || !data.songId) return;
       const { currentSong } = usePlaybackStore.getState();
-      if (currentSong && currentSong.id === data.songId) {
+      const currentId = currentSong?.id || currentSong?.songId;
+      if (currentSong && currentId && String(currentId) === String(data.songId)) {
         usePlaybackStore.setState({
           currentSong: {
             ...currentSong,

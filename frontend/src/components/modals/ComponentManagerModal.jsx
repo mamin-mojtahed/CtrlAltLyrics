@@ -61,6 +61,7 @@ export default function ComponentManagerModal() {
 
   const [whisperModel, setWhisperModel] = useState('small');
   const [whisperLanguage, setWhisperLanguage] = useState('auto');
+  const [whisperPrecision, setWhisperPrecision] = useState('word');
   const [isSavingLang, setIsSavingLang] = useState(false);
   const [langSavedFeedback, setLangSavedFeedback] = useState(false);
 
@@ -390,7 +391,7 @@ export default function ComponentManagerModal() {
       [targetSongId]: { percent: 5, stage: 'starting', message: 'Initializing AI alignment...' }
     }));
     try {
-      await api.autoSyncLyrics(targetSongId, { model: whisperModel, language: whisperLanguage });
+      await api.autoSyncLyrics(targetSongId, { model: whisperModel, language: whisperLanguage, precision: whisperPrecision });
       await loadDetails();
     } catch (err) {
       alert(`AI Auto-Sync failed: ${err.message}`);
@@ -412,7 +413,7 @@ export default function ComponentManagerModal() {
       [targetSongId]: { percent: 5, stage: 'starting', message: 'Initializing Whisper speech-to-text...' }
     }));
     try {
-      await api.autoGenerateLyrics(targetSongId, { model: whisperModel, language: whisperLanguage });
+      await api.autoGenerateLyrics(targetSongId, { model: whisperModel, language: whisperLanguage, precision: whisperPrecision });
       await loadDetails();
     } catch (err) {
       alert(`AI Auto-Generate failed: ${err.message}`);
@@ -1025,63 +1026,75 @@ export default function ComponentManagerModal() {
 
                 {/* AI Whisper Engine (Auto-Sync & Auto-Generate) */}
                 <div className="component-sub-actions-row lyrics-ai-actions-row">
-                  {/* Single-line Engine Label & Selectors */}
                   <div className="ai-engine-config-row">
-                    <div className="ai-engine-badge" title="Local speech-to-text & forced alignment engine">
+                    <div
+                      className={`ai-engine-badge ${sp.status === 'separated' ? 'stem-separated' : ''}`}
+                      title={`Whisper AI Engine (${sp.status === 'separated' ? 'Using isolated lead vocal stem' : 'Using full audio track'})`}
+                    >
                       <i className="icon-cpu"></i>
-                      <span>Engine</span>
                     </div>
 
-                    <div className="ai-engine-field ai-engine-field-model">
-                      <label className="ai-engine-field-label" htmlFor="whisper-model-select">Model:</label>
-                      <select
-                        id="whisper-model-select"
-                        className="ai-engine-select"
-                        value={whisperModel}
-                        onChange={(e) => setWhisperModel(e.target.value)}
-                        disabled={aiProcessing !== null}
-                        title="Whisper AI model architecture and capacity"
-                      >
-                        {WHISPER_MODELS.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    <div className="ai-engine-fields-grid">
+                      {/* Model Selector Row */}
+                      <div className="ai-engine-field ai-engine-field-model">
+                        <label className="ai-engine-field-label" htmlFor="whisper-model-select">Model:</label>
+                        <select
+                          id="whisper-model-select"
+                          className="ai-engine-select"
+                          value={whisperModel}
+                          onChange={(e) => setWhisperModel(e.target.value)}
+                          disabled={aiProcessing !== null}
+                          title="Whisper AI model architecture and capacity"
+                        >
+                          {WHISPER_MODELS.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-                    <div className="ai-engine-field ai-engine-field-lang">
-                      <label className="ai-engine-field-label" htmlFor="whisper-lang-select">Lang:</label>
-                      <select
-                        id="whisper-lang-select"
-                        className="ai-engine-select"
-                        value={whisperLanguage}
-                        onChange={handleWhisperLanguageChange}
-                        disabled={aiProcessing !== null || isSavingLang}
-                        title="Language for Whisper recognition (saved to song info)"
-                      >
-                        {WHISPER_LANGUAGES.map((lang) => (
-                          <option key={lang.code} value={lang.code}>
-                            {lang.name}
-                          </option>
-                        ))}
-                      </select>
-                      {langSavedFeedback && (
-                        <span className="ai-lang-saved-indicator" title="Saved to song info!">
-                          <i className="icon-check"></i>
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                      {/* Language & Precision Sub-row */}
+                      <div className="ai-engine-fields-subrow">
+                        <div className="ai-engine-field ai-engine-field-lang">
+                          <label className="ai-engine-field-label" htmlFor="whisper-lang-select">Lang:</label>
+                          <select
+                            id="whisper-lang-select"
+                            className="ai-engine-select"
+                            value={whisperLanguage}
+                            onChange={handleWhisperLanguageChange}
+                            disabled={aiProcessing !== null || isSavingLang}
+                            title="Language for Whisper recognition (saved to song info)"
+                          >
+                            {WHISPER_LANGUAGES.map((lang) => (
+                              <option key={lang.code} value={lang.code}>
+                                {lang.name}
+                              </option>
+                            ))}
+                          </select>
+                          {langSavedFeedback && (
+                            <span className="ai-lang-saved-indicator" title="Saved to song info!">
+                              <i className="icon-check"></i>
+                            </span>
+                          )}
+                        </div>
 
-                  {/* Vocal Stem Indicator */}
-                  <div className={`ai-engine-stem-pill ${sp.status === 'separated' ? 'separated' : 'fallback'}`}>
-                    <i className={sp.status === 'separated' ? "icon-check-circle" : "icon-info"}></i>
-                    <span>
-                      {sp.status === 'separated'
-                        ? 'Using isolated lead vocal stem for optimal accuracy'
-                        : 'Using full audio track (recommend vocal separation first)'}
-                    </span>
+                        <div className="ai-engine-field ai-engine-field-precision">
+                          <label className="ai-engine-field-label" htmlFor="whisper-precision-select">Sync:</label>
+                          <select
+                            id="whisper-precision-select"
+                            className="ai-engine-select"
+                            value={whisperPrecision}
+                            onChange={(e) => setWhisperPrecision(e.target.value)}
+                            disabled={aiProcessing !== null}
+                            title="Synchronization granularity: Word-by-Word (includes in-line pauses) or Line-by-Line"
+                          >
+                            <option value="word">Word Precision</option>
+                            <option value="line">Line Precision</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="sub-actions-buttons" style={{ display: 'flex', gap: '0.45rem', width: '100%' }}>
