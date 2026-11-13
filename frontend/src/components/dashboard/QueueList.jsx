@@ -77,16 +77,24 @@ export default function QueueList() {
   // History reveal & spring interaction state
   const [isHistoryUnlocked, setIsHistoryUnlocked] = useState(false);
   const [springOffset, setSpringOffset] = useState(0);
+  const [isPulling, setIsPulling] = useState(false);
 
   const queueListRef = useRef(null);
+  const queueContainerRef = useRef(null);
   const historyWrapperRef = useRef(null);
   const historySectionRef = useRef(null);
   const queueSectionRef = useRef(null);
   const isHistoryUnlockedRef = useRef(false);
   const isUnlockingRef = useRef(false);
+  const springOffsetRef = useRef(0);
   const lastTapRef = useRef({ time: 0, x: 0, y: 0, id: null });
+  const draggedQueueIdRef = useRef(null);
+  const targetQueueIdRef = useRef(null);
 
   isHistoryUnlockedRef.current = isHistoryUnlocked;
+  springOffsetRef.current = springOffset;
+  draggedQueueIdRef.current = draggedQueueId;
+  targetQueueIdRef.current = targetQueueId;
 
   // Derive active index to separate past songs into History and current/upcoming into Queue
   const activeQueueId = currentQueueId || currentSong?.queueId;
@@ -104,173 +112,152 @@ export default function QueueList() {
   const unlockHistory = () => {
     isHistoryUnlockedRef.current = true;
     isUnlockingRef.current = true;
-    if (historyWrapperRef.current) {
-      historyWrapperRef.current.style.transition = '';
-      historyWrapperRef.current.style.gridTemplateRows = '';
-      historyWrapperRef.current.style.opacity = '';
-      historyWrapperRef.current.style.display = '';
+
+    const container = queueListRef.current;
+    const historyEl = historySectionRef.current;
+    const wrapper = historyWrapperRef.current;
+
+    const currentSpring = springOffsetRef.current || 44;
+
+    if (wrapper) {
+      wrapper.classList.add('is-instant');
+      wrapper.classList.add('is-expanded');
     }
+
+    const historyHeight = historyEl ? historyEl.offsetHeight || historyEl.scrollHeight : 0;
+
     setIsHistoryUnlocked(true);
+    setIsPulling(false);
     setSpringOffset(0);
-    setTimeout(() => {
-      isUnlockingRef.current = false;
-    }, 700);
+
+    // Don't start from its top (don't scroll all the way up).
+    // Simply resume the scroll right above Queue, keeping the current visual position intact!
+    if (container && historyHeight > 0) {
+      container.scrollTop = Math.max(0, historyHeight - currentSpring);
+    }
+
+    requestAnimationFrame(() => {
+      if (wrapper) {
+        wrapper.classList.remove('is-instant');
+      }
+      setTimeout(() => {
+        isUnlockingRef.current = false;
+      }, 350);
+    });
   };
 
   const handleLockHistory = () => {
+    if (!isHistoryUnlockedRef.current) return;
     isHistoryUnlockedRef.current = false;
+    isUnlockingRef.current = true;
+    setIsPulling(false);
+    setSpringOffset(0);
+
     const container = queueListRef.current;
-    if (historyWrapperRef.current) {
-      historyWrapperRef.current.style.transition = '';
-      historyWrapperRef.current.style.gridTemplateRows = '';
-      historyWrapperRef.current.style.opacity = '';
-      historyWrapperRef.current.style.display = '';
-    }
-    if (container && container.scrollTop > 10) {
+    if (container && container.scrollTop > 0) {
       container.scrollTo({ top: 0, behavior: 'smooth' });
-      setTimeout(() => {
-        setIsHistoryUnlocked(false);
-      }, 180);
-    } else {
-      setIsHistoryUnlocked(false);
     }
+
+    setIsHistoryUnlocked(false);
+    setTimeout(() => {
+      isUnlockingRef.current = false;
+    }, 450);
   };
 
-  // When History unlocks, if history is taller than container, smoothly align recent history above queue
-  useEffect(() => {
-    if (isHistoryUnlocked) {
-      const container = queueListRef.current;
-      const historyEl = historySectionRef.current;
-      if (!container || !historyEl) return;
-
-      const timer = setTimeout(() => {
-        const containerHeight = container.clientHeight;
-        const historyHeight = historyEl.offsetHeight;
-
-        if (historyHeight > containerHeight - 65) {
-          const targetScroll = Math.max(0, historyHeight - (containerHeight - 75));
-          container.scrollTo({ top: targetScroll, behavior: 'smooth' });
-        }
-      }, 70);
-
-      return () => clearTimeout(timer);
-    }
-  }, [isHistoryUnlocked]);
-
-  // Relock History when scrolled down so History is completely out of view
   const handleScroll = () => {
     if (!isHistoryUnlockedRef.current || isUnlockingRef.current) return;
     const container = queueListRef.current;
     const historyEl = historySectionRef.current;
     const wrapper = historyWrapperRef.current;
-    if (!container || !historyEl) return;
+    if (!container || !historyEl || !wrapper) return;
 
-    const historyHeight = historyEl.offsetHeight;
+    const historyHeight = historyEl.offsetHeight || historyEl.scrollHeight;
     if (historyHeight > 0 && container.scrollTop >= historyHeight) {
       isHistoryUnlockedRef.current = false;
-      if (wrapper) {
-        wrapper.style.transition = 'none';
-        wrapper.style.display = 'none';
-      }
-      // Synchronously adjust scrollTop on the DOM in the same frame as hiding wrapper
-      container.scrollTop = Math.max(0, container.scrollTop - historyHeight);
-      if (wrapper) void wrapper.offsetHeight;
+      wrapper.classList.add('is-instant');
+      wrapper.classList.remove('is-expanded');
+      container.scrollTop = container.scrollTop - historyHeight;
       setIsHistoryUnlocked(false);
+      requestAnimationFrame(() => {
+        if (wrapper) wrapper.classList.remove('is-instant');
+      });
     }
   };
 
-  // Wheel listener: pull up against spring resistance when at top of Queue (twice as hard)
-  // And when History is open, scrolling down at top smoothly auto-collapses History!
+  // Wheel listener: pull down against spring resistance when at top of Queue (twice as hard)
   useEffect(() => {
     const container = queueListRef.current;
-    if (!container) return;
+    const targetElement = queueContainerRef.current || container;
+    if (!container || !targetElement) return;
 
     let pullAcc = 0;
     let decayTimer = null;
 
     const handleWheel = (e) => {
-      // If History is open and user scrolls down at top, smoothly auto-collapse History!
-      if (isHistoryUnlockedRef.current) {
-        if (container.scrollTop <= 10 && e.deltaY > 15) {
-          e.preventDefault();
-          handleLockHistory();
-        }
-        return;
-      }
-
-      // If History is closed, pull up against spring to reveal History
-      if (container.scrollTop <= 0 && e.deltaY < 0) {
+      // If History is closed, pull down against spring to reveal History
+      if (!isHistoryUnlockedRef.current && container.scrollTop <= 0 && e.deltaY < 0) {
         e.preventDefault();
         clearTimeout(decayTimer);
 
-        // Twice as hard: threshold is 245 raw delta units (vs 122 previously)
+        setIsPulling(true);
+        // Twice as hard: threshold is 245 raw delta units
         pullAcc += -e.deltaY;
         const ratio = Math.min(1, Math.max(0, pullAcc / 245));
-        const spring = Math.pow(ratio, 0.75) * 44;
+        const spring = Math.pow(ratio, 0.8) * 50;
         setSpringOffset(spring);
 
         if (pullAcc >= 245) {
           pullAcc = 0;
-          setSpringOffset(0);
           unlockHistory();
           return;
         }
 
         decayTimer = setTimeout(() => {
           pullAcc = 0;
+          setIsPulling(false);
           setSpringOffset(0);
-        }, 180);
+        }, 120);
       }
     };
 
-    container.addEventListener('wheel', handleWheel, { passive: false });
+    targetElement.addEventListener('wheel', handleWheel, { passive: false });
     return () => {
-      container.removeEventListener('wheel', handleWheel);
+      targetElement.removeEventListener('wheel', handleWheel);
       clearTimeout(decayTimer);
     };
   }, []);
 
   // Touch listener: pull down against spring resistance on touch screens (twice as hard)
-  // And when History is open, swiping up at top smoothly auto-collapses History!
   useEffect(() => {
     const container = queueListRef.current;
-    if (!container) return;
+    const targetElement = queueContainerRef.current || container;
+    if (!container || !targetElement) return;
 
     let startY = 0;
-    let isPulling = false;
+    let isTouchActive = false;
 
     const handleTouchStart = (e) => {
-      if (container.scrollTop <= 10 && e.touches.length === 1) {
+      if (e.target.closest('button')) return;
+      if (container.scrollTop <= 5 && e.touches.length === 1) {
         startY = e.touches[0].clientY;
-        isPulling = true;
+        isTouchActive = true;
       }
     };
 
     const handleTouchMove = (e) => {
-      if (!isPulling) return;
+      if (!isTouchActive) return;
 
-      if (isHistoryUnlockedRef.current) {
-        if (container.scrollTop <= 10) {
-          const diff = e.touches[0].clientY - startY;
-          if (diff < -25) {
-            isPulling = false;
-            handleLockHistory();
-          }
-        }
-        return;
-      }
-
-      if (container.scrollTop <= 0) {
+      if (!isHistoryUnlockedRef.current && container.scrollTop <= 0) {
         const diff = e.touches[0].clientY - startY;
         if (diff > 0) {
           e.preventDefault();
-          // Twice as hard: threshold is 130px (vs 65px previously)
+          setIsPulling(true);
+          // Twice as hard: threshold is 130px
           const ratio = Math.min(1, Math.max(0, diff / 130));
-          const spring = Math.pow(ratio, 0.75) * 44;
+          const spring = Math.pow(ratio, 0.8) * 50;
           setSpringOffset(spring);
           if (diff >= 130) {
-            isPulling = false;
-            setSpringOffset(0);
+            isTouchActive = false;
             unlockHistory();
           }
         }
@@ -278,22 +265,23 @@ export default function QueueList() {
     };
 
     const handleTouchEnd = () => {
-      if (isPulling) {
-        isPulling = false;
+      if (isTouchActive) {
+        isTouchActive = false;
+        setIsPulling(false);
         setSpringOffset(0);
       }
     };
 
-    container.addEventListener('touchstart', handleTouchStart, { passive: true });
-    container.addEventListener('touchmove', handleTouchMove, { passive: false });
-    container.addEventListener('touchend', handleTouchEnd, { passive: true });
-    container.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+    targetElement.addEventListener('touchstart', handleTouchStart, { passive: true });
+    targetElement.addEventListener('touchmove', handleTouchMove, { passive: false });
+    targetElement.addEventListener('touchend', handleTouchEnd, { passive: true });
+    targetElement.addEventListener('touchcancel', handleTouchEnd, { passive: true });
 
     return () => {
-      container.removeEventListener('touchstart', handleTouchStart);
-      container.removeEventListener('touchmove', handleTouchMove);
-      container.removeEventListener('touchend', handleTouchEnd);
-      container.removeEventListener('touchcancel', handleTouchEnd);
+      targetElement.removeEventListener('touchstart', handleTouchStart);
+      targetElement.removeEventListener('touchmove', handleTouchMove);
+      targetElement.removeEventListener('touchend', handleTouchEnd);
+      targetElement.removeEventListener('touchcancel', handleTouchEnd);
     };
   }, []);
 
@@ -350,29 +338,88 @@ export default function QueueList() {
     }, 60);
   };
 
-  // Helper to determine target element from pointer Y
-  const getDragAfterElement = (y) => {
+  // Helper to determine target queue card from pointer Y
+  const getTargetQueueId = (y, currentDraggedId) => {
     if (!queueListRef.current) return null;
-    const cards = [...queueListRef.current.querySelectorAll('.queue-card:not(.dragging):not(.queue-drop-placeholder)')];
-    if (cards.length === 0) return null;
+    const cards = [
+      ...queueListRef.current.querySelectorAll('.queue-cards-group .queue-card')
+    ];
+    if (cards.length === 0) return '__END__';
 
-    const firstBox = cards[0].getBoundingClientRect();
-    if (y < firstBox.top + firstBox.height / 2) {
-      return cards[0];
-    }
-    const lastBox = cards[cards.length - 1].getBoundingClientRect();
-    if (y > lastBox.top + lastBox.height / 2) {
-      return null; // Append at end of list
-    }
-
-    return cards.reduce((closest, child) => {
-      const box = child.getBoundingClientRect();
-      const offset = y - (box.top + box.height / 2);
-      if (offset < 0 && offset > closest.offset) {
-        return { offset, element: child };
+    // Find target slot index (0 = before first card, ..., cards.length = after last card)
+    let targetSlot = cards.length;
+    for (let j = 0; j < cards.length; j++) {
+      const box = cards[j].getBoundingClientRect();
+      const midY = box.top + box.height / 2;
+      if (y < midY) {
+        targetSlot = j;
+        break;
       }
-      return closest;
-    }, { offset: Number.NEGATIVE_INFINITY }).element || null;
+    }
+
+    // If dragging an item that is already in the queue, slots adjacent to the item represent no move
+    if (currentDraggedId) {
+      const draggedIdx = queueSongs.findIndex(
+        (s) => String(s.queueId || s.id) === String(currentDraggedId)
+      );
+      if (draggedIdx !== -1) {
+        // Dropping before itself (targetSlot === draggedIdx) or after itself (targetSlot === draggedIdx + 1) is a no-op
+        if (targetSlot === draggedIdx || targetSlot === draggedIdx + 1) {
+          return null;
+        }
+      }
+    }
+
+    return targetSlot < cards.length
+      ? (cards[targetSlot].dataset.queueId || null)
+      : '__END__';
+  };
+
+  const handleRemoveQueueSong = async (qId) => {
+    const targetQId = String(qId);
+    const { queue: currentQ } = useQueueStore.getState();
+    const { currentSong: activeSong, currentQueueId: activeQId, endQueue } = usePlaybackStore.getState();
+
+    const activeTargetQId = String(activeQId || activeSong?.queueId || '');
+    const activeTargetSongId = String(activeSong?.id || '');
+
+    // Find index of song being removed in current queue
+    const removeIdx = currentQ.findIndex(s => String(s.queueId || s.id) === targetQId);
+
+    // Determine if it is the currently playing active song
+    let activeIdx = -1;
+    if (activeTargetQId) {
+      activeIdx = currentQ.findIndex(s => String(s.queueId || s.id) === activeTargetQId);
+    }
+    if (activeIdx === -1 && activeTargetSongId) {
+      activeIdx = currentQ.findIndex(s => String(s.id) === activeTargetSongId);
+    }
+
+    const isCurrentActive =
+      (activeTargetQId && activeTargetQId === targetQId) ||
+      (activeTargetSongId && activeTargetSongId === targetQId) ||
+      (activeIdx >= 0 && removeIdx === activeIdx);
+
+    // Look for the next upcoming song in line after the removed active song
+    let nextSongToPlay = null;
+    if (isCurrentActive) {
+      const fromIdx = activeIdx >= 0 ? activeIdx : removeIdx;
+      if (fromIdx >= 0 && fromIdx < currentQ.length - 1) {
+        nextSongToPlay = currentQ[fromIdx + 1];
+      }
+    }
+
+    // Remove from queue
+    await remove(qId);
+
+    // Advance playback if the currently playing song was removed
+    if (isCurrentActive) {
+      if (nextSongToPlay) {
+        await selectSong(nextSongToPlay.id, true, nextSongToPlay.queueId);
+      } else {
+        endQueue();
+      }
+    }
   };
 
   const isDraggingAny = draggedQueueId !== null || !!draggedLibrarySong;
@@ -382,29 +429,35 @@ export default function QueueList() {
     if (!isDraggingAny) {
       setIsDragOutside(false);
       setTargetQueueId(null);
+      targetQueueIdRef.current = null;
       return;
     }
 
     const handleDocDragOver = (e) => {
       e.preventDefault();
-      const isOver = queueListRef.current && queueListRef.current.contains(e.target);
+      const isOver = (queueListRef.current && queueListRef.current.contains(e.target)) ||
+                     (queueContainerRef.current && queueContainerRef.current.contains(e.target));
       if (!isOver) {
         setIsDragOutside(true);
         setTargetQueueId(null);
+        targetQueueIdRef.current = null;
       } else {
         setIsDragOutside(false);
       }
     };
 
     const handleDocDrop = async (e) => {
-      const isOver = queueListRef.current && queueListRef.current.contains(e.target);
-      if (!isOver && draggedQueueId) {
+      const isOver = (queueListRef.current && queueListRef.current.contains(e.target)) ||
+                     (queueContainerRef.current && queueContainerRef.current.contains(e.target));
+      const idToRemove = draggedQueueIdRef.current;
+      if (!isOver && idToRemove) {
         e.preventDefault();
-        const idToRemove = draggedQueueId;
         setDraggedQueueId(null);
+        draggedQueueIdRef.current = null;
         setTargetQueueId(null);
+        targetQueueIdRef.current = null;
         setIsDragOutside(false);
-        await remove(idToRemove);
+        await handleRemoveQueueSong(idToRemove);
       }
     };
 
@@ -415,22 +468,27 @@ export default function QueueList() {
       document.removeEventListener('dragover', handleDocDragOver);
       document.removeEventListener('drop', handleDocDrop);
     };
-  }, [isDraggingAny, draggedQueueId, remove]);
+  }, [isDraggingAny, remove]);
 
   const handleQueueDragStart = (e, qId, song) => {
     if (e.target.closest('button') || e.target.closest('.queue-controls-group') || e.target.closest('.queue-arrow-btn')) {
       e.preventDefault();
       return;
     }
-    setDraggedQueueId(String(qId));
+    const idStr = String(qId);
+    setDraggedQueueId(idStr);
+    draggedQueueIdRef.current = idStr;
     setIsDragOutside(false);
-    e.dataTransfer.setData('text/plain', String(qId));
+    e.dataTransfer.setData('text/plain', idStr);
+    e.dataTransfer.setData('application/x-ctrlaltlyrics-queue-id', idStr);
     e.dataTransfer.effectAllowed = 'move';
   };
 
   const handleQueueDragEnd = () => {
     setDraggedQueueId(null);
+    draggedQueueIdRef.current = null;
     setTargetQueueId(null);
+    targetQueueIdRef.current = null;
     setIsDragOutside(false);
   };
 
@@ -450,25 +508,30 @@ export default function QueueList() {
     }
 
     setIsDragOutside(false);
-    const afterEl = getDragAfterElement(e.clientY);
-    setTargetQueueId(afterEl ? (afterEl.dataset.queueId || '__END__') : '__END__');
+    const newTargetId = getTargetQueueId(e.clientY, draggedQueueIdRef.current || draggedQueueId);
+    targetQueueIdRef.current = newTargetId;
+    if (newTargetId !== targetQueueId) {
+      setTargetQueueId(newTargetId);
+    }
   };
 
   const handleListDragLeave = (e) => {
     if (!queueListRef.current || !queueListRef.current.contains(e.relatedTarget)) {
       setTargetQueueId(null);
+      targetQueueIdRef.current = null;
       setIsDragOutside(true);
     }
   };
 
   const handleListDrop = async (e) => {
     e.preventDefault();
-    const target = targetQueueId;
+    const target = targetQueueIdRef.current ?? targetQueueId;
 
     if (draggedLibrarySong) {
       const songToEnqueue = draggedLibrarySong;
       setDraggedLibrarySong(null);
       setTargetQueueId(null);
+      targetQueueIdRef.current = null;
       setIsDragOutside(false);
 
       let insertIdx = queue.length;
@@ -483,10 +546,12 @@ export default function QueueList() {
     if (draggedQueueId) {
       const fromId = draggedQueueId;
       setDraggedQueueId(null);
+      draggedQueueIdRef.current = null;
       setTargetQueueId(null);
+      targetQueueIdRef.current = null;
       setIsDragOutside(false);
 
-      if (!target) return;
+      if (!target || target === fromId) return;
 
       const fromIdx = queue.findIndex(s => String(s.queueId || s.id) === fromId);
       if (fromIdx === -1) return;
@@ -547,31 +612,19 @@ export default function QueueList() {
   };
 
   const showPreview = isDraggingAny && !isDragOutside && !!targetQueueId;
-  const draggedTitle = draggedLibrarySong?.title ||
-    queue.find(s => String(s.queueId || s.id) === String(draggedQueueId))?.title ||
-    'Track';
 
   const renderSongCard = (song, idx, isHistory) => {
     const qId = String(song.queueId || song.id);
     const isCurrentActive = !isHistory && idx === 0 && Boolean(currentSong);
     const isProcessing = song.status !== 'ready';
     const isBeingDragged = isDraggingAny && draggedQueueId === qId;
-    const isTargetBefore = showPreview && targetQueueId === qId;
+    const isTargetBefore = !isHistory && showPreview && targetQueueId === qId && draggedQueueId !== qId;
+    const isTargetAfter = !isHistory && showPreview && targetQueueId === '__END__' && idx === queueSongs.length - 1 && draggedQueueId !== qId;
 
     return (
       <React.Fragment key={`${isHistory ? 'hist-' : 'queue-'}${qId}`}>
-        {/* Show preview placeholder before this item if targeted */}
-        {isTargetBefore && (
-          <div className="song-card queue-card queue-drop-placeholder">
-            <i className="icon-plus"></i>
-            <span className="placeholder-text">
-              Insert: <strong>{draggedTitle}</strong>
-            </span>
-          </div>
-        )}
-
         <div
-          className={`song-card queue-card ${isHistory ? 'history-card' : ''} ${isCurrentActive ? (isPlaying ? 'active-playing' : 'active-playing is-paused') : ''} ${isProcessing ? 'queue-card-processing' : ''} ${isBeingDragged ? 'dragging' : ''} ${isBeingDragged && isDragOutside ? 'dragging-remove' : ''}`}
+          className={`song-card queue-card ${isHistory ? 'history-card' : ''} ${isCurrentActive ? (isPlaying ? 'active-playing' : 'active-playing is-paused') : ''} ${isProcessing ? 'queue-card-processing' : ''} ${isBeingDragged ? 'dragging' : ''} ${isBeingDragged && isDragOutside ? 'dragging-remove' : ''} ${isTargetBefore ? 'drop-target-before' : ''} ${isTargetAfter ? 'drop-target-after' : ''}`}
           data-queue-id={qId}
           draggable={!isHistory}
           onDragStart={(e) => !isHistory && handleQueueDragStart(e, qId, song)}
@@ -580,6 +633,18 @@ export default function QueueList() {
           onDoubleClick={(e) => handleQueueCardDoubleClick(e, song, qId)}
           title="Double-tap to play track"
         >
+          {isTargetBefore && (
+            <div className="queue-drop-indicator drop-indicator-before" aria-hidden="true">
+              <span className="drop-indicator-dot"></span>
+              <span className="drop-indicator-line"></span>
+            </div>
+          )}
+          {isTargetAfter && (
+            <div className="queue-drop-indicator drop-indicator-after" aria-hidden="true">
+              <span className="drop-indicator-dot"></span>
+              <span className="drop-indicator-line"></span>
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', width: '100%' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: 1, minWidth: 0 }}>
               {!isHistory && (
@@ -648,7 +713,7 @@ export default function QueueList() {
 
                 <button
                   className="queue-icon-btn"
-                  onClick={() => remove(qId)}
+                  onClick={() => isHistory ? remove(qId) : handleRemoveQueueSong(qId)}
                   title={isHistory ? "Remove from History" : "Remove from Queue"}
                   aria-label={isHistory ? "Remove from History" : "Remove from Queue"}
                 >
@@ -663,103 +728,97 @@ export default function QueueList() {
   };
 
   return (
-    <div className="queue-component-container">
-      {/* Spring Pull Indicator */}
-      {springOffset > 0 && (
-        <div className="queue-spring-indicator" style={{ height: `${springOffset}px` }}>
-          <div className="queue-spring-pill" style={{ opacity: Math.min(1, springOffset / 20) }}>
-            <i className={`icon-arrow-down ${springOffset >= 36 ? 'icon-rotate-180' : ''}`}></i>
-            <span>{springOffset >= 36 ? 'Release for History' : 'Pull for History'}</span>
+    <div className="queue-component-container" ref={queueContainerRef}>
+      {/* Spring Pull Indicator at the very top edge */}
+      <div
+        className={`queue-spring-indicator ${springOffset > 0 ? 'is-visible' : ''} ${isPulling ? 'is-pulling' : ''}`}
+        style={{
+          height: `${springOffset}px`,
+          opacity: springOffset > 0 ? Math.min(1, springOffset / 18) : 0
+        }}
+      >
+        <div className="queue-spring-pill">
+          <i className={`icon-arrow-down ${springOffset >= 36 ? 'icon-rotate-180' : ''}`}></i>
+          <span>{springOffset >= 36 ? 'Release for History' : 'Pull for History'}</span>
+        </div>
+      </div>
+
+      {/* Queue Content: Frozen History Header (when expanded) + Scroll Wrapper */}
+      <div
+        className={`queue-content-wrapper ${!isPulling ? 'is-animating' : ''}`}
+        style={{
+          transform: springOffset > 0 ? `translateY(${springOffset}px)` : 'none'
+        }}
+      >
+        {/* Frozen History Title: stays frozen on top when History is expanded */}
+        <div className={`history-header-frozen ${isHistoryUnlocked ? 'is-visible' : ''}`}>
+          <div className="history-header-frozen-inner">
+            <h2>History</h2>
+            <button
+              type="button"
+              className="history-collapse-btn"
+              onClick={handleLockHistory}
+              title="Lock History"
+              aria-label="Lock History"
+            >
+              <i className="icon-chevron-up"></i>
+            </button>
           </div>
         </div>
-      )}
 
-      <ScrollShadowWrapper className="queue-scroll-wrapper" scrollRef={queueListRef}>
-        <div
-          id="queueList"
-          ref={queueListRef}
-          className={`queue-list ${isHistoryUnlocked ? 'has-history-unlocked' : ''}`}
-          style={
-            springOffset > 0
-              ? { transform: `translateY(${springOffset}px)`, transition: 'none' }
-              : { transition: 'transform 0.32s cubic-bezier(0.16, 1, 0.3, 1)' }
-          }
-          onScroll={handleScroll}
-          onDragOver={handleListDragOver}
-          onDragLeave={handleListDragLeave}
-          onDrop={handleListDrop}
-        >
-          {/* History Section Wrapper (smooth CSS Grid height & opacity transition) */}
+        <ScrollShadowWrapper className="queue-scroll-wrapper" scrollRef={queueListRef}>
           <div
-            ref={historyWrapperRef}
-            className={`history-section-wrapper ${isHistoryUnlocked ? 'is-expanded' : ''}`}
+            id="queueList"
+            ref={queueListRef}
+            className={`queue-list ${isHistoryUnlocked ? 'has-history-unlocked' : ''}`}
+            onScroll={handleScroll}
+            onDragOver={handleListDragOver}
+            onDragLeave={handleListDragLeave}
+            onDrop={handleListDrop}
           >
-            <div className="history-section-inner">
-              <div className="history-section" ref={historySectionRef}>
-                <div className="history-header-row">
-                  <h2>History</h2>
-                  <button
-                    type="button"
-                    className="history-collapse-btn"
-                    onClick={handleLockHistory}
-                    title="Lock History"
-                    aria-label="Lock History"
-                  >
-                    <i className="icon-chevron-up"></i>
-                  </button>
-                </div>
-
-                <div className="history-cards-group">
-                  {historySongs.length === 0 ? (
-                    <div className="empty-state history-empty-state">No played tracks in history yet.</div>
-                  ) : (
-                    historySongs.map((song, idx) => renderSongCard(song, idx, true))
-                  )}
+            {/* History Section Wrapper (smooth CSS Grid height & opacity transition above Queue, uses any space needed) */}
+            <div
+              ref={historyWrapperRef}
+              className={`history-section-wrapper ${isHistoryUnlocked ? 'is-expanded' : ''}`}
+            >
+              <div className="history-section-inner">
+                <div className="history-section" ref={historySectionRef}>
+                  <div className="history-cards-group">
+                    {historySongs.length === 0 ? (
+                      <div className="empty-state history-empty-state">No played tracks in history yet.</div>
+                    ) : (
+                      historySongs.map((song, idx) => renderSongCard(song, idx, true))
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* Queue Section */}
-          <div className="queue-section" ref={queueSectionRef}>
-            <div className="queue-header-row">
-              <h2>Queue</h2>
-              <div
-                id="queueDragOutHint"
-                className={`queue-drag-out-hint ${isDragOutside ? 'active' : ''}`}
-                style={{ display: draggedQueueId !== null ? 'inline-flex' : 'none' }}
-              >
-                <i className="icon-trash-2" style={{ marginRight: '0.25rem' }}></i> Drag outside to remove
+            {/* Queue Section: Header and cards scroll along bottom of history when history is open */}
+            <div className="queue-section" ref={queueSectionRef}>
+              <div className="queue-header-row">
+                <h2>Queue</h2>
+              </div>
+
+              <div className="queue-cards-group">
+                {queueSongs.length === 0 ? (
+                  <div className={`empty-state ${showPreview ? 'drop-target-empty' : ''}`}>
+                    {showPreview ? (
+                      <>
+                        <i className="icon-plus"></i> Drop here to add to queue
+                      </>
+                    ) : (
+                      'No songs in queue. Use the search bar above to add a track!'
+                    )}
+                  </div>
+                ) : (
+                  queueSongs.map((song, idx) => renderSongCard(song, idx, false))
+                )}
               </div>
             </div>
-
-            <div className="queue-cards-group">
-              {queueSongs.length === 0 && !isDraggingAny ? (
-                <div className="empty-state">No songs in queue. Use the search bar above to add a track!</div>
-              ) : (
-                queueSongs.map((song, idx) => renderSongCard(song, idx, false))
-              )}
-            </div>
           </div>
-
-          {/* Show preview placeholder at the end of the queue if targeted */}
-          {showPreview && targetQueueId === '__END__' && (
-            <div className="song-card queue-card queue-drop-placeholder">
-              <i className="icon-plus"></i>
-              <span className="placeholder-text">
-                Insert: <strong>{draggedTitle}</strong>
-              </span>
-            </div>
-          )}
-        </div>
-      </ScrollShadowWrapper>
-
-      {/* Floating Drag Remove Toast */}
-      {isDragOutside && draggedQueueId !== null && (
-        <div id="queueRemoveToast" className="queue-remove-toast" style={{ display: 'flex' }}>
-          <i className="icon-trash-2"></i> Drop here to remove from queue
-        </div>
-      )}
+        </ScrollShadowWrapper>
+      </div>
     </div>
   );
 }
