@@ -1325,11 +1325,9 @@ router.post('/search', async (req, res) => {
   }
 });
 
-router.post('/enqueue', async (req, res) => {
-  const { song, engineSettings, insertIndex } = req.body;
-  
+async function enqueueSongCore({ song, engineSettings, insertIndex, requestedBy, singers, notes, io }) {
   const history = readHistory();
-  const existing = history.find(s => s.id === song.id);
+  const existing = history.find(s => String(s.id) === String(song.id));
 
   const getInsertIndex = (arr) => {
     if (typeof insertIndex === 'number' && Number.isInteger(insertIndex) && insertIndex >= 0 && insertIndex <= arr.length) {
@@ -1337,6 +1335,14 @@ router.post('/enqueue', async (req, res) => {
     }
     return arr.length;
   };
+
+  const reqBy = requestedBy || song.requestedBy || null;
+  const initialSingers = Array.isArray(singers) && singers.length > 0
+    ? singers
+    : (Array.isArray(song.singers) && song.singers.length > 0
+        ? song.singers
+        : (reqBy?.nickname ? [reqBy.nickname] : []));
+  const songNotes = notes || song.notes || null;
 
   if (existing) {
     const songDir = path.join(DOWNLOADS_DIR, existing.id);
@@ -1346,17 +1352,21 @@ router.post('/enqueue', async (req, res) => {
       const fullSong = {
         ...existing,
         ...lyricsData,
-        queueId: generateQueueId()
+        queueId: generateQueueId(),
+        requestedBy: reqBy,
+        singers: initialSingers,
+        notes: songNotes
       };
       // If existing song lacks YouTube video ID, resolve it in background
-      if (!existing.youtubeId) {
-        resolveYoutubeMusicVideo(existing, req.app.get('io')).catch(err => console.error("Error resolving video for existing song:", err));
+      if (!existing.youtubeId && io) {
+        resolveYoutubeMusicVideo(existing, io).catch(err => console.error("Error resolving video for existing song:", err));
       }
       const idx = getInsertIndex(queue);
       queue.splice(idx, 0, fullSong);
-      res.json(fullSong);
-      req.app.get('io').emit('queue_updated', queue);
-      return;
+      if (io) {
+        io.emit('queue_updated', queue);
+      }
+      return fullSong;
     }
   }
 
@@ -1368,23 +1378,42 @@ router.post('/enqueue', async (req, res) => {
     status: 'pending',
     videoStatus: 'fetching',
     stems: {},
-    lyrics: []
+    lyrics: [],
+    requestedBy: reqBy,
+    singers: initialSingers,
+    notes: songNotes
   };
   saveLightweightHistoryItem(newSong);
   const idx = getInsertIndex(queue);
   queue.splice(idx, 0, newSong);
-  const io = req.app.get('io');
   if (io) {
     io.emit('queue_updated', queue);
     io.emit('library_updated', readHistory());
   }
-  res.json(newSong);
 
-  // Background YouTube Music Video resolution - initiated AS SOON AS SEARCH RESULT IS SELECTED!
-  resolveYoutubeMusicVideo(newSong, io).catch(err => console.error("Error resolving music video:", err));
+  if (io) {
+    // Background YouTube Music Video resolution - initiated AS SOON AS SEARCH RESULT IS SELECTED!
+    resolveYoutubeMusicVideo(newSong, io).catch(err => console.error("Error resolving music video:", err));
+    // Background processing
+    processSong(newSong, io).catch(err => console.error("Error processing song", err));
+  }
+  return newSong;
+}
 
-  // Background processing
-  processSong(newSong, io).catch(err => console.error("Error processing song", err));
+router.post('/enqueue', async (req, res) => {
+  const { song, engineSettings, insertIndex, requestedBy, singers, notes } = req.body || {};
+  if (!song) return res.status(400).json({ error: 'Song payload is required' });
+  const io = req.app.get('io');
+  const result = await enqueueSongCore({
+    song,
+    engineSettings,
+    insertIndex,
+    requestedBy,
+    singers,
+    notes,
+    io
+  });
+  res.json(result);
 });
 
 router.post('/upload', upload.single('audioFile'), async (req, res) => {
@@ -4456,8 +4485,23 @@ router.post('/queue/reorder', (req, res) => {
   res.json({ success: true, queue });
 });
 
+// Social Router integration
+const { createSocialRouter } = require('./social');
+const socialRouter = createSocialRouter({
+  getQueue: () => queue,
+  setQueue: (newQ) => { queue = newQ; return queue; },
+  enqueueSongCore,
+  DOWNLOADS_DIR,
+  readHistory
+});
+router.use('/social', socialRouter);
+
 router.extractYoutubeId = extractYoutubeId;
 router.resolveYoutubeMusicVideo = resolveYoutubeMusicVideo;
+router.getQueue = () => queue;
+router.setQueue = (newQ) => { queue = newQ; return queue; };
+router.enqueueSongCore = enqueueSongCore;
+router.socialRouter = socialRouter;
 
 module.exports = router;
 

@@ -1,7 +1,7 @@
 {
   "sep:5_HP-Karaoke-UVR.pth": 7,
   "sep:UVR-MDX-NET-Inst_HQ_3.onnx": 7,
-  "whisper:small": 19,
+  "whisper:small": 20,
   "whisper:medium": 3,
-  "whisper:turbo": 5
+  "whisper:turbo": 7
 }

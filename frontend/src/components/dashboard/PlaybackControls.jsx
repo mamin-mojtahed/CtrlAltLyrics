@@ -159,7 +159,8 @@ export default function PlaybackControls() {
     const frameLoop = () => {
       animId = requestAnimationFrame(frameLoop);
 
-      if (!isDragging) {
+      // Check synchronous ref and store flag to prevent overwriting during user drag
+      if (!isDraggingRef.current && !usePlaybackStore.getState().isDraggingSlider) {
         const cur = getPlaybackTime();
         const maxDur = typeof duration === 'number' && duration > 0 ? duration : 0;
         const bounded = maxDur > 0 ? Math.min(maxDur, cur) : cur;
@@ -226,7 +227,7 @@ export default function PlaybackControls() {
       const maxDur = typeof duration === 'number' && duration > 0 ? duration : 0;
       const bounded = maxDur > 0 ? Math.min(maxDur, cur) : cur;
 
-      if (sliderRef.current && !isDraggingRef.current) {
+      if (sliderRef.current && !isDraggingRef.current && !usePlaybackStore.getState().isDraggingSlider) {
         sliderRef.current.value = bounded;
       }
       if (timeCurrentRef.current) {
@@ -278,6 +279,36 @@ export default function PlaybackControls() {
       if (animId) cancelAnimationFrame(animId);
     };
   }, [isPlaying, currentSong, duration, isDragging, showKaraokeSlide, getPlaybackTime]);
+
+  const handlePointerDown = (e) => {
+    isDraggingRef.current = true;
+    setIsDragging(true);
+    setDraggingSlider(true);
+    const val = parseFloat(e.target.value) || 0;
+    setSliderTime(val);
+
+    const handleGlobalPointerUp = () => {
+      window.removeEventListener('pointerup', handleGlobalPointerUp);
+      window.removeEventListener('pointercancel', handleGlobalPointerUp);
+      window.removeEventListener('mouseup', handleGlobalPointerUp);
+      window.removeEventListener('touchend', handleGlobalPointerUp);
+
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false;
+        setIsDragging(false);
+        setDraggingSlider(false);
+        if (sliderRef.current) {
+          const finalTime = parseFloat(sliderRef.current.value) || 0;
+          seek(finalTime);
+        }
+      }
+    };
+
+    window.addEventListener('pointerup', handleGlobalPointerUp);
+    window.addEventListener('pointercancel', handleGlobalPointerUp);
+    window.addEventListener('mouseup', handleGlobalPointerUp);
+    window.addEventListener('touchend', handleGlobalPointerUp);
+  };
 
   const handleSliderInput = (e) => {
     const val = parseFloat(e.target.value) || 0;
@@ -550,6 +581,9 @@ export default function PlaybackControls() {
           aria-valuemin="0"
           aria-valuemax={duration || 0}
           aria-valuenow={usePlaybackStore.getState().currentTime || 0}
+          onPointerDown={handlePointerDown}
+          onMouseDown={handlePointerDown}
+          onTouchStart={handlePointerDown}
           onInput={handleSliderInput}
           onChange={handleSliderChange}
         />

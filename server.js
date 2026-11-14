@@ -38,6 +38,24 @@ app.get(['/display', '/display.html'], (req, res) => {
   }
   res.redirect('http://localhost:5173/display.html');
 });
+app.get(['/host', '/host.html'], (req, res) => {
+  if (process.env.NODE_ENV !== 'production') {
+    return res.redirect('http://localhost:5173/host.html');
+  }
+  if (fs.existsSync(path.join(distPath, 'host.html'))) {
+    return res.sendFile(path.join(distPath, 'host.html'));
+  }
+  res.redirect('http://localhost:5173/host.html');
+});
+app.get(['/guest', '/guest.html'], (req, res) => {
+  if (process.env.NODE_ENV !== 'production') {
+    return res.redirect('http://localhost:5173/guest.html');
+  }
+  if (fs.existsSync(path.join(distPath, 'guest.html'))) {
+    return res.sendFile(path.join(distPath, 'guest.html'));
+  }
+  res.redirect('http://localhost:5173/guest.html');
+});
 app.get('/', (req, res) => {
   if (process.env.NODE_ENV !== 'production') {
     return res.redirect('http://localhost:5173/');
@@ -68,10 +86,16 @@ let currentState = {
     lead: 1,
     back: 1
   },
+  isInstBackLinked: false,
+  isBackLeadLinked: false,
   showKaraokeSlide: true,
   showWaveform: true,
-  showMusicVideo: true
+  showMusicVideo: true,
+  audioMaster: 'display'
 };
+
+let lastServerSeekTimestamp = 0;
+let lastServerSeekTime = 0;
 
 io.getCurrentState = () => currentState;
 io.updateCurrentState = (updater) => {
@@ -114,8 +138,29 @@ io.on('connection', (socket) => {
       }
       newState.volumes = { ...(currentState.volumes || {}), ...normalized };
     }
+
+    if (
+      newState &&
+      typeof newState.currentTime === 'number' &&
+      Date.now() - lastServerSeekTimestamp < 600 &&
+      Math.abs(newState.currentTime - lastServerSeekTime) > 1.2
+    ) {
+      delete newState.currentTime;
+    }
+
+    if (newState.isInstBackLinked !== undefined) {
+      currentState.isInstBackLinked = Boolean(newState.isInstBackLinked);
+    }
+    if (newState.isBackLeadLinked !== undefined) {
+      currentState.isBackLeadLinked = Boolean(newState.isBackLeadLinked);
+    }
+
     currentState = { ...currentState, ...newState };
-    if (newState.isPlaying !== undefined) {
+    if (
+      newState.isPlaying !== undefined ||
+      newState.isInstBackLinked !== undefined ||
+      newState.isBackLeadLinked !== undefined
+    ) {
       io.emit('sync_state', currentState);
     } else {
       socket.broadcast.emit('sync_state', newState);
@@ -139,9 +184,14 @@ io.on('connection', (socket) => {
       }
     } else if (cmd.command === 'seek' && typeof cmd.time === 'number') {
       currentState.currentTime = cmd.time;
+      lastServerSeekTimestamp = Date.now();
+      lastServerSeekTime = cmd.time;
     } else if (cmd.command === 'select_song') {
       currentState.songId = cmd.id;
       currentState.queueId = cmd.queueId || null;
+      apiRoutes.socialRouter?.clearStageRequestsForNewTrack?.(io);
+    } else if (cmd.command === 'play_next') {
+      apiRoutes.socialRouter?.clearStageRequestsForNewTrack?.(io);
     } else if (cmd.command === 'set_volumes' && cmd.volumes) {
       const inst = cmd.volumes.inst ?? cmd.volumes.instrumentals;
       const lead = cmd.volumes.lead ?? cmd.volumes.vocals;
@@ -164,16 +214,18 @@ io.on('connection', (socket) => {
       currentState.audioMaster = cmd.audioMaster;
     }
 
-    if (cmd.command === 'set_volumes' && cmd.volumes) {
-      socket.broadcast.emit('sync_state', { volumes: currentState.volumes });
-    } else if (['toggle_play', 'play', 'pause', 'seek'].includes(cmd.command)) {
-      socket.broadcast.emit('sync_state', currentState);
-    }
     socket.broadcast.emit('player_command', cmd);
+  });
+
+  socket.on('social_reaction', (reaction) => {
+    io.emit('reaction_received', reaction);
   });
 
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
+    if (apiRoutes.socialRouter && typeof apiRoutes.socialRouter.handleSocketDisconnect === 'function') {
+      apiRoutes.socialRouter.handleSocketDisconnect(socket.id, io);
+    }
   });
 });
 

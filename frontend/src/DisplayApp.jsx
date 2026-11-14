@@ -8,6 +8,9 @@ import { useDisplayResizer } from './hooks/useDisplayResizer';
 import { extractColorsFromSongCover, getHighResAlbumArt } from './utils/themeColors';
 import { prepareLyricsForDisplay } from './utils/lyricsWrapping';
 import { extractYoutubeId } from './utils/youtube';
+import QrCodeWidget from './components/social/QrCodeWidget';
+import FloatingReactions from './components/social/FloatingReactions';
+import AnnouncementBanner from './components/social/AnnouncementBanner';
 
 export default function DisplayApp() {
   const [song, setSong] = useState(null);
@@ -16,7 +19,7 @@ export default function DisplayApp() {
   const [duration, setDuration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volumes, setVolumes] = useState({ inst: 1, back: 1, lead: 1 });
-  const [audioMaster, setAudioMaster] = useState(null);
+  const [audioMaster, setAudioMaster] = useState('display');
   const [showTranslit, setShowTranslit] = useState(false);
   const [showTranslat, setShowTranslat] = useState(false);
   const [showKaraokeSlide, setShowKaraokeSlide] = useState(true);
@@ -30,7 +33,7 @@ export default function DisplayApp() {
   const queueRef = useRef([]);
   const volumesRef = useRef({ inst: 1, back: 1, lead: 1 });
   const prevFaderVolumesRef = useRef({ inst: 1, back: 1, lead: 1 });
-  const audioMasterRef = useRef(null);
+  const audioMasterRef = useRef('display');
 
   // High-precision sync anchor for 60/120fps liquid smooth karaoke sliding
   const syncAnchorRef = useRef({ time: 0, timestamp: performance.now(), isPlaying: false });
@@ -100,6 +103,9 @@ export default function DisplayApp() {
           if (state.audioMaster !== undefined) {
             audioMasterRef.current = state.audioMaster;
             setAudioMaster(state.audioMaster);
+          } else if (!audioMasterRef.current) {
+            audioMasterRef.current = 'display';
+            setAudioMaster('display');
           }
 
           setSong(fullSong);
@@ -109,8 +115,10 @@ export default function DisplayApp() {
 
           audioPlayer.setupAudio(fullSong, volumesRef.current).then((dur) => {
             if (dur > 0) setDuration(dur);
-            if (audioMasterRef.current === 'display' && (state.isPlaying || syncAnchorRef.current.isPlaying)) {
-              audioPlayer.playAudio(syncAnchorRef.current.time);
+            if ((audioMasterRef.current === 'display' || !audioMasterRef.current) && (state.isPlaying || syncAnchorRef.current.isPlaying)) {
+              audioPlayer.unlockAudio().then(() => {
+                audioPlayer.playAudio(syncAnchorRef.current.time);
+              });
             }
           });
         } else {
@@ -202,21 +210,35 @@ export default function DisplayApp() {
         setCurrentTime(cmd.time);
         syncAnchorRef.current.time = cmd.time;
         syncAnchorRef.current.timestamp = performance.now();
-        if (audioMasterRef.current === 'display') {
+        if (audioMasterRef.current === 'display' || !audioMasterRef.current) {
           audioPlayer.seekAudio(cmd.time, syncAnchorRef.current.isPlaying);
+          emitUpdateState({ currentTime: cmd.time });
         }
       } else if (cmd.command === 'play') {
-        setIsPlaying(true);
-        syncAnchorRef.current.isPlaying = true;
-        if (typeof cmd.time === 'number') {
-          setCurrentTime(cmd.time);
-          syncAnchorRef.current.time = cmd.time;
-        }
-        syncAnchorRef.current.timestamp = performance.now();
-        if (cmd.audioMaster === 'display' || (audioMasterRef.current === 'display' && cmd.audioMaster !== 'dashboard')) {
-          audioPlayer.playAudio(syncAnchorRef.current.time);
-        } else {
+        if (cmd.audioMaster === 'dashboard') {
           audioPlayer.stopAllSources();
+          audioMasterRef.current = 'dashboard';
+          setAudioMaster('dashboard');
+          setIsPlaying(true);
+          syncAnchorRef.current.isPlaying = true;
+        } else {
+          setIsPlaying(true);
+          syncAnchorRef.current.isPlaying = true;
+          if (typeof cmd.time === 'number') {
+            setCurrentTime(cmd.time);
+            syncAnchorRef.current.time = cmd.time;
+          }
+          syncAnchorRef.current.timestamp = performance.now();
+          audioPlayer.unlockAudio().then(() => {
+            audioPlayer.playAudio(syncAnchorRef.current.time);
+          });
+          emitUpdateState({
+            isPlaying: true,
+            currentTime: syncAnchorRef.current.time,
+            audioMaster: 'display',
+            queueId: songRef.current?.queueId || null,
+            songId: songRef.current?.id || null
+          });
         }
       } else if (cmd.command === 'pause') {
         setIsPlaying(false);
@@ -226,7 +248,16 @@ export default function DisplayApp() {
           syncAnchorRef.current.time = cmd.time;
         }
         syncAnchorRef.current.timestamp = performance.now();
-        audioPlayer.pauseAudio();
+        if (audioMasterRef.current === 'display' || !audioMasterRef.current) {
+          audioPlayer.pauseAudio();
+          emitUpdateState({
+            isPlaying: false,
+            currentTime: syncAnchorRef.current.time,
+            audioMaster: 'display',
+            queueId: songRef.current?.queueId || null,
+            songId: songRef.current?.id || null
+          });
+        }
       } else if (cmd.command === 'set_volumes' && cmd.volumes) {
         const v = {
           inst: cmd.volumes.inst ?? cmd.volumes.instrumentals ?? volumesRef.current.inst,
@@ -239,8 +270,19 @@ export default function DisplayApp() {
         setVolumes(v);
         volumesRef.current = v;
         audioPlayer.setStemVolumes(v);
+        emitUpdateState({ volumes: v });
       } else if (cmd.command === 'toggle_play') {
-        handleTogglePlayPause();
+        if (audioMasterRef.current === 'display' || !audioMasterRef.current) {
+          handleTogglePlayPause();
+        }
+      } else if (cmd.command === 'play_next') {
+        if (audioMasterRef.current === 'display' || !audioMasterRef.current) {
+          handlePlayNext();
+        }
+      } else if (cmd.command === 'play_prev') {
+        if (audioMasterRef.current === 'display' || !audioMasterRef.current) {
+          handlePlayPrev();
+        }
       } else if (cmd.command === 'end_queue') {
         handleEndQueue(true);
       } else if (cmd.command === 'select_song' && cmd.id) {
@@ -248,12 +290,15 @@ export default function DisplayApp() {
           audioPlayer.stopAllSources();
           audioMasterRef.current = 'dashboard';
           setAudioMaster('dashboard');
+          syncAnchorRef.current.time = 0;
+          syncAnchorRef.current.timestamp = performance.now();
+          syncAnchorRef.current.isPlaying = false;
+          setCurrentTime(0);
+          setIsPlaying(false);
+        } else {
+          // Display is room audio master
+          handleSelectSong(cmd.id, cmd.queueId);
         }
-        syncAnchorRef.current.time = 0;
-        syncAnchorRef.current.timestamp = performance.now();
-        syncAnchorRef.current.isPlaying = false;
-        setCurrentTime(0);
-        setIsPlaying(false);
       }
     });
 
@@ -347,11 +392,32 @@ export default function DisplayApp() {
       }
     });
 
+    const handleSingersUpdated = (data) => {
+      if (!data) return;
+      setSong((prev) => {
+        if (!prev) return prev;
+        const curId = prev.id || prev.songId;
+        const curQId = prev.queueId;
+        if (
+          (data.songId && String(curId) === String(data.songId)) ||
+          (data.queueId && String(curQId) === String(data.queueId)) ||
+          !data.songId
+        ) {
+          const updated = { ...prev, singers: data.singers };
+          songRef.current = updated;
+          return updated;
+        }
+        return prev;
+      });
+    };
+    socket.on('singers_updated', handleSingersUpdated);
+
     return () => {
       socket.off('sync_state');
       socket.off('player_command');
       socket.off('queue_updated');
       socket.off('lyrics_updated', handleLyricsUpdated);
+      socket.off('singers_updated', handleSingersUpdated);
     };
   }, []);
 
@@ -381,6 +447,21 @@ export default function DisplayApp() {
         handlePlayNext();
       }
     });
+  }, []);
+
+  // Unlock audio context on user interaction (clicks, taps, or key presses on stage display)
+  useEffect(() => {
+    const handleUnlockInteraction = () => {
+      audioPlayer.unlockAudio();
+    };
+    window.addEventListener('click', handleUnlockInteraction);
+    window.addEventListener('touchstart', handleUnlockInteraction);
+    window.addEventListener('keydown', handleUnlockInteraction);
+    return () => {
+      window.removeEventListener('click', handleUnlockInteraction);
+      window.removeEventListener('touchstart', handleUnlockInteraction);
+      window.removeEventListener('keydown', handleUnlockInteraction);
+    };
   }, []);
 
   const handleEndQueue = (skipBroadcast = false) => {
@@ -423,7 +504,9 @@ export default function DisplayApp() {
       setCurrentTime(0);
       setIsPlaying(false);
 
-      emitPlayerCommand({ command: 'select_song', id, queueId, audioMaster: 'display' });
+      // Reserve songRef immediately so in-flight sync_state knows this track is already handled
+      songRef.current = { id, queueId };
+
       const fullSong = await fetchSong(id);
       fullSong.queueId = queueId;
 
@@ -497,7 +580,6 @@ export default function DisplayApp() {
       setIsPlaying(true);
       setCurrentTime(cur);
 
-      emitPlayerCommand({ command: 'play', time: cur, audioMaster: 'display' });
       emitUpdateState({
         isPlaying: true,
         currentTime: cur,
@@ -514,7 +596,6 @@ export default function DisplayApp() {
       setIsPlaying(false);
       setCurrentTime(cur);
 
-      emitPlayerCommand({ command: 'pause', time: cur });
       emitUpdateState({
         isPlaying: false,
         currentTime: cur,
@@ -532,7 +613,6 @@ export default function DisplayApp() {
     if (audioMasterRef.current === 'display') {
       audioPlayer.seekAudio(target, syncAnchorRef.current.isPlaying);
     }
-    emitPlayerCommand({ command: 'seek', time: target, audioMaster: audioMasterRef.current });
     emitUpdateState({ currentTime: target });
   };
 
@@ -832,6 +912,11 @@ export default function DisplayApp() {
           <i className="icon-disc"></i>
         </button>
       </div>
+
+      {/* Social Overlays & Party Integration */}
+      <FloatingReactions />
+      <AnnouncementBanner />
+      <QrCodeWidget />
     </div>
   );
 }

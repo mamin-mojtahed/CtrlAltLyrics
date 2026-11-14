@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Cpu } from 'lucide-react';
+import { Cpu, Sliders, Tv, Crown, Smartphone } from 'lucide-react';
 import { useModalStore } from './stores/useModalStore';
 import ModelsManagerModal from './components/modals/ModelsManagerModal';
 
@@ -28,12 +28,20 @@ export default function MainMenuApp() {
         <h2>Karaoke Player</h2>
         <div className="links">
           <a href="/dashboard.html" className="btn btn-menu btn-primary">
-            <span className="btn-icon"><i className="icon-sliders"></i></span>
+            <span className="btn-icon"><Sliders size={18} /></span>
             <span>Open Dashboard</span>
           </a>
           <a href="/display.html" className="btn btn-menu btn-secondary" target="_blank" rel="noreferrer">
-            <span className="btn-icon"><i className="icon-tv"></i></span>
+            <span className="btn-icon"><Tv size={18} /></span>
             <span>Open Display Window</span>
+          </a>
+          <a href="/host.html" className="btn btn-menu btn-host">
+            <span className="btn-icon"><Crown size={18} /></span>
+            <span>Open Host Console</span>
+          </a>
+          <a href="/guest.html" className="btn btn-menu btn-guest" target="_blank" rel="noreferrer">
+            <span className="btn-icon"><Smartphone size={18} /></span>
+            <span>Open Guest Portal</span>
           </a>
         </div>
       </div>

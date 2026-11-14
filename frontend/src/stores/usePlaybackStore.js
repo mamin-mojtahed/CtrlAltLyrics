@@ -12,6 +12,14 @@ const syncAnchor = {
   isPlaying: false
 };
 
+let lastSeekTimestamp = 0;
+let lastSeekTime = 0;
+let lastCommandTimestamp = 0;
+
+export function getLastSeekInfo() {
+  return { lastSeekTimestamp, lastSeekTime, lastCommandTimestamp };
+}
+
 export function updateSyncAnchor(time, isPlaying) {
   if (typeof time === 'number' && !isNaN(time)) {
     syncAnchor.time = Math.max(0, time);
@@ -63,7 +71,7 @@ export const usePlaybackStore = create((set, get) => ({
   showMusicVideo: true,
   audioBlocked: false,
   isDraggingSlider: false,
-  audioMaster: 'dashboard',
+  audioMaster: 'display',
   isEndingSong: false,
 
   getAccuratePlaybackTime: () => getAccuratePlaybackTime(),
@@ -75,8 +83,16 @@ export const usePlaybackStore = create((set, get) => ({
 
   setDraggingSlider: (isDragging) => set({ isDraggingSlider: isDragging }),
 
-  setLinkInstBack: (linked) => set({ isInstBackLinked: linked }),
-  setLinkBackLead: (linked) => set({ isBackLeadLinked: linked }),
+  setLinkInstBack: (linked) => {
+    const val = Boolean(linked);
+    set({ isInstBackLinked: val });
+    emitUpdateState({ isInstBackLinked: val });
+  },
+  setLinkBackLead: (linked) => {
+    const val = Boolean(linked);
+    set({ isBackLeadLinked: val });
+    emitUpdateState({ isBackLeadLinked: val });
+  },
 
   setVolumes: (newVolumes, skipLinking = false, skipSync = false) => {
     const state = get();
@@ -118,7 +134,9 @@ export const usePlaybackStore = create((set, get) => ({
         inst: updated.inst
       };
       emitPlayerCommand({ command: 'set_volumes', volumes: fullVols });
-      emitUpdateState({ volumes: fullVols });
+      if (state.audioMaster !== 'display') {
+        emitUpdateState({ volumes: fullVols });
+      }
     }
   },
 
@@ -207,9 +225,10 @@ export const usePlaybackStore = create((set, get) => ({
     if (!song) return;
 
     const fullSong = { ...song, queueId: targetQueueId };
-    const { volumes, isPlaying } = get();
+    const { volumes, isPlaying, audioMaster } = get();
+    const effectiveMaster = remoteAudioMaster || audioMaster;
 
-    if (remoteAudioMaster === 'display') {
+    if (effectiveMaster === 'display') {
       audioPlayer.stopAllSources();
       const colorSrc = fullSong.id ? `/api/cover/${fullSong.id}` : getHighResAlbumArt(fullSong.albumArt);
       extractColorsFromSongCover(colorSrc);
@@ -224,6 +243,8 @@ export const usePlaybackStore = create((set, get) => ({
         isPlaying: willPlay,
         audioMaster: 'display'
       });
+
+      emitPlayerCommand({ command: 'select_song', id: fullSong.id, queueId: targetQueueId, audioMaster: 'display', isPlaying: willPlay });
 
       // Keep metadata modal in sync with chosen song if open
       try {
@@ -268,19 +289,13 @@ export const usePlaybackStore = create((set, get) => ({
   play: async (offset = 0) => {
     const state = get();
     if (!state.currentSong) return;
+    lastCommandTimestamp = Date.now();
 
     if (state.audioMaster === 'display') {
       audioPlayer.stopAllSources();
       updateSyncAnchor(offset, true);
       set({ isPlaying: true, currentTime: offset });
       emitPlayerCommand({ command: 'play', time: offset, audioMaster: 'display' });
-      emitUpdateState({
-        isPlaying: true,
-        currentTime: offset,
-        audioMaster: 'display',
-        queueId: state.currentQueueId || state.currentSong.queueId || null,
-        songId: state.currentSong.id
-      });
       return;
     }
 
@@ -302,6 +317,7 @@ export const usePlaybackStore = create((set, get) => ({
 
   pause: () => {
     const state = get();
+    lastCommandTimestamp = Date.now();
     const currentActualTime = (state.audioMaster === 'display')
       ? state.currentTime
       : audioPlayer.pauseAudio();
@@ -310,19 +326,24 @@ export const usePlaybackStore = create((set, get) => ({
     }
     updateSyncAnchor(currentActualTime, false);
     set({ isPlaying: false, currentTime: currentActualTime });
-    emitPlayerCommand({ command: 'pause', time: currentActualTime });
-    emitUpdateState({
-      isPlaying: false,
-      currentTime: currentActualTime,
-      queueId: state.currentQueueId || state.currentSong?.queueId || null,
-      songId: state.currentSong?.id || null
-    });
+    emitPlayerCommand({ command: 'pause', time: currentActualTime, audioMaster: state.audioMaster });
+    if (state.audioMaster !== 'display') {
+      emitUpdateState({
+        isPlaying: false,
+        currentTime: currentActualTime,
+        queueId: state.currentQueueId || state.currentSong?.queueId || null,
+        songId: state.currentSong?.id || null
+      });
+    }
   },
 
   togglePlayPause: async () => {
+    lastCommandTimestamp = Date.now();
     const state = get();
-    if (audioPlayer.isContextSuspended()) {
-      await audioPlayer.unlockAudio();
+    if (state.audioMaster !== 'display') {
+      if (audioPlayer.isContextSuspended()) {
+        await audioPlayer.unlockAudio();
+      }
     }
 
     if (!state.currentSong) {
@@ -331,7 +352,7 @@ export const usePlaybackStore = create((set, get) => ({
         const queue = await fetchQueue();
         const readySong = (queue || []).find(s => s.status === 'ready');
         if (readySong) {
-          await get().selectSong(readySong, true, readySong.queueId);
+          await get().selectSong(readySong, true, readySong.queueId, state.audioMaster);
         }
       } catch (e) {
         console.error("Error picking track from queue:", e);
@@ -352,11 +373,17 @@ export const usePlaybackStore = create((set, get) => ({
     const maxDur = state.duration || 0;
     const target = Math.max(0, maxDur > 0 ? Math.min(maxDur, time) : time);
 
+    lastSeekTimestamp = Date.now();
+    lastSeekTime = target;
+    lastCommandTimestamp = Date.now();
+
     updateSyncAnchor(target, state.isPlaying);
     set({ currentTime: target });
-    audioPlayer.seekAudio(target, state.isPlaying);
+    if (state.audioMaster !== 'display') {
+      audioPlayer.seekAudio(target, state.isPlaying);
+      emitUpdateState({ currentTime: target });
+    }
     emitPlayerCommand({ command: 'seek', time: target, audioMaster: state.audioMaster });
-    emitUpdateState({ currentTime: target });
   },
 
   jumpToNextLine: () => {
@@ -409,6 +436,10 @@ export const usePlaybackStore = create((set, get) => ({
   handleSongEnd: async () => {
     const state = get();
     if (state.isEndingSong) return;
+    if (state.audioMaster === 'display') {
+      // DisplayApp handles auto-advance natively when audioMaster is display
+      return;
+    }
     set({ isEndingSong: true });
     try {
       audioPlayer.pauseAudio();
@@ -435,7 +466,7 @@ export const usePlaybackStore = create((set, get) => ({
       }
       if (idx !== -1 && idx < readySongs.length - 1) {
         const next = readySongs[idx + 1];
-        await get().selectSong(next, true, next.queueId);
+        await get().selectSong(next, true, next.queueId, 'dashboard');
       } else {
         // Last song in queue completed -> bland mode
         get().endQueue();
@@ -449,6 +480,11 @@ export const usePlaybackStore = create((set, get) => ({
   },
 
   playNext: async () => {
+    const { audioMaster } = get();
+    if (audioMaster === 'display') {
+      emitPlayerCommand({ command: 'play_next', audioMaster: 'display' });
+      return;
+    }
     try {
       const q = await fetchQueue();
       const readySongs = (q || []).filter(s => s.status === 'ready');
@@ -458,7 +494,7 @@ export const usePlaybackStore = create((set, get) => ({
       }
       const { currentSong, currentQueueId, isPlaying } = get();
       if (!currentSong) {
-        return get().selectSong(readySongs[0], true, readySongs[0].queueId);
+        return get().selectSong(readySongs[0], true, readySongs[0].queueId, 'dashboard');
       }
       let idx = -1;
       const targetQId = currentQueueId || currentSong?.queueId;
@@ -470,7 +506,7 @@ export const usePlaybackStore = create((set, get) => ({
       }
       if (idx !== -1 && idx < readySongs.length - 1) {
         const next = readySongs[idx + 1];
-        await get().selectSong(next, isPlaying, next.queueId);
+        await get().selectSong(next, isPlaying, next.queueId, 'dashboard');
       } else {
         // Reached end of queue via next button -> bland mode
         get().endQueue();
@@ -481,13 +517,18 @@ export const usePlaybackStore = create((set, get) => ({
   },
 
   playPrev: async () => {
+    const { audioMaster } = get();
+    if (audioMaster === 'display') {
+      emitPlayerCommand({ command: 'play_prev', audioMaster: 'display' });
+      return;
+    }
     try {
       const q = await fetchQueue();
       const readySongs = (q || []).filter(s => s.status === 'ready');
       if (readySongs.length === 0) return;
       const { currentSong, currentQueueId, isPlaying } = get();
       if (!currentSong) {
-        return get().selectSong(readySongs[0], true, readySongs[0].queueId);
+        return get().selectSong(readySongs[0], true, readySongs[0].queueId, 'dashboard');
       }
       let idx = -1;
       const targetQId = currentQueueId || currentSong?.queueId;
@@ -499,7 +540,7 @@ export const usePlaybackStore = create((set, get) => ({
       }
       if (idx > 0) {
         const prev = readySongs[idx - 1];
-        await get().selectSong(prev, isPlaying, prev.queueId);
+        await get().selectSong(prev, isPlaying, prev.queueId, 'dashboard');
       } else {
         get().seek(0);
       }
@@ -519,6 +560,8 @@ export const usePlaybackStore = create((set, get) => ({
     if (state.showWaveform !== undefined) updates.showWaveform = !!state.showWaveform;
     if (state.showMusicVideo !== undefined) updates.showMusicVideo = !!state.showMusicVideo;
     if (state.audioBlocked !== undefined) updates.audioBlocked = !!state.audioBlocked;
+    if (state.isInstBackLinked !== undefined) updates.isInstBackLinked = !!state.isInstBackLinked;
+    if (state.isBackLeadLinked !== undefined) updates.isBackLeadLinked = !!state.isBackLeadLinked;
 
     if (state.volumes) {
       const vols = {
@@ -606,7 +649,13 @@ export const usePlaybackStore = create((set, get) => ({
       }
     }
 
-    if (state.currentTime !== undefined && !current.isDraggingSlider) {
+    const isStaleSeekEcho = (
+      Date.now() - lastSeekTimestamp < 750 &&
+      typeof state.currentTime === 'number' &&
+      Math.abs(state.currentTime - lastSeekTime) > 1.2
+    );
+
+    if (state.currentTime !== undefined && !current.isDraggingSlider && !isStaleSeekEcho) {
       if (!(current.isPlaying && current.audioMaster === 'dashboard')) {
         updates.currentTime = state.currentTime;
         const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
@@ -618,7 +667,11 @@ export const usePlaybackStore = create((set, get) => ({
       }
     }
 
-    if (state.isPlaying !== undefined && state.isPlaying !== current.isPlaying) {
+    const isStalePlayPauseEcho = (
+      Date.now() - lastCommandTimestamp < 400
+    );
+
+    if (state.isPlaying !== undefined && state.isPlaying !== current.isPlaying && !isStalePlayPauseEcho) {
       updates.isPlaying = state.isPlaying;
       if (!state.isPlaying) {
         audioPlayer.stopAllSources();

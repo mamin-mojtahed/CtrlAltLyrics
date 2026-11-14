@@ -685,6 +685,15 @@ export default function QueueList() {
               <div className="song-info">
                 <div className="song-title">{song.title}</div>
                 <div className="song-artist">{song.artist}</div>
+                {Array.isArray(song.singers) && song.singers.length > 0 ? (
+                  <div className="queue-performer-tag" title={`Singers: ${song.singers.join(', ')}`}>
+                    🎤 {song.singers.join(', ')}
+                  </div>
+                ) : song.requestedBy?.nickname ? (
+                  <div className="queue-requester-tag" title={`Requested by: ${song.requestedBy.nickname}`}>
+                    👤 {song.requestedBy.nickname}
+                  </div>
+                ) : null}
               </div>
             </div>
 

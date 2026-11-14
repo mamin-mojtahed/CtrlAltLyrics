@@ -85,6 +85,16 @@ export default function SongSidebar({ song, queue = [], currentTime = 0, duratio
         <p id="displaySongArtist" className="meta-artist">
           {song?.artist || 'Ready for playback'}
         </p>
+        {Array.isArray(song?.singers) && song.singers.length > 0 ? (
+          <div className="performer-badge" title={`Performers: ${song.singers.join(', ')}`}>
+            <span className="performer-mic">🎤</span>
+            <span>Singing: {song.singers.join(' & ')}</span>
+          </div>
+        ) : song?.requestedBy?.nickname ? (
+          <div className="requester-chip" title={`Requested by: ${song.requestedBy.nickname}`}>
+            <span>👤 Requested by {song.requestedBy.nickname}</span>
+          </div>
+        ) : null}
       </div>
 
       {/* Playback Timeline & Timer */}
@@ -143,6 +153,11 @@ export default function SongSidebar({ song, queue = [], currentTime = 0, duratio
                       <span className="queue-item-sep">•</span>
                       <span className="queue-item-artist">{item.artist}</span>
                     </span>
+                    {Array.isArray(item.singers) && item.singers.length > 0 ? (
+                      <span className="singer-chip">🎤 {item.singers.join(', ')}</span>
+                    ) : item.requestedBy?.nickname ? (
+                      <span className="singer-chip">👤 {item.requestedBy.nickname}</span>
+                    ) : null}
                   </div>
                   <div className="queue-expanded-container">
                     <div className="queue-expanded-body">

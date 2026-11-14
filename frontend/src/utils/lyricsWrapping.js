@@ -2,7 +2,7 @@
 
 export function isRtlText(text) {
   if (!text) return false;
-  const rtlRegex = /[\u0591-\u07FF\uFB1D-\uFDFD\uFE70-\uFEFC]/;
+  const rtlRegex = /[\u0591-\u07FF\u08A0-\u08FF\uFB1D-\uFDFD\uFE70-\uFEFC]/;
   return rtlRegex.test(text);
 }
 

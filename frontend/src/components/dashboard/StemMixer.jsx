@@ -22,7 +22,7 @@ export default function StemMixer() {
   const showMusicVideo = usePlaybackStore((state) => state.showMusicVideo);
   const setShowMusicVideo = usePlaybackStore((state) => state.setShowMusicVideo);
 
-  const [showShortcuts, setShowShortcuts] = useState(() => (typeof window !== 'undefined' ? window.innerWidth > 768 : true));
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   // Revealed panel state: 'visual' (eye icon), 'controls' (gear icon), or null (off by default)
   const [revealedPanel, setRevealedPanel] = useState(() => {
@@ -424,9 +424,11 @@ export default function StemMixer() {
 
         {/* Link Inst & Back */}
         <button
-          className="btn mixer-link-btn"
+          type="button"
+          className={`btn mixer-link-btn ${isInstBackLinked ? 'is-linked' : ''}`}
           style={{ opacity: isInstBackLinked ? 1 : 0.4 }}
           title={isInstBackLinked ? 'Linked Inst & Back (Click to Unlink)' : 'Unlinked Inst & Back (Click to Link)'}
+          aria-label={isInstBackLinked ? 'Unlink instrumental and backing vocals' : 'Link instrumental and backing vocals'}
           onClick={() => setLinkInstBack(!isInstBackLinked)}
         >
           <i className={isInstBackLinked ? 'icon-link-2' : 'icon-unlink-2'}></i>
@@ -462,9 +464,11 @@ export default function StemMixer() {
 
         {/* Link Back & Lead */}
         <button
-          className="btn mixer-link-btn"
+          type="button"
+          className={`btn mixer-link-btn ${isBackLeadLinked ? 'is-linked' : ''}`}
           style={{ opacity: isBackLeadLinked ? 1 : 0.4 }}
           title={isBackLeadLinked ? 'Linked Back & Lead (Click to Unlink)' : 'Unlinked Back & Lead (Click to Link)'}
+          aria-label={isBackLeadLinked ? 'Unlink backing vocals and lead vocals' : 'Link backing vocals and lead vocals'}
           onClick={() => setLinkBackLead(!isBackLeadLinked)}
         >
           <i className={isBackLeadLinked ? 'icon-link-2' : 'icon-unlink-2'}></i>

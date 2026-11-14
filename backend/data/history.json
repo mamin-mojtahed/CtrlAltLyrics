@@ -1473,7 +1473,7 @@
       "karaokeModel": "5_HP-Karaoke-UVR.pth",
       "isCustom": false
     },
-    "lyricsProvider": "AI Whisper Auto-Synced (small)",
+    "lyricsProvider": "AI Whisper Auto-Synced (turbo)",
     "isSynced": true,
     "hasLyrics": true,
     "duration": 247.5,

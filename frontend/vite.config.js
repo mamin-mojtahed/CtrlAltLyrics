@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   server: {
+    host: true,
     proxy: {
       '/api': 'http://localhost:3000',
       '/socket.io': {
@@ -19,7 +20,9 @@ export default defineConfig({
       input: {
         main: resolve(import.meta.dirname, 'index.html'),
         dashboard: resolve(import.meta.dirname, 'dashboard.html'),
-        display: resolve(import.meta.dirname, 'display.html')
+        display: resolve(import.meta.dirname, 'display.html'),
+        host: resolve(import.meta.dirname, 'host.html'),
+        guest: resolve(import.meta.dirname, 'guest.html')
       }
     }
   }

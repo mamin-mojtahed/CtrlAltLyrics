@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import socket, { emitRequestSync, emitUpdateState } from './services/socket';
 import * as audioPlayer from './services/audioPlayer';
-import { usePlaybackStore } from './stores/usePlaybackStore';
+import { usePlaybackStore, updateSyncAnchor } from './stores/usePlaybackStore';
 import { useQueueStore } from './stores/useQueueStore';
 import { useLibraryStore } from './stores/useLibraryStore';
 import { useModalStore } from './stores/useModalStore';
@@ -90,47 +90,54 @@ export default function DashboardApp() {
       if (cmd.sender && socket.id && cmd.sender === socket.id) return;
 
       if (cmd.command === 'toggle_play') {
-        togglePlayPause();
+        if (usePlaybackStore.getState().audioMaster === 'dashboard') {
+          togglePlayPause();
+        }
       } else if (cmd.command === 'play') {
-        if (cmd.audioMaster === 'display') {
+        if (cmd.audioMaster === 'display' || usePlaybackStore.getState().audioMaster === 'display') {
           audioPlayer.stopAllSources();
+          const targetTime = typeof cmd.time === 'number' ? cmd.time : usePlaybackStore.getState().currentTime;
           usePlaybackStore.setState({
             isPlaying: true,
-            currentTime: typeof cmd.time === 'number' ? cmd.time : usePlaybackStore.getState().currentTime,
+            currentTime: targetTime,
             audioMaster: 'display'
           });
+          updateSyncAnchor(targetTime, true);
         } else {
           const offset = typeof cmd.time === 'number' ? cmd.time : usePlaybackStore.getState().currentTime;
           audioPlayer.playAudio(offset);
           usePlaybackStore.setState({ isPlaying: true, currentTime: offset, audioMaster: 'dashboard' });
+          updateSyncAnchor(offset, true);
         }
       } else if (cmd.command === 'pause') {
-        audioPlayer.stopAllSources();
+        if (cmd.audioMaster !== 'display' && usePlaybackStore.getState().audioMaster !== 'display') {
+          audioPlayer.stopAllSources();
+        }
         const targetTime = typeof cmd.time === 'number' ? cmd.time : usePlaybackStore.getState().currentTime;
         usePlaybackStore.setState({ isPlaying: false, currentTime: targetTime });
+        updateSyncAnchor(targetTime, false);
       } else if (cmd.command === 'seek' && typeof cmd.time === 'number') {
         const state = usePlaybackStore.getState();
         const maxDur = state.duration || 0;
         const target = Math.max(0, maxDur > 0 ? Math.min(maxDur, cmd.time) : cmd.time);
         usePlaybackStore.setState({ currentTime: target });
+        updateSyncAnchor(target, state.isPlaying);
         if (state.audioMaster !== 'display') {
           audioPlayer.seekAudio(target, state.isPlaying);
         }
       } else if (cmd.command === 'play_prev') {
-        if (cmd.audioMaster !== 'display') {
+        if (cmd.audioMaster !== 'display' && usePlaybackStore.getState().audioMaster !== 'display') {
           playPrev();
         }
       } else if (cmd.command === 'play_next') {
-        if (cmd.audioMaster !== 'display') {
+        if (cmd.audioMaster !== 'display' && usePlaybackStore.getState().audioMaster !== 'display') {
           playNext();
         }
       } else if (cmd.command === 'end_queue') {
         usePlaybackStore.getState().endQueue(true);
       } else if (cmd.command === 'select_song' && cmd.id) {
-        if (cmd.audioMaster === 'display') {
+        if (cmd.audioMaster === 'display' || usePlaybackStore.getState().audioMaster === 'display') {
           audioPlayer.stopAllSources();
-          const willPlay = cmd.isPlaying !== undefined ? !!cmd.isPlaying : true;
-          usePlaybackStore.getState().selectSong(cmd.id, willPlay, cmd.queueId, 'display');
         } else {
           selectSong(cmd.id, true, cmd.queueId);
         }
@@ -275,15 +282,24 @@ export default function DashboardApp() {
         return;
       }
 
-      // Ignore other shortcuts when typing in inputs/textareas or interacting with form controls
-      if (e.target && (
-        e.target.tagName === 'INPUT' ||
+      // Ignore other shortcuts ONLY when user is typing in text inputs/textareas or selecting options
+      const isTextEntry = e.target && (
+        (e.target.tagName === 'INPUT' && e.target.type !== 'range') ||
         e.target.tagName === 'TEXTAREA' ||
         e.target.tagName === 'SELECT' ||
-        e.target.tagName === 'BUTTON' ||
         e.target.isContentEditable
-      )) {
+      );
+      if (isTextEntry) {
         return;
+      }
+
+      // If a button or timeline range input was clicked and has focus, blur it so Space doesn't re-trigger it
+      if (e.code === 'Space' || e.key === '<' || e.key === '>' || e.key === ',' || e.key === '.') {
+        if (e.target && (e.target.tagName === 'BUTTON' || (e.target.tagName === 'INPUT' && e.target.type === 'range'))) {
+          if (typeof e.target.blur === 'function') {
+            e.target.blur();
+          }
+        }
       }
 
       // Skip system combinations (Cmd+C, Ctrl+R, etc.)
